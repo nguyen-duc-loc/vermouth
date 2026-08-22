@@ -1,0 +1,126 @@
+# The one infra stack: four Postgres instances and one Redpanda node (STK-15).
+#
+# It is started once and used for both local development and the integration
+# tests, because the interesting failures (a consumer that is not idempotent, a
+# relay publishing twice, a projection rebuilt wrong) only appear against a real
+# broker and a real database, and one stack started once is what 2 vCPU can
+# carry.
+#
+# Everything here is tuned small on purpose. Redpanda's defaults assume a
+# dedicated machine and will take far more memory than this machine can spare
+# once feature 5 adds a Kubernetes control plane. Feature 5 owns the cluster
+# version of all of this, plus Garage for invoice PDFs.
+
+name: vermouth
+
+x-postgres: &postgres
+  image: postgres:18.3-alpine
+  restart: unless-stopped
+  command:
+    # Small enough that four instances fit beside a broker on 2 vCPU.
+    - postgres
+    - -c
+    - shared_buffers=64MB
+    - -c
+    - max_connections=50
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+    interval: 5s
+    timeout: 5s
+    retries: 20
+
+services:
+  # One database per service, each with its own role, so INV-2 is physical
+  # rather than aspirational (STK-5).
+  postgres-identity:
+    <<: *postgres
+    container_name: vermouth-postgres-identity
+    environment:
+      POSTGRES_USER: vermouth_identity
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vermouth}
+      POSTGRES_DB: vermouth_identity
+    ports: ["5433:5432"]
+    # Postgres 18 wants a single mount at /var/lib/postgresql, which then holds
+    # the data in a major version subdirectory.
+    volumes: ["postgres-identity:/var/lib/postgresql"]
+
+  postgres-teaching:
+    <<: *postgres
+    container_name: vermouth-postgres-teaching
+    environment:
+      POSTGRES_USER: vermouth_teaching
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vermouth}
+      POSTGRES_DB: vermouth_teaching
+    ports: ["5434:5432"]
+    # Postgres 18 wants a single mount at /var/lib/postgresql, which then holds
+    # the data in a major version subdirectory.
+    volumes: ["postgres-teaching:/var/lib/postgresql"]
+
+  postgres-billing:
+    <<: *postgres
+    container_name: vermouth-postgres-billing
+    environment:
+      POSTGRES_USER: vermouth_billing
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vermouth}
+      POSTGRES_DB: vermouth_billing
+    ports: ["5435:5432"]
+    # Postgres 18 wants a single mount at /var/lib/postgresql, which then holds
+    # the data in a major version subdirectory.
+    volumes: ["postgres-billing:/var/lib/postgresql"]
+
+  postgres-notifications:
+    <<: *postgres
+    container_name: vermouth-postgres-notifications
+    environment:
+      POSTGRES_USER: vermouth_notifications
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vermouth}
+      POSTGRES_DB: vermouth_notifications
+    ports: ["5436:5432"]
+    # Postgres 18 wants a single mount at /var/lib/postgresql, which then holds
+    # the data in a major version subdirectory.
+    volumes: ["postgres-notifications:/var/lib/postgresql"]
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v25.3.5
+    container_name: vermouth-redpanda
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --node-id=0
+      - --smp=1
+      - --overprovisioned
+      - --memory=1G
+      - --reserve-memory=0M
+      - --check=false
+      - --default-log-level=warn
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --rpc-addr=0.0.0.0:33145
+      - --advertise-rpc-addr=redpanda:33145
+      # Automatic topic creation is off, so EnsureTopics owns creation with the
+      # right retention and partition count, and a forgotten call fails loudly
+      # at startup instead of quietly producing a topic with default retention
+      # (STK-16, STK-17).
+      #
+      # --set and its value must be two separate arguments. Written as
+      # `--set=key=value` rpk passes it straight through to the redpanda binary,
+      # which rejects it and the container restarts in a loop.
+      - --set
+      - redpanda.auto_create_topics_enabled=false
+    ports:
+      - "19092:19092"
+      - "19644:9644"
+    volumes: ["redpanda:/var/lib/redpanda/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres-identity:
+  postgres-teaching:
+  postgres-billing:
+  postgres-notifications:
+  redpanda:
