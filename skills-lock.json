@@ -1,0 +1,275 @@
+{
+  "version": 1,
+  "skills": {
+    "architect": {
+      "source": "jsmastery-pro/skills",
+      "sourceType": "github",
+      "skillPath": "skills/architect/SKILL.md",
+      "computedHash": "ff57c65a06ca4047420113d1eaa18e5002bc657224688b9350a1f06d77204327"
+    },
+    "audit": {
+      "source": "jsmastery-pro/skills",
+      "sourceType": "github",
+      "skillPath": "skills/audit/SKILL.md",
+      "computedHash": "a8d524118ce6d60911840ef31509f1f5551ce1099cb8fd8a241ed0859e5c62ed"
+    },
+    "check": {
+      "source": "jsmastery-pro/skills",
+      "sourceType": "github",
+      "skillPath": "skills/check/SKILL.md",
+      "computedHash": "3f21e5cf83a65be1c0fd07fa9f4a75ae31f4f2d169d862be6aec6e6e7adb0382"
+    },
+    "debug": {
+      "source": "jsmastery-pro/skills",
+      "sourceType": "github",
+      "skillPath": "skills/debug/SKILL.md",
+      "computedHash": "bc5bffa19310d272abc205966b85f5f80d562ccfa16c39b1b92701026e676e30"
+    },
+    "develop": {
+      "source": "jsmastery-pro/skills",
+      "sourceType": "github",
+      "skillPath": "skills/develop/SKILL.md",
+      "computedHash": "42dc998560097e8fe95e78f08df574ef4e5110b9ceacdd5ae3fdf68808f51c59"
+    },
+    "document": {
+      "source": "jsmastery-pro/skills",
+      "sourceType": "github",
+      "skillPath": "skills/document/SKILL.md",
+      "computedHash": "90933443f204d2ed29c84730be87b7b5470f6819fccde6129aedad1df517fb92"
+    },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-design/SKILL.md",
+      "computedHash": "4eabc66183767153e404b39d1b839b1c37f2d82d86f0a0d7e880a579d8d62336"
+    },
+    "go-goose": {
+      "source": "metalagman/agent-skills",
+      "sourceType": "github",
+      "skillPath": "go-goose/SKILL.md",
+      "computedHash": "eef3f6f13116013aec9b5acb05164ba6cdf00995d76a92c19b7442597afe8422"
+    },
+    "golang-code-style": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-code-style/SKILL.md",
+      "computedHash": "8ce09e462ef435cedc78307c124adb0c83848366b4bc51cd0942d3c79fff1e71"
+    },
+    "golang-concurrency": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-concurrency/SKILL.md",
+      "computedHash": "35d74060d9cc7889ddde4cfb92df5fb58098be95382ac6fc379ec0939492f077"
+    },
+    "golang-context": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-context/SKILL.md",
+      "computedHash": "19015b6d3855562ee8f9ef5651292ccdc94f8e2f98e7bfc36390736e1ab88bd4"
+    },
+    "golang-database": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-database/SKILL.md",
+      "computedHash": "1a790c69cdcc018ee1de74febc57515f0c7eddf37cbfa97682c68bd5e7d16743"
+    },
+    "golang-error-handling": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-error-handling/SKILL.md",
+      "computedHash": "3020583350324ed9b2483df0a7e0f9290c47070e609c0a900479fcbe88d46368"
+    },
+    "golang-lint": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-lint/SKILL.md",
+      "computedHash": "d386d52147e07c06cf12caf765a82aa22a8ccbb14af2f5f8a008f2ce4e5c68d2"
+    },
+    "golang-observability": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-observability/SKILL.md",
+      "computedHash": "475676c9086ea88a3558137527d5e8a84820505915d0ad2c34339f406271bf9e"
+    },
+    "golang-project-layout": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-project-layout/SKILL.md",
+      "computedHash": "9bc63b2f0848bf9e9b4ee1ffde04516ac6c4015661fed44c0cde6ae68c61e0a6"
+    },
+    "golang-security": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-security/SKILL.md",
+      "computedHash": "30cadcb6d3ff650b6d55a2c66122b5e1218d7fb810b1569763bbc08998ffef00"
+    },
+    "golang-stretchr-testify": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-stretchr-testify/SKILL.md",
+      "computedHash": "b2b496812ed4d2100dfbfd2837d594c5d576a74f5d6242343c40a057d12fbaf0"
+    },
+    "golang-testing": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-testing/SKILL.md",
+      "computedHash": "fae31668e68e7171bf81c7c784bd61851b2f1abde0339bfeeef96f33f43022cc"
+    },
+    "golangci-lint-strict": {
+      "source": "metalagman/agent-skills",
+      "sourceType": "github",
+      "skillPath": "golangci-lint-strict/SKILL.md",
+      "computedHash": "d08c2c75a911c629f0228269043d00aae1f3e90aa27f64afb639f6e2fe0d1cfb"
+    },
+    "gsap-core": {
+      "source": "greensock/gsap-skills",
+      "sourceType": "github",
+      "skillPath": "skills/gsap-core/SKILL.md",
+      "computedHash": "c4a01101d9e1aafbf4b49f75d74f9349790d8741981ba0237c990093863035a6"
+    },
+    "gsap-performance": {
+      "source": "greensock/gsap-skills",
+      "sourceType": "github",
+      "skillPath": "skills/gsap-performance/SKILL.md",
+      "computedHash": "863842ac2d7aee53fd4f0025c960173d7ad3e658a5715b89b2211fa280213c1f"
+    },
+    "gsap-plugins": {
+      "source": "greensock/gsap-skills",
+      "sourceType": "github",
+      "skillPath": "skills/gsap-plugins/SKILL.md",
+      "computedHash": "791bda0e6e460511fe82a78e745db519b88ffaeeab4d04a74879a03ca4f41740"
+    },
+    "gsap-react": {
+      "source": "greensock/gsap-skills",
+      "sourceType": "github",
+      "skillPath": "skills/gsap-react/SKILL.md",
+      "computedHash": "7d3b52822681a4158e371f895c58fb7030ecaf33f585a534b7162f9e92c5d893"
+    },
+    "gsap-scrolltrigger": {
+      "source": "greensock/gsap-skills",
+      "sourceType": "github",
+      "skillPath": "skills/gsap-scrolltrigger/SKILL.md",
+      "computedHash": "1cdc5647693783cb7a662d84a5de434c88a051ed56b4d33597c9b5782b5973e6"
+    },
+    "gsap-timeline": {
+      "source": "greensock/gsap-skills",
+      "sourceType": "github",
+      "skillPath": "skills/gsap-timeline/SKILL.md",
+      "computedHash": "54981c2feec5a9c0d57988aeb32315af32bdeadd261550d5e9db7a7b1f08b487"
+    },
+    "gsap-utils": {
+      "source": "greensock/gsap-skills",
+      "sourceType": "github",
+      "skillPath": "skills/gsap-utils/SKILL.md",
+      "computedHash": "1ab2387f6e694718a4f1b5acf2a4ab16e1b884c3428adf5f6b26d830f00826cf"
+    },
+    "kafka-development": {
+      "source": "mindrally/skills",
+      "sourceType": "github",
+      "skillPath": "kafka-development/SKILL.md",
+      "computedHash": "402a2cf2292175618fc82709ab526b477ade35cf4aa7c6ed88c906d87c778ec4"
+    },
+    "openapi": {
+      "source": "oakoss/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/openapi/SKILL.md",
+      "computedHash": "218b78b5f5090a59300ec7afb8ff1c8afbd14dd330b37071662fa7ba132e29ad"
+    },
+    "openapi-to-typescript": {
+      "source": "softaworks/agent-toolkit",
+      "sourceType": "github",
+      "skillPath": "skills/openapi-to-typescript/SKILL.md",
+      "computedHash": "525b39ee84d8fbc835d1dea710fb36b40fd4834441a4d18d75a8dafe985eeacd"
+    },
+    "performance-lint-rules": {
+      "source": "oxc-project/oxc",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/performance-lint-rules/SKILL.md",
+      "computedHash": "53c2c3a922a0e12a4ef14d6524f632abb17e6af5646fd45a8f9688a9abfbd07d"
+    },
+    "playwright-best-practices": {
+      "source": "currents-dev/playwright-best-practices-skill",
+      "sourceType": "github",
+      "skillPath": "playwright-best-practices/SKILL.md",
+      "computedHash": "7eb144f734450fee649dc1d209114775ddda07cbf45be84fe969d3d4f3971dce"
+    },
+    "playwright-cli": {
+      "source": "microsoft/playwright-cli",
+      "sourceType": "github",
+      "skillPath": "skills/playwright-cli/SKILL.md",
+      "computedHash": "f602822b51bcb6d033749c60731b8f1e80f308222fcb2e4af551905a817c6e08"
+    },
+    "pnpm": {
+      "source": "antfu/skills",
+      "sourceType": "github",
+      "skillPath": "skills/pnpm/SKILL.md",
+      "computedHash": "2ec08c851c6f901d4ed72c21b826416ed074a487db65662b36249418afd728bf"
+    },
+    "react19-concurrent-patterns": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "skillPath": "skills/react19-concurrent-patterns/SKILL.md",
+      "computedHash": "7f8d2e6d77fd5644208d0cc5d6e63278cb231211e54f573a1278b11b50869160"
+    },
+    "react19-source-patterns": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "skillPath": "skills/react19-source-patterns/SKILL.md",
+      "computedHash": "4b109d3ae035c6c4b8e056d16841c4d1ac0813ad84846bb482c247c45febd226"
+    },
+    "scope": {
+      "source": "jsmastery-pro/skills",
+      "sourceType": "github",
+      "skillPath": "skills/scope/SKILL.md",
+      "computedHash": "cc3683a45b96c1b0ecb23f9aba64263be096cb3ef2487662c0fe7e7c3200fb70"
+    },
+    "sync": {
+      "source": "jsmastery-pro/skills",
+      "sourceType": "github",
+      "skillPath": "skills/sync/SKILL.md",
+      "computedHash": "005f989b25192d3dbb4bf4e89630a3c31da8ea45dd77939102f263052309e409"
+    },
+    "tailwindcss-accessibility": {
+      "source": "josiahsiegel/claude-plugin-marketplace",
+      "sourceType": "github",
+      "skillPath": "plugins/tailwindcss-master/skills/tailwindcss-accessibility/SKILL.md",
+      "computedHash": "a942cf3362dc2aaa2edc5f1e1e07ebd1e7516e5e63aaa9cb05eab0ba6b933fa9"
+    },
+    "tailwindcss-fundamentals-v4": {
+      "source": "josiahsiegel/claude-plugin-marketplace",
+      "sourceType": "github",
+      "skillPath": "plugins/tailwindcss-master/skills/tailwindcss-fundamentals-v4/SKILL.md",
+      "computedHash": "70879742832119c014136e8b5a9fe99d1dbcf272db43037fb11d41aaeb7acafb"
+    },
+    "tanstack-integration-best-practices": {
+      "source": "deckardger/tanstack-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/tanstack-integration/SKILL.md",
+      "computedHash": "f8454d0835f04539c0d90a5a481937bc0e1cd7e31ac8610f302abd3421f3d24a"
+    },
+    "tanstack-query-best-practices": {
+      "source": "deckardger/tanstack-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/tanstack-query/SKILL.md",
+      "computedHash": "21d2e8b7468a81d772b6527ad8ca178cc2f3f08af777bb9061333013ee88a0c9"
+    },
+    "tanstack-router-best-practices": {
+      "source": "deckardger/tanstack-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/tanstack-router/SKILL.md",
+      "computedHash": "65764bc7b90e47f6023cb7f89b3af93eaaafc517754f10b9382e184d4646a77d"
+    },
+    "test": {
+      "source": "jsmastery-pro/skills",
+      "sourceType": "github",
+      "skillPath": "skills/test/SKILL.md",
+      "computedHash": "87dd379cca618d8cb2ca3d5073ffa8be6755e5822e7834a3c0ebe06bd3853f1f"
+    },
+    "vite": {
+      "source": "antfu/skills",
+      "sourceType": "github",
+      "skillPath": "skills/vite/SKILL.md",
+      "computedHash": "867ff66238f3152e9c494339ad08dc432dd0df5bcf5cc7a00b61a72b580eb908"
+    }
+  }
+}
