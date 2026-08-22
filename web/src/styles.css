@@ -1,0 +1,5 @@
+@import "tailwindcss";
+
+/* Feature 6 (design system and UI foundation) owns type, colour, spacing and
+   the component set. This file holds only what the skeleton page needs, so
+   there is nothing here for that feature to undo. */

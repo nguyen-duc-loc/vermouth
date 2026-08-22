@@ -1,0 +1,96 @@
+{
+  // One tool for formatting and linting the web app, TypeScript and CSS alike
+  // (Biome). It replaces Prettier and oxlint, so there is one config, one
+  // binary, and no chance of a formatter and a linter disagreeing.
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+
+  // Biome reads .gitignore itself, so dist/ and node_modules/ need no repeating.
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+
+  "files": {
+    // Generated from api/openapi.yaml (STK-10) and never hand edited, so Biome
+    // must not reformat it either.
+    "includes": ["**", "!src/api/schema.d.ts"]
+  },
+
+  // Matches the code that is already here, so turning Biome on reformatted
+  // nothing: single quotes, no semicolons, 100 columns.
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "semicolons": "asNeeded",
+      "trailingCommas": "all"
+    }
+  },
+
+  "linter": {
+    "enabled": true,
+    // The react domain turns on the hook rules (useHookAtTopLevel,
+    // useExhaustiveDependencies) that oxlint's react plugin used to carry.
+    "domains": {
+      "react": "recommended"
+    },
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        // Named exports only, the convention in web/AGENTS.md, now enforced
+        // rather than remembered.
+        "noDefaultExport": "error",
+        // A module that exports a component exports nothing else, so React
+        // Fast Refresh keeps working.
+        "useComponentExportOnlyModules": "error"
+      },
+      "suspicious": {
+        // No `any`: strict TypeScript says so, and so does the repo rule.
+        "noExplicitAny": "error"
+      }
+    }
+  },
+
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+
+  "overrides": [
+    {
+      // Static assets, not markup a screen reader ever reaches: a favicon and
+      // an icon sprite carry no title element, and should not grow one.
+      "includes": ["public/**", "src/assets/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noSvgWithoutTitle": "off"
+          }
+        }
+      }
+    },
+    {
+      // Vite and its plugins read a default export, so config files are the one
+      // place the named exports only rule cannot hold.
+      "includes": ["vite.config.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off"
+          }
+        }
+      }
+    }
+  ]
+}
