@@ -1,0 +1,80 @@
+# The commit gate, run by pre-commit (https://pre-commit.com).
+#
+# Install it once with `task hooks:install`, which runs `pre-commit install`.
+# Run it over the whole tree at any time with `task hooks:run`. Skip it for one
+# commit with `git commit --no-verify`, and bump the pinned hook versions with
+# `task hooks:update`.
+#
+# Two kinds of hook live here. The small hygiene ones come from upstream at a
+# pinned revision and look only at the files you staged. The real gate is the
+# local block: it calls the same `task` targets CI calls, so a green hook and a
+# green pipeline mean the same thing and the gate is defined once, in
+# Taskfile.yml, rather than twice.
+minimum_pre_commit_version: '4.0.0'
+
+# `pre-commit install` wires the pre-commit hook only. Nothing here runs on push.
+default_install_hook_types: [pre-commit]
+
+# Vendored skills, generated code, and the lockfile are not ours to rewrite.
+exclude: |
+  (?x)^(
+    \.agents/skills/.*|
+    \.claude/.*|
+    web/src/api/schema\.d\.ts|
+    pnpm-lock\.yaml
+  )$
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+        # The tsconfig files carry /* block comments */, so they are JSONC and no
+        # strict JSON parser will read them. Biome checks and formats those.
+        exclude: ^web/tsconfig.*\.json$
+      - id: check-added-large-files
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        # Two trailing spaces are a line break in Markdown, so leave prose alone.
+        args: [--markdown-linebreak-ext=md]
+      - id: detect-private-key
+        # `task dev:keys` writes the Ed25519 signing key into .env, which is
+        # ignored; this catches the day somebody pastes one somewhere tracked.
+
+  - repo: local
+    hooks:
+      # The Go half runs over the whole tree, not the staged files alone, because
+      # golangci-lint reads a package at a time and a half staged package would be
+      # checked against code that is not being committed.
+      - id: go-fmt
+        name: go format (gofumpt, gci and golines, through golangci-lint)
+        entry: task fmt:check
+        language: system
+        pass_filenames: false
+        files: (\.go|go\.mod|go\.sum|go\.work|^\.golangci\.yml)$
+
+      - id: go-lint
+        name: go lint (golangci-lint, the pinned strict config)
+        entry: task lint
+        language: system
+        pass_filenames: false
+        files: (\.go|go\.mod|go\.sum|go\.work|^\.golangci\.yml)$
+
+      # The web half is one Biome pass over formatting, lint and import order,
+      # then the type checker. Biome reads its own config, so the file list is a
+      # trigger only.
+      - id: web-check
+        name: web format, lint and import order (Biome)
+        entry: task web:check
+        language: system
+        pass_filenames: false
+        files: ^web/
+
+      - id: web-typecheck
+        name: web type check (tsc -b)
+        entry: task web:typecheck
+        language: system
+        pass_filenames: false
+        files: ^web/

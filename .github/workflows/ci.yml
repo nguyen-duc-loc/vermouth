@@ -1,0 +1,107 @@
+# The one gate on a push and on a pull request: build, lint, type check, test.
+# It runs the same task targets a commit runs locally through pre-commit
+# (.pre-commit-config.yaml), so a green hook and a green pipeline mean the same
+# thing. The third job runs the hygiene hooks that job does not cover.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A new push to the same branch cancels the run it replaced.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go (build, lint, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          # The workspace names the toolchain, so CI never drifts from go.work.
+          go-version-file: go.work
+          cache-dependency-path: '**/go.sum'
+
+      # Both tools are pinned and built from source rather than curled, so the
+      # version in CI is the version named here and nothing else.
+      - name: Install task and golangci-lint
+        run: |
+          go install github.com/go-task/task/v3/cmd/task@v3.53.1
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
+
+      - name: Build every binary
+        run: task build
+
+      - name: Formatting
+        run: task fmt:check
+
+      - name: Lint
+        run: task lint
+
+      - name: Test
+        run: task test
+
+  web:
+    name: Web (Biome, type check, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # pnpm first, because the Node cache below is keyed on its lockfile.
+      # The version comes from the packageManager field in the root package.json.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.19'
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # One Biome pass over formatting, lint and import order.
+      - name: Biome
+        run: pnpm --filter web run check
+
+      - name: Type check
+        run: pnpm --filter web run typecheck
+
+      # The browser type generator drives the TypeScript compiler API, so it can
+      # break in a way no type check and no test ever sees. Running it here proves
+      # it still runs, and the diff proves src/api/schema.d.ts still matches
+      # api/openapi.yaml (STK-10).
+      - name: Browser types are up to date
+        run: |
+          pnpm run generate:browser
+          git diff --exit-code -- web/src/api/schema.d.ts
+
+      - name: Build
+        run: pnpm --filter web run build
+
+  hooks:
+    name: Hooks (pre-commit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install pre-commit
+        run: pip install pre-commit==4.6.2
+
+      # Only the hygiene hooks: the Go and web gates are the two jobs above, which
+      # already have the right toolchains installed.
+      - name: Run the hygiene hooks
+        env:
+          SKIP: go-fmt,go-lint,web-check,web-typecheck
+        run: pre-commit run --all-files --show-diff-on-failure
