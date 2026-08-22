@@ -1,0 +1,14 @@
+// Development tooling only (STK-24). The shared module resolves through this
+// workspace rather than through a published version, which is why every
+// service image builds with the repository root as its Docker build context.
+go 1.27
+
+use (
+	./gateway
+	./pkg/vermouth
+	./services/billing
+	./services/identity
+	./services/notifications
+	./services/teaching
+	./test
+)

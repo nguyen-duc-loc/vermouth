@@ -1,0 +1,19 @@
+# environment
+.env
+.env.local
+
+# go
+/bin/
+*.test
+go.work.sum
+
+# node
+node_modules/
+web/dist/
+web/.vite/
+*.tsbuildinfo
+
+# local state
+.task/
+.tmp/
+*.log

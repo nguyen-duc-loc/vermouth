@@ -1,0 +1,468 @@
+# One entry point over both halves of the repository (spec 0002, task runner).
+# Run `task` on its own to see everything.
+version: '3'
+
+dotenv: ['.env']
+
+vars:
+  SERVICES: identity teaching billing notifications
+  BINARIES: gateway identity teaching billing notifications
+  MODULES: pkg/vermouth gateway services/identity services/teaching services/billing services/notifications test
+  COMPOSE: docker compose -f test/compose.test.yaml
+  RUNDIR: .tmp/run
+  LOGDIR: .tmp/logs
+  # pnpm is installed but only on the interactive shell path, so every web
+  # target puts it on PATH itself rather than failing confusingly.
+  PNPM: PATH="$HOME/.local/share/pnpm/bin:$PATH" pnpm
+
+tasks:
+  default:
+    desc: List everything you can run
+    cmds:
+      - task --list
+    silent: true
+
+  # ------------------------------------------------------------------ setup
+
+  env:
+    desc: Create .env from .env.example if you do not have one yet
+    status:
+      - test -f .env
+    cmds:
+      - cp .env.example .env
+      - echo 'Wrote .env. Now run task dev:keys to fill in the signing keys.'
+
+  dev:keys:
+    desc: Generate a development signing key pair and write it into .env
+    cmds:
+      - task: env
+      - |
+        set -e
+        mkdir -p .tmp
+        go run ./pkg/vermouth/cmd/devkeys dev-1 > .tmp/keys.env
+        for line in IDENTITY_TOKEN_KID IDENTITY_TOKEN_PRIVATE_KEY TOKEN_PUBLIC_KEYS; do
+          value=$(grep "^$line=" .tmp/keys.env)
+          if grep -q "^$line=" .env; then
+            awk -v key="$line" -v repl="$value" 'index($0, key "=") == 1 { print repl; next } { print }' .env > .env.next
+            mv .env.next .env
+          else
+            echo "$value" >> .env
+          fi
+        done
+        rm -f .tmp/keys.env
+        echo "Signing keys written into .env. identity holds the private half; everybody else verifies with the public half."
+
+  module:owner:
+    desc: "Point the Go module path at a GitHub account, for example `task module:owner -- your-github-account`"
+    cmds:
+      - |
+        set -e
+        owner={{.CLI_ARGS}}
+        if [ -z "$owner" ]; then
+          echo "name your account, for example: task module:owner -- your-github-account"
+          exit 1
+        fi
+        current=$(sed -n 's|^module github.com/\(.*\)/vermouth/pkg/vermouth$|\1|p' pkg/vermouth/go.mod)
+        if [ -z "$current" ]; then
+          echo "cannot read the current owner from pkg/vermouth/go.mod"
+          exit 1
+        fi
+        if [ "$current" = "$owner" ]; then
+          echo "nothing to rename: the module path already says $owner"
+          exit 0
+        fi
+        files=$(grep -rl "github.com/$current/vermouth" --include='*.go' --include='go.mod' --include='go.work' --include='*.yaml' --include='*.yml' --exclude=Taskfile.yml . || true)
+        if [ -z "$files" ]; then
+          echo "nothing to rename: no file carries github.com/$current/vermouth"
+          exit 0
+        fi
+        for f in $files; do
+          sed -i.bak "s|github.com/$current/vermouth|github.com/$owner/vermouth|g" "$f"
+          rm -f "$f.bak"
+        done
+        echo "module path is now github.com/$owner/vermouth"
+        echo 'run task build and task test to confirm, then commit.'
+
+  # ------------------------------------------------------------------ infra
+
+  infra:up:
+    desc: Start the four Postgres instances and Redpanda
+    cmds:
+      - "{{.COMPOSE}} up -d --wait"
+
+  infra:down:
+    desc: Stop the infra stack, keeping the data
+    cmds:
+      - "{{.COMPOSE}} down"
+
+  infra:clean:
+    desc: Stop the infra stack and delete its data (this is not reversible)
+    prompt: This deletes every database and the whole event log. Continue?
+    cmds:
+      - "{{.COMPOSE}} down -v"
+
+  infra:logs:
+    desc: Follow the infra logs
+    cmds:
+      - "{{.COMPOSE}} logs -f"
+
+  infra:ps:
+    desc: Show the infra containers
+    cmds:
+      - "{{.COMPOSE}} ps"
+
+  # ------------------------------------------------------------- migrations
+
+  migrate:sync-kit:
+    desc: Copy the shared module's canonical DDL into every service's migrations (STK-3)
+    cmds:
+      - |
+        set -e
+        for svc in {{.SERVICES}}; do
+          cp pkg/vermouth/ddl/00001_vermouth_kit.sql services/$svc/db/migrations/00001_vermouth_kit.sql
+          echo "synced services/$svc/db/migrations/00001_vermouth_kit.sql"
+        done
+
+  migrate:up:
+    desc: Apply every service's migrations (STK-21, run before services start, never from main.go)
+    cmds:
+      - |
+        set -e
+        for svc in {{.SERVICES}}; do
+          url=$(printenv "$(echo $svc | tr '[:lower:]' '[:upper:]')_DATABASE_URL")
+          echo "==> $svc"
+          goose -dir services/$svc/db/migrations postgres "$url" up
+        done
+
+  migrate:status:
+    desc: Show each service's migration state
+    cmds:
+      - |
+        set -e
+        for svc in {{.SERVICES}}; do
+          url=$(printenv "$(echo $svc | tr '[:lower:]' '[:upper:]')_DATABASE_URL")
+          echo "==> $svc"
+          goose -dir services/$svc/db/migrations postgres "$url" status
+        done
+
+  migrate:down:
+    desc: Roll one migration back in one service, for example `task migrate:down -- identity`
+    cmds:
+      - |
+        set -e
+        svc={{.CLI_ARGS}}
+        if [ -z "$svc" ]; then echo "name a service, for example: task migrate:down -- identity"; exit 1; fi
+        url=$(printenv "$(echo $svc | tr '[:lower:]' '[:upper:]')_DATABASE_URL")
+        goose -dir services/$svc/db/migrations postgres "$url" down
+
+  # -------------------------------------------------------------- generation
+
+  generate:
+    desc: Regenerate everything that is generated, then build
+    cmds:
+      - task: generate:sql
+      - task: generate:api
+      - task: build
+
+  generate:sql:
+    desc: Compile the hand written SQL to typed Go with sqlc (STK-3)
+    cmds:
+      - |
+        set -e
+        for svc in {{.SERVICES}}; do
+          if [ -f services/$svc/sqlc.yaml ]; then
+            echo "==> $svc"
+            (cd services/$svc && sqlc generate)
+          else
+            echo "==> $svc has no queries yet, skipping"
+          fi
+        done
+
+  generate:api:
+    desc: Regenerate the gateway's Go types from api/openapi.yaml (STK-10)
+    cmds:
+      - cd api && oapi-codegen -config oapi-codegen.yaml openapi.yaml
+      - echo 'The browser types come from the same document, through task web:generate.'
+
+  # ------------------------------------------------------------------- go
+
+  build:
+    desc: Build every binary into bin/
+    cmds:
+      - |
+        set -e
+        mkdir -p bin
+        for name in {{.BINARIES}}; do
+          if [ "$name" = "gateway" ]; then dir=gateway; else dir=services/$name; fi
+          CGO_ENABLED=0 go build -o bin/$name ./$dir/cmd/$name
+          echo "built bin/$name"
+        done
+
+  test:
+    desc: Run the Go tests in every module
+    cmds:
+      - |
+        set -e
+        for module in {{.MODULES}}; do
+          echo "==> $module"
+          (cd $module && go test ./...)
+        done
+
+  lint:
+    desc: Lint every Go module against the pinned strict config in .golangci.yml
+    cmds:
+      - |
+        set -e
+        for module in {{.MODULES}}; do
+          # Not `cmd && echo`: a failure on the left of && is exempt from set -e,
+          # so the loop would swallow it and the whole gate would pass regardless.
+          (cd $module && golangci-lint run ./...)
+          echo "lint clean: $module"
+        done
+
+  lint:fix:
+    desc: Lint every Go module and apply the fixes golangci-lint can make itself
+    cmds:
+      - |
+        set -e
+        for module in {{.MODULES}}; do
+          echo "==> $module"
+          (cd $module && golangci-lint run --fix ./...) || true
+        done
+
+  fmt:
+    desc: Format every Go file (gofumpt, gci and golines, run through golangci-lint)
+    cmds:
+      - |
+        set -e
+        for module in {{.MODULES}}; do
+          (cd $module && golangci-lint fmt ./...)
+          echo "formatted: $module"
+        done
+
+  fmt:check:
+    desc: Report the Go files that are not formatted, changing nothing
+    cmds:
+      - |
+        set -e
+        for module in {{.MODULES}}; do
+          (cd $module && golangci-lint fmt --diff ./...)
+          echo "format clean: $module"
+        done
+
+  tidy:
+    desc: Tidy every module
+    cmds:
+      - |
+        set -e
+        for module in {{.MODULES}}; do
+          (cd $module && go mod tidy)
+          echo "tidy: $module"
+        done
+
+  # ------------------------------------------------------- running services
+
+  dev:
+    desc: "Bring the whole skeleton up: infra, migrations, then every service"
+    cmds:
+      - task: infra:up
+      - task: migrate:up
+      - task: build
+      - task: start
+      - task: status
+
+  start:
+    desc: Start every service in the background (logs land in .tmp/logs)
+    cmds:
+      - |
+        set -e
+        for name in {{.BINARIES}}; do
+          sh test/start-service.sh "{{.RUNDIR}}" "{{.LOGDIR}}" "$name"
+        done
+      - sleep 2
+
+  stop:
+    desc: Stop every service
+    cmds:
+      - |
+        for name in {{.BINARIES}}; do
+          sh test/stop-service.sh "{{.RUNDIR}}" "$name"
+        done
+
+  svc:start:
+    desc: Start one service, for example `task svc:start -- notifications`
+    cmds:
+      - |
+        set -e
+        name={{.CLI_ARGS}}
+        if [ -z "$name" ]; then echo "name a service, for example: task svc:start -- notifications"; exit 1; fi
+        sh test/start-service.sh "{{.RUNDIR}}" "{{.LOGDIR}}" "$name"
+
+  svc:stop:
+    desc: Stop one service, for example `task svc:stop -- notifications`
+    cmds:
+      - |
+        name={{.CLI_ARGS}}
+        if [ -z "$name" ]; then echo "name a service, for example: task svc:stop -- notifications"; exit 1; fi
+        sh test/stop-service.sh "{{.RUNDIR}}" "$name"
+
+  status:
+    desc: Show which services are up, through the gateway
+    cmds:
+      - |
+        echo "gateway health:"
+        curl -fsS "http://localhost${GATEWAY_HTTP_ADDR}/health" && echo
+        echo "readiness of every service, asked through the gateway:"
+        curl -sS "http://localhost${GATEWAY_HTTP_ADDR}/ready" && echo
+
+  logs:
+    desc: Follow one service's log, for example `task logs -- identity`
+    cmds:
+      - tail -f {{.LOGDIR}}/{{.CLI_ARGS}}.log
+
+  # --------------------------------------------------------------- replay
+
+  replay:notifications:recipients:
+    desc: Replay notifications.recipients from the beginning (STK-22)
+    cmds:
+      - task: svc:stop
+        vars: { CLI_ARGS: notifications }
+      - |
+        set -e
+        REPLAY_DATABASE_URL="$NOTIFICATIONS_DATABASE_URL" go run ./pkg/vermouth/cmd/replay \
+          -service notifications -consumer recipients -topics identity.events
+      - task: svc:start
+        vars: { CLI_ARGS: notifications }
+
+  dev:token:
+    desc: "Create a tutor and print a token for it, with no browser and no Google (AC-13)"
+    cmds:
+      - go run ./services/identity/cmd/devtoken {{.CLI_ARGS}}
+
+  # ---------------------------------------------------------------- the thread
+
+  thread:
+    desc: Drive the one end to end thread and watch the event land in notifications
+    cmds:
+      - ./test/thread.sh
+
+  # ---------------------------------------------------------------- images
+
+  image:
+    desc: Build one FROM scratch image, for example `task image -- identity`
+    cmds:
+      - |
+        set -e
+        name={{.CLI_ARGS}}
+        if [ -z "$name" ]; then echo "name a service, for example: task image -- identity"; exit 1; fi
+        if [ "$name" = "gateway" ]; then dir=gateway; else dir=services/$name; fi
+        # The build context is the repository root, because pkg/vermouth cannot
+        # resolve from the service directory alone (STK-24).
+        docker build -f $dir/Dockerfile -t vermouth/$name:dev .
+
+  images:
+    desc: Build every FROM scratch image
+    cmds:
+      - |
+        set -e
+        for name in {{.BINARIES}}; do
+          if [ "$name" = "gateway" ]; then dir=gateway; else dir=services/$name; fi
+          docker build -f $dir/Dockerfile -t vermouth/$name:dev .
+        done
+
+  # ---------------------------------------------------------------- the web app
+
+  web:install:
+    desc: Install the web app's dependencies
+    dir: web
+    cmds:
+      - "{{.PNPM}} install"
+
+  web:generate:
+    desc: Regenerate the browser's API types from api/openapi.yaml (STK-10)
+    cmds:
+      # This one runs in the root package, not in web: the generator drives the
+      # TypeScript compiler API, so it needs the TypeScript 6 the root package
+      # pins for it rather than web's TypeScript 7 (see pnpm-workspace.yaml).
+      - "{{.PNPM}} run generate:browser"
+
+  web:dev:
+    desc: Run the Vite dev server
+    dir: web
+    cmds:
+      - "{{.PNPM}} run dev"
+
+  web:build:
+    desc: Build the web app to static files
+    dir: web
+    cmds:
+      - "{{.PNPM}} run build"
+
+  web:check:
+    desc: "Check the web app with Biome: formatting, lint and import order, changing nothing"
+    dir: web
+    cmds:
+      - "{{.PNPM}} run check"
+
+  web:check:fix:
+    desc: Apply every fix Biome can make itself (formatting, safe lint fixes, import order)
+    dir: web
+    cmds:
+      - "{{.PNPM}} run check:fix"
+
+  web:lint:
+    desc: Lint the web app with Biome, without touching formatting
+    dir: web
+    cmds:
+      - "{{.PNPM}} run lint"
+
+  web:fmt:
+    desc: Format the web app's TypeScript and CSS with Biome
+    dir: web
+    cmds:
+      - "{{.PNPM}} run format"
+
+  web:typecheck:
+    desc: Type check the web app with tsc -b
+    dir: web
+    cmds:
+      - "{{.PNPM}} run typecheck"
+
+  # ---------------------------------------------------------------- the gate
+
+  check:
+    desc: "What a commit has to pass: format, lint and type check, over both halves"
+    cmds:
+      - task: fmt:check
+      - task: lint
+      - task: web:check
+      - task: web:typecheck
+
+  hooks:install:
+    desc: Install the pre commit hook from .pre-commit-config.yaml (https://pre-commit.com)
+    cmds:
+      - |
+        set -e
+        if ! command -v pre-commit >/dev/null 2>&1; then
+          echo "pre-commit is not on PATH. Install it once, outside this repository:"
+          echo "  pipx install pre-commit    # or: uv tool install pre-commit"
+          exit 1
+        fi
+        # An earlier version of this repository kept its own hook in .githooks and
+        # wired it with core.hooksPath, which pre-commit refuses to install past.
+        if [ -n "$(git config --get core.hooksPath || true)" ]; then
+          git config --unset core.hooksPath
+          echo "unset core.hooksPath, which the old .githooks hook used"
+        fi
+        pre-commit install
+        echo "Undo it with: pre-commit uninstall"
+
+  hooks:run:
+    desc: Run every pre commit hook over the whole tree, not just the staged files
+    cmds:
+      - pre-commit run --all-files
+
+  hooks:update:
+    desc: Bump the pinned upstream hook revisions in .pre-commit-config.yaml
+    cmds:
+      - pre-commit autoupdate
