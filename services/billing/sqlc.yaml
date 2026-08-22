@@ -1,0 +1,24 @@
+version: "2"
+sql:
+  - engine: postgresql
+    # sqlc reads this service's own migrations, so a wrong column name fails
+    # the build rather than a request (STK-3, STK-5).
+    schema: db/migrations
+    queries: db/queries
+    gen:
+      go:
+        package: sqlcgen
+        out: internal/store/sqlcgen
+        sql_package: pgx/v5
+        emit_prepared_queries: false
+        emit_interface: true
+        emit_empty_slices: true
+        overrides:
+          # Identifiers are UUIDv7 generated in Go with google/uuid (spec 0002,
+          # conventions this stack fixes), so the generated code uses that type
+          # rather than a driver specific one.
+          - db_type: "uuid"
+            go_type: "github.com/google/uuid.UUID"
+          # Timestamps are timestamptz stored in UTC, and plain time.Time in Go.
+          - db_type: "timestamptz"
+            go_type: "time.Time"
