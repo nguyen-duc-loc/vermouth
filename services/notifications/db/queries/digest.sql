@@ -1,0 +1,97 @@
+-- Hand written SQL for the daily digest, compiled to typed Go by sqlc (STK-3).
+--
+-- Every statement names tutor_id (INV-8, AC-4). The projection upserts above the
+-- line are run only by internal/consumer, on the identifying key the event
+-- already carries, so a redelivery and a full replay both change nothing the
+-- second time (AC-7). digest_runs below the line is the scheduler's own record
+-- and no consumer writes it.
+
+-- ---------------------------------------------------------------- projections
+
+-- name: UpsertClass :exec
+INSERT INTO classes (class_id, tutor_id, name)
+VALUES ($1, $2, $3)
+ON CONFLICT (class_id) DO UPDATE
+SET name       = excluded.name,
+    updated_at = now()
+WHERE classes.tutor_id = excluded.tutor_id;
+
+-- UpsertSession serves teaching.session.scheduled and teaching.session.moved
+-- alike: a move is the same three columns at new values.
+-- name: UpsertSession :exec
+INSERT INTO sessions (session_id, class_id, tutor_id, starts_at, ends_at, local_date)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (session_id) DO UPDATE
+SET starts_at  = excluded.starts_at,
+    ends_at    = excluded.ends_at,
+    local_date = excluded.local_date,
+    updated_at = now()
+WHERE sessions.tutor_id = excluded.tutor_id;
+
+-- name: MarkSessionCancelled :exec
+UPDATE sessions
+SET cancelled_at = $3,
+    updated_at   = now()
+WHERE tutor_id = $1
+  AND session_id = $2
+  AND cancelled_at IS NULL;
+
+-- name: OpenRosterPeriod :exec
+INSERT INTO roster_periods (class_id, student_id, effective_from, tutor_id)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (class_id, student_id, effective_from) DO NOTHING;
+
+-- name: CloseRosterPeriod :exec
+UPDATE roster_periods
+SET effective_to = $4,
+    updated_at   = now()
+WHERE tutor_id = $1
+  AND class_id = $2
+  AND student_id = $3
+  AND effective_to IS NULL;
+
+-- ListDigestSessions is the whole digest read: the tutor's sessions on their own
+-- local day, the class label, and how many students were in that class on that
+-- day. The count is counted here rather than stored, because an integer bumped up
+-- and down is the accumulate in arrival order shape INV-7 forbids: a redelivery
+-- would double count and a replay would multiply it (AC-9). Membership uses the
+-- one coverage predicate spec 0003 states for all three services, inclusive at
+-- both ends, so this and billing's ListBillableSessions can never disagree about
+-- who was in a class on a day.
+-- name: ListDigestSessions :many
+SELECT s.session_id,
+       s.class_id,
+       c.name AS class_name,
+       s.starts_at,
+       s.ends_at,
+       s.local_date,
+       (SELECT count(*)
+        FROM roster_periods rp
+        WHERE rp.tutor_id = s.tutor_id
+          AND rp.class_id = s.class_id
+          AND rp.effective_from <= s.local_date
+          AND (rp.effective_to IS NULL OR s.local_date <= rp.effective_to)) AS roster_size
+FROM sessions s
+JOIN classes c
+  ON c.class_id = s.class_id
+ AND c.tutor_id = s.tutor_id
+WHERE s.tutor_id = $1
+  AND s.local_date = $2
+  AND s.cancelled_at IS NULL
+ORDER BY s.starts_at, s.session_id;
+
+-- ------------------------------------------------------- authoritative record
+
+-- InsertDigestRun is the scheduler's claim on one tutor's morning. The primary
+-- key is the lock: a repeated tick is a unique violation rather than a second
+-- email, which is what makes one digest per tutor per day true (STK-23).
+-- name: InsertDigestRun :one
+INSERT INTO digest_runs (tutor_id, local_date, state)
+VALUES ($1, $2, $3)
+RETURNING tutor_id, local_date, state, attempts, last_error, sent_at, created_at, updated_at;
+
+-- name: GetDigestRun :one
+SELECT tutor_id, local_date, state, attempts, last_error, sent_at, created_at, updated_at
+FROM digest_runs
+WHERE tutor_id = $1
+  AND local_date = $2;
