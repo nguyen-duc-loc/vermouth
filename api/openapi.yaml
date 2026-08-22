@@ -1,0 +1,355 @@
+openapi: 3.1.0
+info:
+  title: Vermouth gateway
+  version: 0.1.0
+  description: |
+    The single description of the gateway surface (STK-10). The gateway's Go
+    request and response types are generated from this document with
+    oapi-codegen, and the browser's types with openapi-typescript. A hand
+    written client type for a gateway endpoint is not allowed.
+
+    Only the gateway is described here. Services are reached by the gateway
+    alone (INV-1), so their endpoints are not a public surface.
+
+    This is the skeleton surface of feature 2, with feature 7's sign in on it:
+    the four auth endpoints are unauthenticated because they are what produces a
+    token, and everything else under /api/ needs one. Feature 8 adds the first
+    real teaching endpoints.
+servers:
+  - url: http://localhost:8080
+    description: local development
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness of the gateway itself
+      security: []
+      responses:
+        "200":
+          description: The gateway is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /ready:
+    get:
+      operationId: getReady
+      summary: Readiness of the gateway and every service behind it
+      security: []
+      responses:
+        "200":
+          description: Every service answered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+        "503":
+          description: At least one service did not answer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+
+  /api/auth/google/start:
+    get:
+      operationId: startGoogleSignIn
+      summary: Begin Google sign in
+      description: |
+        Writes the in flight sign in (its state, PKCE verifier and nonce) and
+        redirects the browser to Google. The browser follows this as a plain
+        link, so it is a GET; nothing here needs a token, because this is what
+        eventually produces one (spec 0004).
+      security: []
+      parameters:
+        - name: tz
+          in: query
+          required: false
+          description: |
+            The browser's IANA timezone name, carried onto the tutor created by
+            the callback. Anything time.LoadLocation refuses falls back to
+            Asia/Ho_Chi_Minh.
+          schema:
+            type: string
+            examples: ["Asia/Ho_Chi_Minh"]
+        - name: lang
+          in: query
+          required: false
+          description: The browser's language. Anything else falls back to vi.
+          schema:
+            type: string
+            enum: [vi, en]
+        - name: redirect_to
+          in: query
+          required: false
+          description: |
+            Where in the app to land after signing in. Kept only when it is a
+            path starting with a single slash, so it cannot become an open
+            redirect.
+          schema:
+            type: string
+            examples: ["/"]
+      responses:
+        "302":
+          description: |
+            Google's authorize URL, or /signin?error=provider_error when the
+            attempt could not be written.
+          headers:
+            Location:
+              required: true
+              schema:
+                type: string
+
+  /api/auth/google/callback:
+    get:
+      operationId: completeGoogleSignIn
+      summary: Complete Google sign in and start a session
+      description: |
+        Google sends the browser here. The code is exchanged and the ID token
+        validated by identity, which holds the client secret; a first sign in
+        creates the tutor and its identity.tutor.registered event in one
+        transaction. The answer carries no access token on purpose: it sets the
+        refresh cookie and lands the browser in the app, which then calls
+        /api/auth/refresh, so a token never appears in a URL or in history.
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: false
+          description: Google's authorization code. Absent when Google reports an error instead.
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          description: The single use state from the start call.
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          description: Set by Google when the tutor cancelled or the exchange cannot proceed.
+          schema:
+            type: string
+      responses:
+        "302":
+          description: |
+            The app, or /signin?error=<code> with one of not_allowed,
+            email_conflict, cancelled, expired_state or provider_error.
+          headers:
+            Location:
+              required: true
+              schema:
+                type: string
+            Set-Cookie:
+              description: The rotating refresh token, HttpOnly and scoped to /api/auth.
+              schema:
+                type: string
+
+  /api/auth/refresh:
+    post:
+      operationId: refreshSession
+      summary: Exchange the refresh cookie for an access token
+      description: |
+        The one path to an access token, used both after the callback and on
+        every boot, which is what makes a reload survive without a Google round
+        trip. The cookie rotates on every call: presenting an already rotated
+        token later than the grace window revokes the whole session family.
+
+        It is a POST rather than a GET because the method is half of the cross
+        site protection, together with SameSite=Lax on the cookie.
+      security: []
+      responses:
+        "200":
+          description: A fresh access token, and a rotated cookie
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /api/auth/signout:
+    post:
+      operationId: signOut
+      summary: End the session
+      description: |
+        Revokes every refresh token in this session family and clears the
+        cookie. It answers 204 whether or not the cookie named a live session,
+        because signing out twice is not an error.
+      security: []
+      responses:
+        "204":
+          description: The session is over
+
+  /api/me:
+    get:
+      operationId: getMe
+      summary: The signed in tutor
+      description: |
+        The tutor comes from the sub claim of the verified token and from
+        nothing else (INV-8).
+      responses:
+        "200":
+          description: The signed in tutor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tutor"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /api/thread:
+    get:
+      operationId: getThread
+      summary: The state of the skeleton's one end to end thread
+      description: |
+        A read the gateway fans out in parallel to two services (spec 0001,
+        gateway read aggregation): the tutor from identity, which owns it, and
+        from notifications whether its recipient projection has caught up yet.
+        No identity fact is read from notifications' copy (INV-10).
+
+        The relay polls, so `projection.recorded` is false for the first moment
+        after registering and true shortly after. That delay is the design
+        working, not a fault.
+      responses:
+        "200":
+          description: The thread as it stands
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThreadStatus"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: An Ed25519 signed access token, verified locally by each service (INV-14).
+
+  responses:
+    BadRequest:
+      description: The request was not acceptable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthenticated:
+      description: No valid token was supplied
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      description: The one error shape at the gateway boundary (spec 0001).
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              examples: ["invalid_input"]
+            message:
+              type: string
+            request_id:
+              type: string
+
+    Health:
+      type: object
+      required: [status, service]
+      properties:
+        status:
+          type: string
+        service:
+          type: string
+
+    Readiness:
+      type: object
+      required: [status, service]
+      properties:
+        status:
+          type: string
+        service:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+
+    Session:
+      type: object
+      description: |
+        What the browser holds after a refresh: an access token in memory only,
+        and when it stops being valid. The refresh token itself is never in a
+        body, only in the HttpOnly cookie beside it (spec 0004).
+      required: [access_token, access_expires_at]
+      properties:
+        access_token:
+          type: string
+        access_expires_at:
+          type: string
+          format: date-time
+
+    Tutor:
+      type: object
+      required: [tutor_id, email, display_name, timezone, language, created_at]
+      properties:
+        tutor_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        timezone:
+          type: string
+        language:
+          type: string
+          enum: [vi, en]
+        created_at:
+          type: string
+          format: date-time
+
+    ProjectionStatus:
+      type: object
+      description: notifications' own fact about how far its projection has caught up.
+      required: [tutor_id, recorded]
+      properties:
+        tutor_id:
+          type: string
+          format: uuid
+        recorded:
+          type: boolean
+        recorded_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ThreadStatus:
+      type: object
+      required: [tutor, projection]
+      properties:
+        tutor:
+          $ref: "#/components/schemas/Tutor"
+        projection:
+          $ref: "#/components/schemas/ProjectionStatus"
+        projection_unavailable:
+          type: string
+          description: |
+            Set when notifications did not answer. The tutor panel still
+            arrives, because one slow service degrades only its own panel.
+
+security:
+  - bearerAuth: []

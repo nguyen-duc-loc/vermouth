@@ -1,0 +1,9 @@
+# STK-10: the gateway's request and response types come from api/openapi.yaml
+# through oapi-codegen. Types only: the routes stay hand written on ServeMux, so
+# nothing hides the request path being studied.
+package: apitypes
+output: ../gateway/internal/apitypes/types.gen.go
+generate:
+  models: true
+output-options:
+  skip-prune: true
