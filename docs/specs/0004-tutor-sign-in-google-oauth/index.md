@@ -483,8 +483,8 @@ Google, and the database, and back to a signed in screen. Nothing is thickened u
       address. Nothing bounds them today.
 - [ ] A stub Google provider in `test/`, pointed at through the `IDENTITY_GOOGLE_*` variables, so the
       browser path can be driven end to end. The runner up in this design, and what the empty
-      `test/e2e/` will want when `/test` covers the money path with Playwright.
-- [ ] `/sync` owes three context files an update once this is built: `services/identity/AGENTS.md`
+      `test/e2e/` will want when `$test` covers the money path with Playwright.
+- [ ] `$sync` owes three context files an update once this is built: `services/identity/AGENTS.md`
       (the `golang.org/x/crypto/argon2` dependency line, the password hash convention, and the
       password hash gotcha), root `AGENTS.md` if it grows an auth line, and `web/AGENTS.md` (the token
       storage note in `src/api/client.ts`).

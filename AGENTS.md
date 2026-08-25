@@ -50,8 +50,8 @@ Spec 0001 fixes the service boundaries and the event catalogue (`INV-n`), spec 0
 (`STK-n`). Both are Accepted, and the rules below only say how they are met.
 
 The feature roadmap lives in `docs/scope/scope.md`: twenty features in phases with their status, the
-workflow level (Beta, so `/develop` then `/check verify` then `/test`), and the decisions taken up
-front so no feature reopens them. `/scope` owns that file.
+workflow level (Beta, so `$develop` then `$check verify` then `$test`), and the decisions taken up
+front so no feature reopens them. `$scope` owns that file.
 
 ## Rules
 
@@ -94,12 +94,12 @@ front so no feature reopens them. `/scope` owns that file.
 - In `web/`: TypeScript is strict (no `any`, exhaustive types), exports are named only, and every
   screen meets WCAG AA with visible focus, keyboard reach, and phone first sizing. `"strict": true`
   is missing from `web/tsconfig.app.json` today, so turning it on is the first job of
-  `/develop tooling`.
+  `$develop tooling`.
 - Commit messages are conventional: `feat:`, `fix:`, `docs:`, `chore:`, `test:`, `refactor:`.
 
 ## Tooling
 
-Chosen here, installed by `/develop tooling`. None of it is wired up yet.
+Chosen here, installed by `$develop tooling`. None of it is wired up yet.
 
 - **Go**: `golangci-lint` on the pinned upstream strict config (see the `golangci-lint-strict`
   skill), plus `gofumpt` for formatting. The `golangci-lint` binary is already installed at 2.13.1,
@@ -111,7 +111,7 @@ Chosen here, installed by `/develop tooling`. None of it is wired up yet.
   `pre-commit` hook. No hook is installed today.
 - **Tests**: Go `testing` with `testify/require`; anything touching a relay, a consumer, a
   projection, or a month end run runs against the real Postgres and Redpanda in
-  `test/compose.test.yaml` (STK-15). Playwright for the money path in the browser. `/test` sets the
+  `test/compose.test.yaml` (STK-15). Playwright for the money path in the browser. `$test` sets the
   runners up; only `pkg/vermouth/envelope_test.go` exists so far.
 - **CI**: one GitHub Actions workflow on push and on pull request: build, lint, type check, test.
   There is no `.github/` directory yet.
@@ -127,6 +127,19 @@ Chosen here, installed by `/develop tooling`. None of it is wired up yet.
 
 Installed in `.agents/skills/` (tool agnostic), symlinked into `.claude/skills/`. Repo wide skills
 are listed here; the web app's own are in `web/AGENTS.md`.
+
+Project workflow skills use Codex's `$skill-name` syntax. Their canonical copies live in
+`.agents/skills/`; `.claude/skills/` contains compatibility symlinks for Claude Code.
+
+- `$architect`: make load bearing design decisions and write specs under `docs/specs/`
+- `$scope`: plan and maintain the feature roadmap under `docs/scope/`
+- `$develop`: implement a scoped feature or tooling milestone
+- `$check`: review or verify a change before merge
+- `$test`: add focused tests for the current change
+- `$debug`: reproduce, diagnose, and fix a defect
+- `$audit`: bootstrap or gap fill durable `AGENTS.md` context
+- `$sync`: reconcile context, scope tasks, and spec statuses with repository evidence
+- `$document`: produce release notes, changelogs, pull request text, or postmortems
 
 - [golang-code-style](.agents/skills/golang-code-style/): `samber/cc-skills-golang`, idiomatic Go naming, structure, and readability
 - [golang-error-handling](.agents/skills/golang-error-handling/): `samber/cc-skills-golang`, wrapping, sentinel errors, and error types
@@ -159,4 +172,4 @@ MCP servers: none connected. Avoid `@modelcontextprotocol/server-postgres` (arch
 - [web/AGENTS.md](web/AGENTS.md) (React 19, Vite, TanStack, Tailwind v4, and the generated API types)
 - [test/AGENTS.md](test/AGENTS.md) (the one infra stack for development and tests, the service scripts, the thread driver)
 
-_Drafted by /audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._
+_Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

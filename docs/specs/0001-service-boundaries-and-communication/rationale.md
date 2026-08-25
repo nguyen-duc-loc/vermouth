@@ -1,6 +1,6 @@
 # 0001. Service boundaries and event driven communication: rationale
 
-The decision record for [index.md](index.md). Read by humans and by `/architect` on an update. A build does not need it.
+The decision record for [index.md](index.md). Read by humans and by `$architect` on an update. A build does not need it.
 
 ## Context
 

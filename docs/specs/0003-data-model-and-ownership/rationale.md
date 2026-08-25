@@ -12,7 +12,7 @@ the decision rests on.
 > inputs down to the field, and a projection whose key is wrong is only fixable by a migration plus a
 > replay. So the reach is deliberate, with one guard rail: a later feature adds its own migration
 > rather than editing one of these four, and a real change to this model routes back through
-> `/architect`. Two smaller notes. This spec refines spec 0001's wording in two places rather than
+> `$architect`. Two smaller notes. This spec refines spec 0001's wording in two places rather than
 > only applying it: the `notifications` roster count becomes membership rows counted at read time, and
 > the run table is written `billing_runs`. Both are recorded in Follow-up so the two specs do not
 > disagree. And spec 0001's catalogue leaves three values without a source (which roster period a

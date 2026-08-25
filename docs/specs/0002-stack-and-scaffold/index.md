@@ -9,7 +9,7 @@ Vermouth is built in Go for the four services and the gateway, in TypeScript for
 
 ## Requirements
 
-This is a decision spec. It carries no build tasks and no acceptance criteria of its own: `/develop stack & scaffold` derives the scaffold steps from the stack below, and the scope's "Done when" for feature 2 is the contract it is checked against (every tool choice recorded with a reason, and the skeleton building and starting locally with at least one service answering a health check through the gateway).
+This is a decision spec. It carries no build tasks and no acceptance criteria of its own: `$develop stack & scaffold` derives the scaffold steps from the stack below, and the scope's "Done when" for feature 2 is the contract it is checked against (every tool choice recorded with a reason, and the skeleton building and starting locally with at least one service answering a health check through the gateway).
 
 What it carries instead is the set of rules every later feature obeys, in the same spirit as spec 0001's invariants. Where an `INV-n` is named, that rule comes from [spec 0001](../0001-service-boundaries-and-communication/index.md) and this one only says how it is met.
 
@@ -110,7 +110,7 @@ These are settled here so feature 3 records them and feature 4 does not reopen t
 
 ### The scaffold target
 
-The ordered steps belong to `/develop stack & scaffold`, not here. What this spec fixes is the shape they arrive at, and the single thread the skeleton must demonstrate, in the project's Tracer Bullet spirit: a request from the browser, through the gateway, into one service, out of its outbox, through the relay into Redpanda, and consumed by a second service that records it. Health checks alone would prove the tools resolve; this thread proves the architecture does, and it is what feature 8 then thickens into real behaviour.
+The ordered steps belong to `$develop stack & scaffold`, not here. What this spec fixes is the shape they arrive at, and the single thread the skeleton must demonstrate, in the project's Tracer Bullet spirit: a request from the browser, through the gateway, into one service, out of its outbox, through the relay into Redpanda, and consumed by a second service that records it. Health checks alone would prove the tools resolve; this thread proves the architecture does, and it is what feature 8 then thickens into real behaviour.
 
 ```
 vermouth/
@@ -185,7 +185,7 @@ The arithmetic matters more than either figure. Against 5.0 GiB available, the h
 
 ## Follow-up
 
-- [ ] Replace `OWNER` in the Go module path `github.com/OWNER/vermouth` with the real account before the first push. `/develop` should ask once at scaffold time rather than guess.
+- [ ] Replace `OWNER` in the Go module path `github.com/OWNER/vermouth` with the real account before the first push. `$develop` should ask once at scaffold time rather than guess.
 - [ ] `git init` plus a `.gitignore` is part of the scaffold. Until it exists, every skill's freshness check is blind, and nothing is recoverable.
 - [ ] Add the `PNPM_HOME` export to `~/.profile` as well as `~/.bashrc`. Verified today: `bash -lc 'pnpm --version'` fails, so anything the task runner shells out to will not find pnpm.
 - [ ] Feature 5 must not scaffold onto `ingress-nginx`: Kubernetes SIG Network retired it in March 2026, with no releases and no security patches. Choose a maintained controller there (Traefik and Envoy Gateway are the current candidates).
@@ -193,7 +193,7 @@ The arithmetic matters more than either figure. Against 5.0 GiB available, the h
 - [ ] Feature 5 owns the Postgres advisory lock that would let `notifications` run more than one replica (STK-23). Until it exists, a second replica means two digests on the same morning.
 - [ ] `LISTEN/NOTIFY` on the outbox table is a deliberate later optimisation on top of the relay poll (STK-18), worth doing only if the wait proves visible on screen. Never a replacement for the poll: a dropped connection loses the notification while the row survives.
 - [ ] Feature 5 should measure the real total against the estimate table above. If it does not fit, apply the named fallback (one Postgres instance, four databases, four roles) by superseding this spec rather than improvising.
-- [ ] Feature 3 (or `/audit`) records in root `AGENTS.md`: the service contract, the shared module's role, the `sqlc` and `goose` workflow, the generate step, and the event naming convention.
+- [ ] Feature 3 (or `$audit`) records in root `AGENTS.md`: the service contract, the shared module's role, the `sqlc` and `goose` workflow, the generate step, and the event naming convention.
 - [ ] No technology community skills are installed. Consider installing skills covering Go backend conventions, Postgres, React with TanStack, and Tailwind v4, so later features get specific implementation guidance instead of generic advice.
 - [ ] Feature 4 inherits the identifier, timestamp, and money conventions above and should not decide them again.
 - [ ] Feature 7 owns token lifetime, refresh rotation, and browser storage. The recommendation carried into it: access token in memory lasting about fifteen minutes, refresh token in a cookie marked `HttpOnly`, `Secure`, and `SameSite=Strict`. It also owns the revocation window named in Consequences.

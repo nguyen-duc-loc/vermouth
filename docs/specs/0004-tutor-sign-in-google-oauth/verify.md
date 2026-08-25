@@ -1,7 +1,7 @@
 # 0004 verify: tutor sign in with Google only, no password
 
 How to prove spec 0004 landed. Every line names the acceptance criterion it covers, so you can run the
-list top to bottom or pick the one criterion you care about. `/check verify` can drive this directly.
+list top to bottom or pick the one criterion you care about. `$check verify` can drive this directly.
 
 Read the last section first. Five criteria (**AC-1**, **AC-2**, **AC-5**, **AC-9**, **AC-14**) need a
 real Google OAuth client, which this repository cannot carry, so they sit in their own section and stay
@@ -164,4 +164,4 @@ test cannot fully pin down, because they are about which value a tutor ends up c
 callback carries no token and the app calls `refresh`, while Key invariants says minting happens after
 that commit. Both cannot hold, so the build followed the endpoint contract: only the refresh handler
 and `cmd/devtoken` mint. The invariant AC-13 is protecting gets stronger, not weaker, but the list to
-check is one shorter than the spec's. Worth `/architect` correcting in the spec.
+check is one shorter than the spec's. Worth `$architect` correcting in the spec.

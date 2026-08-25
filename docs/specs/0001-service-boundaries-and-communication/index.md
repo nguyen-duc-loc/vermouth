@@ -242,7 +242,7 @@ Ordering only, in the project's Tracer Bullet spirit (prove the whole pipe befor
 - [ ] Feature 7 owns token lifetime, refresh, and browser storage; this spec fixes only claims and local verification.
 - [ ] Feature 13 must implement the run key with a generation, and feature 15 must implement void with a reason as a deliberate action.
 - [ ] Feature 14 renders and stores the invoice PDF inside `billing`; the future `documents` service is only for tutor uploaded session files.
-- [ ] There is no `AGENTS.md` yet. Once feature 2 exists, feature 3 (or `/audit`) should record the service contract, the event naming convention, and the outbox and consumer patterns so every service is written the same way.
+- [ ] There is no `AGENTS.md` yet. Once feature 2 exists, feature 3 (or `$audit`) should record the service contract, the event naming convention, and the outbox and consumer patterns so every service is written the same way.
 - [ ] No technology community skills are installed yet. After feature 2 picks the stack, install the matching framework and database skills so later features get specific guidance.
 - [ ] Revisit the `notifications` roster count if it drifts. The alternative is a session level snapshot of the count carried on the session events.
 

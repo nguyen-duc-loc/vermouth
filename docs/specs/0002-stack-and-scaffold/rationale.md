@@ -1,6 +1,6 @@
 # 0002. Rationale: Go services on Postgres and Redpanda, in one repository
 
-Reasoning, the stacks weighed, and the sources behind [0002](index.md). `/develop` does not read this file.
+Reasoning, the stacks weighed, and the sources behind [0002](index.md). `$develop` does not read this file.
 
 ## Context
 

@@ -1,7 +1,7 @@
 # 0004. Rationale: tutor sign in with Google only, no password
 
 The build spec is [index.md](index.md). This file is the reasoning, the options weighed, and the
-evidence behind them. `/develop` does not read it.
+evidence behind them. `$develop` does not read it.
 
 ## Context
 
@@ -25,7 +25,7 @@ and a language, then hands back an access token to anyone who asks.
 
 That gap is already blocking work. `00003` cannot apply: the development database holds 26 tutor rows
 from `task thread` runs and the column is `NOT NULL` with no default, so `task migrate:up` fails on
-`identity` and `0003/verify.md` carries the failure as an open item that names `/architect` as the way
+`identity` and `0003/verify.md` carries the failure as an open item that names `$architect` as the way
 out. Meanwhile feature 7 in the scope is tagged as needing a decision, and its "Done when" line still
 says passwords are stored hashed.
 

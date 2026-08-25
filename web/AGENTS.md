@@ -60,7 +60,7 @@ path. Running `pnpm` directly works in your own shell.
 ## Gotchas
 
 - `"strict": true` is missing from `web/tsconfig.app.json` today. Turning it on is the first job of
-  `/develop tooling`, and it is cheapest now while `src/` is seven files.
+  `$develop tooling`, and it is cheapest now while `src/` is seven files.
 - The API calls go to this app's own origin, and the dev server proxies `/api`, `/health` and
   `/ready` to the gateway (`vite.config.ts`). So `VITE_API_BASE_URL` stays unset: setting it makes
   every call cross origin, the browser preflights the JSON `POST`, and the gateway sends no CORS
@@ -106,7 +106,7 @@ path. Running `pnpm` directly works in your own shell.
 - [performance-lint-rules](../.agents/skills/performance-lint-rules/): `oxc-project/oxc`, only relevant if you ever write an oxlint rule yourself, not for using `oxlint` here
 
 Declined: `tailwindcss-responsive-darkmode` (no `dark:` class in the app yet, so it is premature),
-`react19-test-patterns` (no test library installed yet, revisit when `/test` adds one),
+`react19-test-patterns` (no test library installed yet, revisit when `$test` adds one),
 `gsap-frameworks` (Vue and Svelte only), and the four `microsoft/playwright` skills (they are for
 developing Playwright itself).
 
@@ -115,4 +115,4 @@ developing Playwright itself).
 - [0002 stack and scaffold](../docs/specs/0002-stack-and-scaffold/index.md) (the web app, styling, API contract, and testing rows)
 - Feature 6 (design system and UI foundation) owns the component set and has no spec yet
 
-_Drafted by /audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._
+_Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

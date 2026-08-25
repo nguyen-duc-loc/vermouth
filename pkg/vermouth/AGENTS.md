@@ -64,4 +64,4 @@ The repo wide skills in the root file all apply here. These are the ones that ea
 - [0001 service boundaries and communication](../../docs/specs/0001-service-boundaries-and-communication/index.md) (INV-1 to INV-15)
 - [0002 stack and scaffold](../../docs/specs/0002-stack-and-scaffold/index.md) (STK-2, STK-13, STK-16 to STK-20, STK-24)
 
-_Drafted by /audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._
+_Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

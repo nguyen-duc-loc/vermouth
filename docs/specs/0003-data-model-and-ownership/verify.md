@@ -1,7 +1,7 @@
 # 0003 verify: data model and data ownership per service
 
 How to prove spec 0003 landed. Every line names the acceptance criterion it covers, so you can run the
-list top to bottom or pick the one criterion you care about. `/check verify` can drive this directly.
+list top to bottom or pick the one criterion you care about. `$check verify` can drive this directly.
 
 Read the note at the bottom first: identity's migration is written but not applied, so one command in
 the list fails on purpose until that decision is settled.
