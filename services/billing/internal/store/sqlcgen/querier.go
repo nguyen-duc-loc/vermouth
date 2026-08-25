@@ -19,6 +19,9 @@ type Querier interface {
 	// yet, so the next generation is 1.
 	CurrentBillingRunGeneration(ctx context.Context, arg CurrentBillingRunGenerationParams) (CurrentBillingRunGenerationRow, error)
 	GetBillingRun(ctx context.Context, arg GetBillingRunParams) (BillingRun, error)
+	// GetClassRateBookkeeping exposes the consumer transaction clock for the model
+	// regression tests. Business code reads rates through RateInForceOn instead.
+	GetClassRateBookkeeping(ctx context.Context, arg GetClassRateBookkeepingParams) (GetClassRateBookkeepingRow, error)
 	GetInvoice(ctx context.Context, arg GetInvoiceParams) (Invoice, error)
 	GetInvoiceNumberCounter(ctx context.Context, arg GetInvoiceNumberCounterParams) (InvoiceNumberCounter, error)
 	// GetInvoiceProfile returns is_complete beside the fields, so the month end

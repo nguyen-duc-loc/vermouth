@@ -93,8 +93,18 @@ INSERT INTO class_rates (class_id, effective_from, tutor_id, rate_amount, curren
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (class_id, effective_from) DO UPDATE
 SET rate_amount = excluded.rate_amount,
-    currency    = excluded.currency
+    currency    = excluded.currency,
+    updated_at  = now()
 WHERE class_rates.tutor_id = excluded.tutor_id;
+
+-- GetClassRateBookkeeping exposes the consumer transaction clock for the model
+-- regression tests. Business code reads rates through RateInForceOn instead.
+-- name: GetClassRateBookkeeping :one
+SELECT recorded_at, updated_at
+FROM class_rates
+WHERE tutor_id = $1
+  AND class_id = $2
+  AND effective_from = $3;
 
 -- ListBillableSessions is the month end run's one read of the projections. The
 -- period is a range over local_date, because there is no stored month column a

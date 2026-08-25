@@ -102,6 +102,34 @@ func (q *Queries) GetBillingRun(ctx context.Context, arg GetBillingRunParams) (B
 	return i, err
 }
 
+const getClassRateBookkeeping = `-- name: GetClassRateBookkeeping :one
+SELECT recorded_at, updated_at
+FROM class_rates
+WHERE tutor_id = $1
+  AND class_id = $2
+  AND effective_from = $3
+`
+
+type GetClassRateBookkeepingParams struct {
+	TutorID       uuid.UUID
+	ClassID       uuid.UUID
+	EffectiveFrom pgtype.Date
+}
+
+type GetClassRateBookkeepingRow struct {
+	RecordedAt time.Time
+	UpdatedAt  time.Time
+}
+
+// GetClassRateBookkeeping exposes the consumer transaction clock for the model
+// regression tests. Business code reads rates through RateInForceOn instead.
+func (q *Queries) GetClassRateBookkeeping(ctx context.Context, arg GetClassRateBookkeepingParams) (GetClassRateBookkeepingRow, error) {
+	row := q.db.QueryRow(ctx, getClassRateBookkeeping, arg.TutorID, arg.ClassID, arg.EffectiveFrom)
+	var i GetClassRateBookkeepingRow
+	err := row.Scan(&i.RecordedAt, &i.UpdatedAt)
+	return i, err
+}
+
 const getInvoice = `-- name: GetInvoice :one
 SELECT invoice_id, tutor_id, billing_run_id, student_id, invoice_number, period_year,
        period_month, total_amount, currency, issued_at, pdf_location, paid_at, voided_at,
@@ -837,7 +865,8 @@ INSERT INTO class_rates (class_id, effective_from, tutor_id, rate_amount, curren
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (class_id, effective_from) DO UPDATE
 SET rate_amount = excluded.rate_amount,
-    currency    = excluded.currency
+    currency    = excluded.currency,
+    updated_at  = now()
 WHERE class_rates.tutor_id = excluded.tutor_id
 `
 

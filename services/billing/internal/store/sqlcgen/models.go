@@ -46,6 +46,7 @@ type ClassRate struct {
 	RateAmount    int64
 	Currency      string
 	RecordedAt    time.Time
+	UpdatedAt     time.Time
 }
 
 type HandledEvent struct {

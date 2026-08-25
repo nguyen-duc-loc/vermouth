@@ -35,6 +35,7 @@ var (
 	errEventNameRequired = errors.New("envelope: event_name is required")
 	errEventVersionStart = errors.New("envelope: event_version starts at 1")
 	errKeyRequired       = errors.New("envelope: needs a key, which decides its partition (INV-6)")
+	errTutorIDRequired   = errors.New("envelope: tutor_id is required for a tenant scoped event")
 )
 
 // Key is the partition key: ordering is guaranteed per key and never across
@@ -60,6 +61,40 @@ type Envelope struct {
 	Key          Key             `json:"key"`
 	RequestID    string          `json:"request_id"`
 	Data         json.RawMessage `json:"data"`
+}
+
+// TutorIDConflictError identifies an event whose payload tries to name a
+// different tenant from its trusted envelope. Consumers can reject the event
+// before any projection write instead of silently choosing one value.
+type TutorIDConflictError struct {
+	EventName       string
+	EnvelopeTutorID uuid.UUID
+	PayloadTutorID  uuid.UUID
+}
+
+func (e *TutorIDConflictError) Error() string {
+	return fmt.Sprintf(
+		"event %s payload tutor_id %s conflicts with envelope tutor_id %s",
+		e.EventName,
+		e.PayloadTutorID,
+		e.EnvelopeTutorID,
+	)
+}
+
+// TrustedTutorID returns the tenant identity from the envelope. A payload may
+// repeat that value for catalogue compatibility, but it can never replace it.
+func TrustedTutorID(env Envelope, payloadTutorID uuid.UUID) (uuid.UUID, error) {
+	if env.TutorID == uuid.Nil {
+		return uuid.Nil, fmt.Errorf("%s: %w", env.EventName, errTutorIDRequired)
+	}
+	if payloadTutorID != uuid.Nil && payloadTutorID != env.TutorID {
+		return uuid.Nil, &TutorIDConflictError{
+			EventName:       env.EventName,
+			EnvelopeTutorID: env.TutorID,
+			PayloadTutorID:  payloadTutorID,
+		}
+	}
+	return env.TutorID, nil
 }
 
 // NewEnvelope builds an event. Every event in the catalogue starts at
