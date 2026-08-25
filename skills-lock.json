@@ -13,6 +13,24 @@
       "skillPath": "skills/audit/SKILL.md",
       "computedHash": "a8d524118ce6d60911840ef31509f1f5551ce1099cb8fd8a241ed0859e5c62ed"
     },
+    "azure-compute": {
+      "source": "microsoft/azure-skills",
+      "sourceType": "github",
+      "skillPath": "skills/azure-compute/SKILL.md",
+      "computedHash": "6c87d6a2e509c45cc761c84df8d0c302015470d1f061f5eaa8109408b0bf5480"
+    },
+    "azure-diagnostics": {
+      "source": "microsoft/azure-skills",
+      "sourceType": "github",
+      "skillPath": "skills/azure-diagnostics/SKILL.md",
+      "computedHash": "3311cd59d68193523c96eadd29c4339e41d939b6180997d980f35589c5afef05"
+    },
+    "azure-kubernetes": {
+      "source": "microsoft/azure-skills",
+      "sourceType": "github",
+      "skillPath": "skills/azure-kubernetes/SKILL.md",
+      "computedHash": "390f198d1c2033953729996bd3fa70dc3d9cef9775207dae150d8bc93182f07c"
+    },
     "check": {
       "source": "jsmastery-pro/skills",
       "sourceType": "github",
@@ -30,6 +48,18 @@
       "sourceType": "github",
       "skillPath": "skills/develop/SKILL.md",
       "computedHash": "42dc998560097e8fe95e78f08df574ef4e5110b9ceacdd5ae3fdf68808f51c59"
+    },
+    "docker-buildx": {
+      "source": "full-stack-skills/docker-skills",
+      "sourceType": "github",
+      "skillPath": "skills/docker-buildx/SKILL.md",
+      "computedHash": "d5bcd802ab56dc6b11a45650b2c4ea1c29689580acde5f8c68d15d032f329625"
+    },
+    "docker-security": {
+      "source": "full-stack-skills/docker-skills",
+      "sourceType": "github",
+      "skillPath": "skills/docker-security/SKILL.md",
+      "computedHash": "ff0f56da72d65bf189e60d20198a07c52896bedcb2ce936f461da27a05fd18e7"
     },
     "document": {
       "source": "jsmastery-pro/skills",
@@ -163,11 +193,23 @@
       "skillPath": "skills/gsap-utils/SKILL.md",
       "computedHash": "1ab2387f6e694718a4f1b5acf2a4ab16e1b884c3428adf5f6b26d830f00826cf"
     },
+    "helm-chart-scaffolding": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "skillPath": "plugins/kubernetes-operations/skills/helm-chart-scaffolding/SKILL.md",
+      "computedHash": "d37f4bee4daa0c969ce9912054b46b04164d57ecd0e1d958e6dfb2e5aec16503"
+    },
     "kafka-development": {
       "source": "mindrally/skills",
       "sourceType": "github",
       "skillPath": "kafka-development/SKILL.md",
       "computedHash": "402a2cf2292175618fc82709ab526b477ade35cf4aa7c6ed88c906d87c778ec4"
+    },
+    "kubernetes-specialist": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "skillPath": "skills/kubernetes-specialist/SKILL.md",
+      "computedHash": "9c5eb68fc9d553ee29e745258bc6198563158c4b2c57436d63647e61010b5f0a"
     },
     "openapi": {
       "source": "oakoss/agent-skills",
@@ -216,6 +258,12 @@
       "sourceType": "github",
       "skillPath": "skills/react19-source-patterns/SKILL.md",
       "computedHash": "4b109d3ae035c6c4b8e056d16841c4d1ac0813ad84846bb482c247c45febd226"
+    },
+    "s3-storage": {
+      "source": "terminalskills/skills",
+      "sourceType": "github",
+      "skillPath": "skills/s3-storage/SKILL.md",
+      "computedHash": "225633ab07bcc955975e0042398f8ae4ec29160ea4623d540405cf928a7d99e6"
     },
     "scope": {
       "source": "jsmastery-pro/skills",
