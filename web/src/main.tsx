@@ -3,6 +3,7 @@ import { RouterProvider } from '@tanstack/react-router'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
+import { loadRuntimeConfig } from './api/runtime'
 import { refreshSession } from './api/session'
 import { router } from './routes'
 import './styles.css'
@@ -21,7 +22,7 @@ if (!root) throw new Error('index.html is missing the root element')
 // trip: the cookie is the only thing that persists, and this is the one call that
 // turns it into an access token (spec 0004, AC-3). It runs before the first
 // render so no screen flashes the wrong state.
-await refreshSession()
+await Promise.all([loadRuntimeConfig(), refreshSession()])
 
 createRoot(root).render(
   <StrictMode>

@@ -1,0 +1,99 @@
+schemaVersion: 1
+external:
+  dockerfileFrontend:
+    image: docker/dockerfile:1.12
+    digest: sha256:93bfd3b68c109427185cd78b4779fc82b484b0b7618e36d0f104d4d801e66d25
+    platforms: [linux/arm64, linux/amd64]
+  alpine:
+    image: alpine:3.24
+    digest: sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+    platforms: [linux/arm64, linux/amd64]
+  goBuilder:
+    image: golang:1.27-alpine
+    digest: sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc
+    platforms: [linux/arm64, linux/amd64]
+  nodeBuilder:
+    image: node:24.19-alpine
+    digest: sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43
+    platforms: [linux/arm64, linux/amd64]
+  webRuntime:
+    image: nginx:stable-alpine3.24
+    digest: sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46
+    platforms: [linux/arm64, linux/amd64]
+  postgres:
+    image: postgres:18.3-alpine
+    digest: sha256:54451ecb8ab38c24c3ec123f2fd501303a3a1856a5c66e98cecf2460d5e1e9d7
+    platforms: [linux/arm64, linux/amd64]
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v25.3.5
+    digest: sha256:7a967c3eff32b81689d3edf635a7a73b47a0518981ae6dff72b58fae9af3ffc0
+    platforms: [linux/arm64, linux/amd64]
+  garage:
+    image: dxflrs/garage:v2.2.0
+    digest: sha256:45a61ce3f7c9c24fc23d9ed2b09b27ed560ab87b34605d175d5c588f539c24e4
+    platforms: [linux/arm64, linux/amd64]
+  registry:
+    image: registry:2.8.3
+    digest: sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
+    platforms: [linux/arm64, linux/amd64]
+  k3s:
+    image: rancher/k3s:v1.35.5-k3s1
+    digest: sha256:2074403abe1bded11ef3dde09d457e13be8e0b64c218b1c4f8269b4565cfbc65
+    platforms: [linux/arm64, linux/amd64]
+  envoyGateway:
+    image: docker.io/envoyproxy/gateway:v1.9.0
+    digest: sha256:6f40c7b218b4ff1c4cb481923ed2c9a7634580365913434dd5dda9e954c0114b
+    platforms: [linux/arm64, linux/amd64]
+  envoyProxy:
+    image: docker.io/envoyproxy/envoy:distroless-v1.39.0
+    digest: sha256:7877ad87afd7459e1bd2a077ff601fec7c93aeecd62e71664560d96328c62cf4
+    platforms: [linux/arm64, linux/amd64]
+built:
+  gateway:
+    dockerfile: gateway/Dockerfile
+    target: runtime
+    platforms: [linux/arm64, linux/amd64]
+  identity:
+    dockerfile: services/identity/Dockerfile
+    target: runtime
+    platforms: [linux/arm64, linux/amd64]
+  teaching:
+    dockerfile: services/teaching/Dockerfile
+    target: runtime
+    platforms: [linux/arm64, linux/amd64]
+  billing:
+    dockerfile: services/billing/Dockerfile
+    target: runtime
+    platforms: [linux/arm64, linux/amd64]
+  notifications:
+    dockerfile: services/notifications/Dockerfile
+    target: runtime
+    platforms: [linux/arm64, linux/amd64]
+  web:
+    dockerfile: deploy/images/web/Dockerfile
+    target: runtime
+    platforms: [linux/arm64, linux/amd64]
+  identityMigration:
+    dockerfile: services/identity/Dockerfile
+    target: migration
+    platforms: [linux/arm64, linux/amd64]
+  teachingMigration:
+    dockerfile: services/teaching/Dockerfile
+    target: migration
+    platforms: [linux/arm64, linux/amd64]
+  billingMigration:
+    dockerfile: services/billing/Dockerfile
+    target: migration
+    platforms: [linux/arm64, linux/amd64]
+  notificationsMigration:
+    dockerfile: services/notifications/Dockerfile
+    target: migration
+    platforms: [linux/arm64, linux/amd64]
+  devtoken:
+    dockerfile: services/identity/Dockerfile
+    target: devtoken
+    platforms: [linux/arm64]
+  garageInit:
+    dockerfile: deploy/images/garage-init/Dockerfile
+    target: runtime
+    platforms: [linux/arm64, linux/amd64]

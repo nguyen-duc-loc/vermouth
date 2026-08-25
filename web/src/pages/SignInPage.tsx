@@ -1,5 +1,6 @@
 import { useSearch } from '@tanstack/react-router'
 
+import { runtimeConfig } from '../api/runtime'
 import { browserLanguage, googleSignInUrl, type SignInErrorCode } from '../api/session'
 
 // The sign in screen. One button, because there is one way in: Google. There is
@@ -33,6 +34,11 @@ const refusals: Record<SignInErrorCode, { vi: string; en: string }> = {
   },
 }
 
+const unavailable = {
+  en: 'Google sign in is not configured for this local environment. Use task dev:token for the development thread.',
+  vi: 'Đăng nhập Google chưa được cấu hình cho môi trường cục bộ này. Hãy dùng task dev:token để chạy luồng phát triển.',
+}
+
 function refusalSentence(code: string | undefined): string | null {
   if (!code || !(code in refusals)) return null
   return refusals[code as SignInErrorCode][browserLanguage()]
@@ -41,6 +47,8 @@ function refusalSentence(code: string | undefined): string | null {
 export function SignInPage() {
   const { error } = useSearch({ from: '/signin' })
   const sentence = refusalSentence(error)
+  const googleEnabled = runtimeConfig().googleAuthEnabled
+  const unavailableMessage = unavailable[browserLanguage()]
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-8 px-4 py-10">
@@ -61,13 +69,35 @@ export function SignInPage() {
         </p>
       )}
 
-      <a
-        href={googleSignInUrl('/')}
-        className="flex min-h-11 items-center justify-center gap-3 rounded border border-neutral-300 bg-white px-4 py-3 font-medium text-neutral-900 hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
-      >
-        <GoogleMark />
-        Continue with Google
-      </a>
+      {googleEnabled ? (
+        <a
+          href={googleSignInUrl('/')}
+          className="flex min-h-11 items-center justify-center gap-3 rounded border border-neutral-300 bg-white px-4 py-3 font-medium text-neutral-900 hover:bg-neutral-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900"
+        >
+          <GoogleMark />
+          Continue with Google
+        </a>
+      ) : (
+        <button
+          type="button"
+          disabled
+          aria-describedby="google-auth-unavailable"
+          className="flex min-h-11 items-center justify-center gap-3 rounded border border-neutral-300 bg-neutral-100 px-4 py-3 font-medium text-neutral-600 disabled:cursor-not-allowed"
+        >
+          <GoogleMark />
+          Continue with Google
+        </button>
+      )}
+
+      {!googleEnabled && (
+        <p
+          id="google-auth-unavailable"
+          role="status"
+          className="rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          {unavailableMessage}
+        </p>
+      )}
 
       <p className="text-xs text-neutral-500">
         Only invited addresses can create an account. Signing in keeps you signed in on this device

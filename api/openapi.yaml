@@ -100,6 +100,12 @@ paths:
               required: true
               schema:
                 type: string
+        "503":
+          description: Google sign in is disabled in this local environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /api/auth/google/callback:
     get:
@@ -146,6 +152,12 @@ paths:
               description: The rotating refresh token, HttpOnly and scoped to /api/auth.
               schema:
                 type: string
+        "503":
+          description: Google sign in is disabled in this local environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /api/auth/refresh:
     post:

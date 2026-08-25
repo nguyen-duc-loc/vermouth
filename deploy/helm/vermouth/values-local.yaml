@@ -1,0 +1,6 @@
+images:
+  postgres: docker.io/library/postgres@sha256:54451ecb8ab38c24c3ec123f2fd501303a3a1856a5c66e98cecf2460d5e1e9d7
+  redpanda: docker.redpanda.com/redpandadata/redpanda@sha256:7a967c3eff32b81689d3edf635a7a73b47a0518981ae6dff72b58fae9af3ffc0
+  garage: docker.io/dxflrs/garage@sha256:45a61ce3f7c9c24fc23d9ed2b09b27ed560ab87b34605d175d5c588f539c24e4
+config:
+  googleAuthEnabled: false

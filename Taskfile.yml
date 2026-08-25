@@ -13,7 +13,7 @@ vars:
   LOGDIR: .tmp/logs
   # pnpm is installed but only on the interactive shell path, so every web
   # target puts it on PATH itself rather than failing confusingly.
-  PNPM: PATH="$HOME/.local/share/pnpm/bin:$PATH" pnpm
+  PNPM: corepack pnpm
 
 tasks:
   default:
@@ -38,6 +38,18 @@ tasks:
       - task: env
       - |
         set -e
+        present=0
+        for line in IDENTITY_TOKEN_KID IDENTITY_TOKEN_PRIVATE_KEY TOKEN_PUBLIC_KEYS; do
+          if grep -q "^$line=.." .env; then present=$((present + 1)); fi
+        done
+        if [ "$present" -eq 3 ]; then
+          echo 'Signing keys already exist. Nothing changed.'
+          exit 0
+        fi
+        if [ "$present" -ne 0 ]; then
+          echo 'The signing key set is incomplete. Fix or clear all three key values before regenerating.'
+          exit 1
+        fi
         mkdir -p .tmp
         go run ./pkg/vermouth/cmd/devkeys dev-1 > .tmp/keys.env
         for line in IDENTITY_TOKEN_KID IDENTITY_TOKEN_PRIVATE_KEY TOKEN_PUBLIC_KEYS; do
@@ -262,8 +274,8 @@ tasks:
 
   # ------------------------------------------------------- running services
 
-  dev:
-    desc: "Bring the whole skeleton up: infra, migrations, then every service"
+  dev:host:
+    desc: "Bring the legacy host path up: Compose, migrations, then every Go service"
     cmds:
       - task: infra:up
       - task: migrate:up
@@ -334,7 +346,7 @@ tasks:
       - task: svc:start
         vars: { CLI_ARGS: notifications }
 
-  dev:token:
+  dev:token:host:
     desc: "Create a tutor and print a token for it, with no browser and no Google (AC-13)"
     cmds:
       - go run ./services/identity/cmd/devtoken {{.CLI_ARGS}}
@@ -342,7 +354,14 @@ tasks:
   # ---------------------------------------------------------------- the thread
 
   thread:
-    desc: Drive the one end to end thread and watch the event land in notifications
+    desc: Drive the Kubernetes end to end thread through vermouth.localhost
+    cmds:
+      - ./test/thread.sh
+
+  thread:host:
+    desc: Drive the legacy host thread while the strangler migration remains
+    env:
+      VERMOUTH_DEV_MODE: host
     cmds:
       - ./test/thread.sh
 
@@ -358,7 +377,7 @@ tasks:
         if [ "$name" = "gateway" ]; then dir=gateway; else dir=services/$name; fi
         # The build context is the repository root, because pkg/vermouth cannot
         # resolve from the service directory alone (STK-24).
-        docker build -f $dir/Dockerfile -t vermouth/$name:dev .
+        docker build --target runtime -f $dir/Dockerfile -t vermouth/$name:dev .
 
   images:
     desc: Build every FROM scratch image
@@ -367,8 +386,85 @@ tasks:
         set -e
         for name in {{.BINARIES}}; do
           if [ "$name" = "gateway" ]; then dir=gateway; else dir=services/$name; fi
-          docker build -f $dir/Dockerfile -t vermouth/$name:dev .
+          docker build --target runtime -f $dir/Dockerfile -t vermouth/$name:dev .
         done
+
+  images:native:
+    desc: Build and push every native linux/arm64 platform image, then record its digest
+    cmds:
+      - ./deploy/platform/platform.sh build-native
+
+  images:multi:
+    desc: Build and verify linux/arm64 plus linux/amd64 manifest lists
+    cmds:
+      - ./deploy/platform/platform.sh build-multi
+
+  # ------------------------------------------------------ local Kubernetes
+
+  platform:doctor:
+    desc: Check every pinned host tool, cluster identity, and immutable input
+    cmds:
+      - ./deploy/platform/platform.sh doctor
+
+  platform:bootstrap:
+    desc: Reconcile local config, Colima, k3d, the registry, and Envoy Gateway
+    cmds:
+      - ./deploy/platform/platform.sh bootstrap
+
+  platform:validate:
+    desc: Lint and render the foundation, application, and Job chart modes
+    cmds:
+      - ./deploy/platform/platform.sh validate
+
+  platform:secrets:
+    desc: Create stable foundation Secrets and content named runtime Secrets
+    cmds:
+      - ./deploy/platform/platform.sh secrets
+
+  platform:status:
+    desc: Show releases, workloads, Gateway state, Jobs, storage, registry, and readiness
+    cmds:
+      - ./deploy/platform/platform.sh status
+
+  platform:logs:
+    desc: "Read one platform log target, for example task platform:logs -- identity --previous"
+    cmds:
+      - ./deploy/platform/platform.sh logs {{.CLI_ARGS}}
+
+  platform:stop:
+    desc: Stop the local cluster and registry while keeping their data
+    cmds:
+      - ./deploy/platform/platform.sh stop
+
+  platform:clean:
+    desc: Delete the local cluster, registry, and their data after typed confirmation
+    cmds:
+      - ./deploy/platform/platform.sh clean
+
+  platform:recreate:
+    desc: Delete the local platform after typed confirmation, then bootstrap an empty one
+    cmds:
+      - ./deploy/platform/platform.sh recreate
+
+  platform:jobs:clean:
+    desc: Delete one named completed or failed Job and its Pod
+    cmds:
+      - ./deploy/platform/platform.sh jobs-clean {{.CLI_ARGS}}
+
+  dev:
+    desc: Build and start the whole Kubernetes platform, then print its local address
+    cmds:
+      - ./deploy/platform/platform.sh dev
+
+  dev:redeploy:
+    desc: "Build and redeploy one workload, for example task dev:redeploy -- identity"
+    cmds:
+      - ./deploy/platform/platform.sh redeploy {{.CLI_ARGS}}
+
+  dev:token:
+    desc: Run the local development token program as a short lived Kubernetes Job
+    cmds:
+      - ./deploy/platform/platform.sh devtoken {{.CLI_ARGS}}
 
   # ---------------------------------------------------------------- the web app
 

@@ -1,0 +1,74 @@
+foundation:
+  enabled: false
+application:
+  enabled: false
+jobs:
+  runID: ""
+  migrations:
+    enabled: false
+    services: [identity, teaching, billing, notifications]
+  garageInit:
+    enabled: false
+  devtoken:
+    enabled: false
+    args: []
+
+images:
+  postgres: ""
+  redpanda: ""
+  garage: ""
+  garageInit: ""
+  gateway: ""
+  identity: ""
+  teaching: ""
+  billing: ""
+  notifications: ""
+  web: ""
+  devtoken: ""
+  migrations:
+    identity: ""
+    teaching: ""
+    billing: ""
+    notifications: ""
+
+secrets:
+  gateway: ""
+  identity: ""
+  teaching: ""
+  billing: ""
+  notifications: ""
+  postgres:
+    identity: postgres-identity-bootstrap
+    teaching: postgres-teaching-bootstrap
+    billing: postgres-billing-bootstrap
+    notifications: postgres-notifications-bootstrap
+  garage: garage-bootstrap
+  billingS3: billing-s3-bootstrap
+
+config:
+  logLevel: info
+  brokerSeeds: redpanda:9092
+  topicPartitions: "3"
+  relayInterval: 750ms
+  consumerRetryMax: "5"
+  consumerRetryBaseDelay: 200ms
+  gatewayUpstreamTimeout: 5s
+  googleAuthEnabled: false
+  identityAppURL: http://vermouth.localhost
+  identityGoogleRedirectURL: http://vermouth.localhost/api/auth/google/callback
+  identitySignupAllowlist: ""
+  identityRefreshTTL: 720h
+  identityTokenTTL: 15m
+  identityRefreshGrace: 10s
+  identitySweepInterval: 10m
+  identityCookieSecure: "true"
+  billingS3Endpoint: http://garage:3900
+  billingS3Region: garage
+  billingS3Bucket: vermouth-invoices
+
+storage:
+  className: local-path
+  postgres: 2Gi
+  redpanda: 4Gi
+  garageMetadata: 1Gi
+  garageData: 5Gi

@@ -1,0 +1,107 @@
+{{- if .Values.application.enabled }}
+{{- range $name, $port := dict "gateway" 8080 "identity" 8081 "teaching" 8082 "billing" 8083 "notifications" 8084 }}
+{{- $image := index $.Values.images $name }}
+{{- $secret := index $.Values.secrets $name }}
+{{- if not $secret }}{{ fail (printf "runtime Secret name for %s is required" $name) }}{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" $ "component" $name) | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  selector:
+    app.kubernetes.io/name: vermouth
+    app.kubernetes.io/component: {{ $name }}
+  ports:
+    - name: http
+      port: {{ $port }}
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" $ "component" $name) | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  progressDeadlineSeconds: 300
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vermouth
+      app.kubernetes.io/component: {{ $name }}
+  template:
+    metadata:
+      annotations:
+        vermouth.dev/config-sha256: {{ toJson $.Values.config | sha256sum }}
+      labels:
+        app.kubernetes.io/name: vermouth
+        app.kubernetes.io/component: {{ $name }}
+    spec:
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "vermouth.podSecurity" $ | nindent 8 }}
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: {{ $name }}
+          image: {{ include "vermouth.requireImage" (dict "name" $name "image" $image) }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- include "vermouth.containerSecurity" $ | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ $port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ $name }}-config
+            - secretRef:
+                name: {{ $secret }}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+{{- end }}
+{{- end }}

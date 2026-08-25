@@ -1,0 +1,6 @@
+apiVersion: v2
+name: vermouth
+description: The local Vermouth platform, rendered as foundation, application, or Job resources
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

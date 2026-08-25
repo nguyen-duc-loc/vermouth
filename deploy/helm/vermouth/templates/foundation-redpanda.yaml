@@ -1,0 +1,126 @@
+{{- if .Values.foundation.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redpanda
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "redpanda") | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: vermouth
+    app.kubernetes.io/component: redpanda
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: kafka
+    - name: admin
+      port: 9644
+      targetPort: admin
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redpanda
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "redpanda") | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  serviceName: redpanda
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vermouth
+      app.kubernetes.io/component: redpanda
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vermouth
+        app.kubernetes.io/component: redpanda
+    spec:
+      serviceAccountName: redpanda
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "vermouth.podSecurity" . | nindent 8 }}
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: redpanda
+          image: {{ include "vermouth.requireImage" (dict "name" "redpanda" "image" .Values.images.redpanda) }}
+          imagePullPolicy: IfNotPresent
+          command: [/usr/bin/rpk]
+          args:
+            - redpanda
+            - start
+            - --node-id=0
+            - --smp=1
+            - --overprovisioned
+            - --memory=1G
+            - --reserve-memory=0M
+            - --check=false
+            - --default-log-level=warn
+            - --kafka-addr=internal://0.0.0.0:9092
+            - --advertise-kafka-addr=internal://redpanda:9092
+            - --rpc-addr=0.0.0.0:33145
+            - --advertise-rpc-addr=redpanda:33145
+            - --set
+            - redpanda.auto_create_topics_enabled=false
+          securityContext:
+            {{- include "vermouth.containerSecurity" . | nindent 12 }}
+          ports:
+            - name: kafka
+              containerPort: 9092
+            - name: admin
+              containerPort: 9644
+          readinessProbe:
+            exec:
+              command: [/usr/bin/rpk, cluster, health, --brokers=localhost:9092]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            exec:
+              command: [/usr/bin/rpk, cluster, health, --brokers=localhost:9092]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              cpu: "1"
+              memory: 1536Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/redpanda/data
+            - name: config
+              mountPath: /etc/redpanda
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: vermouth
+          app.kubernetes.io/component: redpanda
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.storage.className }}
+        resources:
+          requests:
+            storage: {{ .Values.storage.redpanda }}
+{{- end }}

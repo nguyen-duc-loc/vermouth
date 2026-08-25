@@ -1,0 +1,122 @@
+{{- if .Values.foundation.enabled }}
+{{- range $name := list "identity" "teaching" "billing" "notifications" }}
+{{- $component := printf "postgres-%s" $name }}
+{{- $role := printf "vermouth_%s" $name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $component }}
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" $ "component" $component) | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: vermouth
+    app.kubernetes.io/component: {{ $component }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $component }}
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" $ "component" $component) | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  serviceName: {{ $component }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vermouth
+      app.kubernetes.io/component: {{ $component }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vermouth
+        app.kubernetes.io/component: {{ $component }}
+    spec:
+      serviceAccountName: {{ $component }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "vermouth.podSecurity" $ | nindent 8 }}
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: postgres
+          image: {{ include "vermouth.requireImage" (dict "name" "postgres" "image" $.Values.images.postgres) }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- include "vermouth.containerSecurity" $ | nindent 12 }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_USER
+              value: {{ $role }}
+            - name: POSTGRES_DB
+              value: {{ $role }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ index $.Values.secrets.postgres $name }}
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/18/docker
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, {{ $role }}, -d, {{ $role }}]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+          livenessProbe:
+            exec:
+              command: [pg_isready, -U, {{ $role }}, -d, {{ $role }}]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 384Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: vermouth
+          app.kubernetes.io/component: {{ $component }}
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ $.Values.storage.className }}
+        resources:
+          requests:
+            storage: {{ $.Values.storage.postgres }}
+{{- end }}
+{{- end }}

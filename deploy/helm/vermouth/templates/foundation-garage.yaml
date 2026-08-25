@@ -1,0 +1,145 @@
+{{- if .Values.foundation.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: garage
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "garage") | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: vermouth
+    app.kubernetes.io/component: garage
+  ports:
+    - name: s3
+      port: 3900
+      targetPort: s3
+    - name: rpc
+      port: 3901
+      targetPort: rpc
+    - name: admin
+      port: 3903
+      targetPort: admin
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: garage
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "garage") | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  serviceName: garage
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vermouth
+      app.kubernetes.io/component: garage
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vermouth
+        app.kubernetes.io/component: garage
+    spec:
+      serviceAccountName: garage
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "vermouth.podSecurity" . | nindent 8 }}
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: garage
+          image: {{ include "vermouth.requireImage" (dict "name" "garage" "image" .Values.images.garage) }}
+          imagePullPolicy: IfNotPresent
+          command: [/garage]
+          args: [server]
+          securityContext:
+            {{- include "vermouth.containerSecurity" . | nindent 12 }}
+          env:
+            - name: GARAGE_CONFIG_FILE
+              value: /etc/garage.toml
+            - name: GARAGE_RPC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.garage }}
+                  key: GARAGE_RPC_SECRET
+            - name: GARAGE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.garage }}
+                  key: GARAGE_ADMIN_TOKEN
+          ports:
+            - name: s3
+              containerPort: 3900
+            - name: rpc
+              containerPort: 3901
+            - name: admin
+              containerPort: 3903
+          readinessProbe:
+            exec:
+              command: [/garage, status]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            exec:
+              command: [/garage, status]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/garage.toml
+              subPath: garage.toml
+              readOnly: true
+            - name: metadata
+              mountPath: /var/lib/garage/meta
+            - name: data
+              mountPath: /var/lib/garage/data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: garage-config
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: metadata
+        labels:
+          app.kubernetes.io/name: vermouth
+          app.kubernetes.io/component: garage
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.storage.className }}
+        resources:
+          requests:
+            storage: {{ .Values.storage.garageMetadata }}
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: vermouth
+          app.kubernetes.io/component: garage
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.storage.className }}
+        resources:
+          requests:
+            storage: {{ .Values.storage.garageData }}
+{{- end }}

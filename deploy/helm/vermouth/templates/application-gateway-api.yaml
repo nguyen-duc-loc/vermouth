@@ -1,0 +1,154 @@
+{{- if .Values.application.enabled }}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: vermouth-proxy
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "envoy-proxy") | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyDeployment:
+        replicas: 1
+        pod:
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+        container:
+          image: docker.io/envoyproxy/envoy@sha256:7877ad87afd7459e1bd2a077ff601fec7c93aeecd62e71664560d96328c62cf4
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+      envoyService:
+        type: LoadBalancer
+  telemetry:
+    accessLog:
+      settings:
+        - format:
+            type: JSON
+            json:
+              start_time: "%START_TIME%"
+              method: "%REQ(:METHOD)%"
+              path: "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%"
+              protocol: "%PROTOCOL%"
+              response_code: "%RESPONSE_CODE%"
+              response_flags: "%RESPONSE_FLAGS%"
+              bytes_received: "%BYTES_RECEIVED%"
+              bytes_sent: "%BYTES_SENT%"
+              duration: "%DURATION%"
+              upstream_host: "%UPSTREAM_HOST%"
+              request_id: "%REQ(X-REQUEST-ID)%"
+          sinks:
+            - type: File
+              file:
+                path: /dev/stdout
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: vermouth
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "envoy-proxy") | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: vermouth
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "envoy-proxy") | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  gatewayClassName: vermouth
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: vermouth-proxy
+  listeners:
+    - name: http
+      hostname: vermouth.localhost
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        kinds:
+          - kind: HTTPRoute
+        namespaces:
+          from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: vermouth
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "envoy-proxy") | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  parentRefs:
+    - name: vermouth
+      sectionName: http
+  hostnames:
+    - vermouth.localhost
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: gateway
+          port: 8080
+    - matches:
+        - path:
+            type: Exact
+            value: /health
+      backendRefs:
+        - name: gateway
+          port: 8080
+    - matches:
+        - path:
+            type: Exact
+            value: /ready
+      backendRefs:
+        - name: gateway
+          port: 8080
+    - matches:
+        - path:
+            type: Exact
+            value: /config.json
+      backendRefs:
+        - name: web
+          port: 8080
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: web
+          port: 8080
+{{- end }}

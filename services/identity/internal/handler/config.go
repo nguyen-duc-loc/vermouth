@@ -14,6 +14,7 @@ import (
 // token.NewSignerFromEnv already parses the signing key (STK-8): a missing
 // required one stops startup instead of defaulting silently.
 const (
+	envGoogleEnabled   = "VERMOUTH_GOOGLE_AUTH_ENABLED"
 	envGoogleClientID  = "IDENTITY_GOOGLE_CLIENT_ID"
 	envGoogleSecret    = "IDENTITY_GOOGLE_CLIENT_SECRET"
 	envGoogleRedirect  = "IDENTITY_GOOGLE_REDIRECT_URL"
@@ -39,6 +40,7 @@ const (
 // never hold it, which is what makes identity the confidential client (spec
 // 0004).
 type AuthConfig struct {
+	GoogleEnabled      bool
 	GoogleClientID     string
 	GoogleClientSecret string
 	GoogleRedirectURL  string
@@ -60,8 +62,9 @@ type AuthConfig struct {
 	CookieSecure bool
 }
 
-// AuthConfigFromEnv reads the nine variables sign in needs. It is called once at
-// startup, and a missing or malformed one stops it there (STK-8).
+// AuthConfigFromEnv reads the local auth switch and the values its selected
+// mode needs. It is called once at startup, and a missing or malformed required
+// value stops it there (STK-8).
 func AuthConfigFromEnv() (AuthConfig, error) {
 	cfg := AuthConfig{
 		SignupAllowlist: make(map[string]bool),
@@ -70,11 +73,18 @@ func AuthConfigFromEnv() (AuthConfig, error) {
 		SweepInterval:   defaultSweepInterval,
 		CookieSecure:    true,
 	}
+	var err error
+	cfg.GoogleEnabled, err = envBool(envGoogleEnabled, true)
+	if err != nil {
+		return AuthConfig{}, err
+	}
 	required := map[string]*string{
-		envGoogleClientID: &cfg.GoogleClientID,
-		envGoogleSecret:   &cfg.GoogleClientSecret,
-		envGoogleRedirect: &cfg.GoogleRedirectURL,
-		envAppURL:         &cfg.AppURL,
+		envAppURL: &cfg.AppURL,
+	}
+	if cfg.GoogleEnabled {
+		required[envGoogleClientID] = &cfg.GoogleClientID
+		required[envGoogleSecret] = &cfg.GoogleClientSecret
+		required[envGoogleRedirect] = &cfg.GoogleRedirectURL
 	}
 	for name, target := range required {
 		value := strings.TrimSpace(os.Getenv(name))

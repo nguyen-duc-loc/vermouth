@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["foundation", "application", "jobs", "images", "secrets", "config", "storage"],
+  "properties": {
+    "foundation": { "$ref": "#/definitions/gate" },
+    "application": { "$ref": "#/definitions/gate" },
+    "jobs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runID", "migrations", "garageInit", "devtoken"],
+      "properties": {
+        "runID": { "type": "string", "pattern": "^$|^[0-9a-f]{12}$" },
+        "migrations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "services"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "services": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "enum": ["identity", "teaching", "billing", "notifications"] }
+            }
+          }
+        },
+        "garageInit": { "$ref": "#/definitions/gate" },
+        "devtoken": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "args"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "args": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["postgres", "redpanda", "garage", "garageInit", "gateway", "identity", "teaching", "billing", "notifications", "web", "devtoken", "migrations"],
+      "properties": {
+        "postgres": { "$ref": "#/definitions/image" },
+        "redpanda": { "$ref": "#/definitions/image" },
+        "garage": { "$ref": "#/definitions/image" },
+        "garageInit": { "$ref": "#/definitions/image" },
+        "gateway": { "$ref": "#/definitions/image" },
+        "identity": { "$ref": "#/definitions/image" },
+        "teaching": { "$ref": "#/definitions/image" },
+        "billing": { "$ref": "#/definitions/image" },
+        "notifications": { "$ref": "#/definitions/image" },
+        "web": { "$ref": "#/definitions/image" },
+        "devtoken": { "$ref": "#/definitions/image" },
+        "migrations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["identity", "teaching", "billing", "notifications"],
+          "properties": {
+            "identity": { "$ref": "#/definitions/image" },
+            "teaching": { "$ref": "#/definitions/image" },
+            "billing": { "$ref": "#/definitions/image" },
+            "notifications": { "$ref": "#/definitions/image" }
+          }
+        }
+      }
+    },
+    "secrets": { "type": "object" },
+    "config": { "type": "object" },
+    "storage": { "type": "object" }
+  },
+  "definitions": {
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "image": {
+      "type": "string",
+      "pattern": "^$|^\\S+@sha256:[0-9a-f]{64}$"
+    }
+  }
+}

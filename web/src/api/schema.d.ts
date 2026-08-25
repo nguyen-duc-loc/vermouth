@@ -359,6 +359,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Google sign in is disabled in this local environment */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     completeGoogleSignIn: {
@@ -389,6 +398,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Google sign in is disabled in this local environment */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };

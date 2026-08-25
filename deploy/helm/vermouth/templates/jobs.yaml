@@ -1,0 +1,200 @@
+{{- if .Values.jobs.migrations.enabled }}
+{{- if not .Values.jobs.runID }}{{ fail "jobs.runID is required for migration Jobs" }}{{- end }}
+{{- range $name := .Values.jobs.migrations.services }}
+{{- $secret := index $.Values.secrets $name }}
+{{- if not $secret }}{{ fail (printf "runtime Secret name for %s migration is required" $name) }}{{- end }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "migrate-%s-%s" $name $.Values.jobs.runID }}
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" $ "component" (printf "migrate-%s" $name)) | nindent 4 }}
+    vermouth.dev/run-id: {{ $.Values.jobs.runID }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  activeDeadlineSeconds: 300
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vermouth
+        app.kubernetes.io/component: {{ printf "migrate-%s" $name }}
+        vermouth.dev/run-id: {{ $.Values.jobs.runID }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ printf "migrate-%s" $name }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "vermouth.podSecurity" $ | nindent 8 }}
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: migrate
+          image: {{ include "vermouth.requireImage" (dict "name" (printf "%s migration" $name) "image" (index $.Values.images.migrations $name)) }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- include "vermouth.containerSecurity" $ | nindent 12 }}
+          env:
+            - name: GOOSE_DBSTRING
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret }}
+                  key: {{ printf "%s_DATABASE_URL" (upper $name) }}
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+{{- end }}
+{{- end }}
+{{- if .Values.jobs.garageInit.enabled }}
+{{- if not .Values.jobs.runID }}{{ fail "jobs.runID is required for the Garage initialization Job" }}{{- end }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "garage-init-%s" .Values.jobs.runID }}
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "garage-init") | nindent 4 }}
+    vermouth.dev/run-id: {{ .Values.jobs.runID }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  activeDeadlineSeconds: 300
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vermouth
+        app.kubernetes.io/component: garage-init
+        vermouth.dev/run-id: {{ .Values.jobs.runID }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: garage-init
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "vermouth.podSecurity" . | nindent 8 }}
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: garage-init
+          image: {{ include "vermouth.requireImage" (dict "name" "garage init" "image" .Values.images.garageInit) }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- include "vermouth.containerSecurity" . | nindent 12 }}
+          env:
+            - name: GARAGE_CONFIG_FILE
+              value: /etc/garage.toml
+            - name: GARAGE_RPC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.garage }}
+                  key: GARAGE_RPC_SECRET
+            - name: GARAGE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.garage }}
+                  key: GARAGE_ADMIN_TOKEN
+            - name: GARAGE_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.billingS3 }}
+                  key: BILLING_S3_ACCESS_KEY_ID
+            - name: GARAGE_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.billingS3 }}
+                  key: BILLING_S3_SECRET_ACCESS_KEY
+            - name: GARAGE_BUCKET
+              value: vermouth-invoices
+            - name: GARAGE_KEY_NAME
+              value: billing
+            - name: GARAGE_ZONE
+              value: local
+            - name: GARAGE_CAPACITY
+              value: 5G
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/garage.toml
+              subPath: garage.toml
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: garage-config
+        - name: tmp
+          emptyDir:
+            sizeLimit: 8Mi
+{{- end }}
+{{- if .Values.jobs.devtoken.enabled }}
+{{- if not .Values.jobs.runID }}{{ fail "jobs.runID is required for the development token Job" }}{{- end }}
+{{- if not .Values.secrets.identity }}{{ fail "identity runtime Secret name is required for the development token Job" }}{{- end }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "devtoken-%s" .Values.jobs.runID }}
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "devtoken") | nindent 4 }}
+    vermouth.dev/run-id: {{ .Values.jobs.runID }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  activeDeadlineSeconds: 120
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vermouth
+        app.kubernetes.io/component: devtoken
+        vermouth.dev/run-id: {{ .Values.jobs.runID }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: devtoken
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "vermouth.podSecurity" . | nindent 8 }}
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: devtoken
+          image: {{ include "vermouth.requireImage" (dict "name" "devtoken" "image" .Values.images.devtoken) }}
+          imagePullPolicy: IfNotPresent
+          args:
+            {{- toYaml .Values.jobs.devtoken.args | nindent 12 }}
+          securityContext:
+            {{- include "vermouth.containerSecurity" . | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: identity-config
+            - secretRef:
+                name: {{ .Values.secrets.identity }}
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+{{- end }}

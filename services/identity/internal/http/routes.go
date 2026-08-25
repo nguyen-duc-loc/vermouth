@@ -67,6 +67,11 @@ func Mux(deps Deps) http.Handler {
 func startSignIn(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
+		if !deps.Auth.GoogleEnabled {
+			vermouth.WriteError(ctx, w, http.StatusServiceUnavailable, "auth_unavailable",
+				"Google sign in is not configured for this local environment")
+			return
+		}
 		query := r.URL.Query()
 		authorizeURL, err := deps.Handler.StartSignIn(ctx, handler.StartInput{
 			Timezone:   query.Get("tz"),
@@ -90,6 +95,11 @@ func startSignIn(deps Deps) http.HandlerFunc {
 func completeSignIn(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
+		if !deps.Auth.GoogleEnabled {
+			vermouth.WriteError(ctx, w, http.StatusServiceUnavailable, "auth_unavailable",
+				"Google sign in is not configured for this local environment")
+			return
+		}
 		query := r.URL.Query()
 		result, err := deps.Handler.CompleteSignIn(ctx,
 			query.Get("state"), query.Get("code"), query.Get("error"))

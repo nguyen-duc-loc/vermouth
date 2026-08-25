@@ -1,0 +1,51 @@
+schemaVersion: 1
+host:
+  os: darwin
+  architecture: arm64
+tools:
+  colima:
+    series: "0.10"
+    minimum: "0.10.3"
+  docker:
+    series: "29"
+    minimum: "29.7.2"
+  buildx:
+    series: "0.36"
+    minimum: "0.36.1"
+  k3d:
+    series: "5.9"
+    minimum: "5.9.0"
+  kubectl:
+    acceptedSeries: ["1.35", "1.36"]
+  helm:
+    series: "4.2"
+    minimum: "4.2.4"
+  task:
+    series: "3.53"
+    minimum: "3.53.1"
+  go:
+    series: "1.27"
+    minimum: "1.27.0"
+  node:
+    series: "24.19"
+    minimum: "24.19.0"
+  pnpm:
+    exact: "11.22.0"
+cluster:
+  name: vermouth
+  context: k3d-vermouth
+  servers: 1
+  agents: 0
+  k3s: "v1.35.5-k3s1"
+  traefikEnabled: false
+  hostHTTPPort: 80
+registry:
+  name: vermouth-registry
+  hostEndpoint: k3d-vermouth-registry.localhost:5111
+  clusterEndpoint: k3d-vermouth-registry:5000
+envoyGateway:
+  release: envoy-gateway
+  namespace: envoy-gateway-system
+  chart: oci://docker.io/envoyproxy/gateway-helm
+  version: "v1.9.0"
+  digest: sha256:06e7c26e50d40f0b98d6d1243a3c8dd094464c6099df727216876c19401ffe5f

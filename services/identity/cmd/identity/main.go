@@ -90,8 +90,8 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	// The nine variables Google sign in needs, read once here so a missing one
-	// stops startup rather than a sign in (STK-8).
+	// The selected auth mode is read once here, so a missing value stops startup
+	// rather than a later sign in (STK-8).
 	auth, err := handler.AuthConfigFromEnv()
 	if err != nil {
 		return err
