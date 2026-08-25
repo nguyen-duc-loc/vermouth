@@ -40,7 +40,9 @@ task web:install     # or: pnpm install, from this directory
 task web:dev         # the Vite dev server on 5173, proxying to the gateway
 task web:build       # tsc -b then vite build
 task web:generate    # regenerate src/api/schema.d.ts from ../api/openapi.yaml
-pnpm lint            # oxlint
+pnpm check           # Biome formatting, lint and import order
+pnpm typecheck       # strict TypeScript through tsc -b
+pnpm lint            # Biome lint only
 ```
 
 Task targets put pnpm on `PATH` themselves, because pnpm is installed only on the interactive shell
@@ -59,8 +61,6 @@ path. Running `pnpm` directly works in your own shell.
 
 ## Gotchas
 
-- `"strict": true` is missing from `web/tsconfig.app.json` today. Turning it on is the first job of
-  `$develop tooling`, and it is cheapest now while `src/` is seven files.
 - The API calls go to this app's own origin, and the dev server proxies `/api`, `/health` and
   `/ready` to the gateway (`vite.config.ts`). So `VITE_API_BASE_URL` stays unset: setting it makes
   every call cross origin, the browser preflights the JSON `POST`, and the gateway sends no CORS
@@ -68,8 +68,8 @@ path. Running `pnpm` directly works in your own shell.
   CORS at the gateway in the same change.
 - The relay polls, so an event reaches a projection 500ms to 1s after the write commits. A screen
   reading a projection must tolerate that window rather than assert on it immediately.
-- There is no test library in `package.json` yet, so `pnpm build` (`tsc -b`) is the only check that
-  runs here today.
+- There is no test library in `package.json` yet. The current web gate is `pnpm check` plus
+  `pnpm typecheck`; `pnpm build` also runs the compiler before Vite builds.
 - TypeScript 7 ships the compiler as a binary and none of the old JavaScript compiler API:
   `ts.factory`, `ts.SyntaxKind`, and `ts.createPrinter` all read as `undefined`. `openapi-typescript`
   builds `src/api/schema.d.ts` by calling that API, so it dies on TypeScript 7. That is why the
@@ -103,7 +103,7 @@ path. Running `pnpm` directly works in your own shell.
 - [gsap-utils](../.agents/skills/gsap-utils/): `greensock/gsap-skills`, `clamp`, `mapRange`, `snap`, and friends
 - [playwright-cli](../.agents/skills/playwright-cli/): `microsoft/playwright-cli`, driving the browser
 - [playwright-best-practices](../.agents/skills/playwright-best-practices/): `currents-dev/playwright-best-practices-skill`, flake, page objects, CI, and accessibility checks
-- [performance-lint-rules](../.agents/skills/performance-lint-rules/): `oxc-project/oxc`, only relevant if you ever write an oxlint rule yourself, not for using `oxlint` here
+- [performance-lint-rules](../.agents/skills/performance-lint-rules/): `oxc-project/oxc`, only relevant if you ever write an oxlint rule yourself, not part of this app's Biome setup
 
 Declined: `tailwindcss-responsive-darkmode` (no `dark:` class in the app yet, so it is premature),
 `react19-test-patterns` (no test library installed yet, revisit when `$test` adds one),

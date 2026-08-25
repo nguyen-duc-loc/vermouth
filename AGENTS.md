@@ -5,7 +5,7 @@ Redpanda between them. Services never call each other: facts travel as events (s
 
 ## Stack
 
-- **Language / Runtime**: Go 1.27 (six modules under `go.work`), TypeScript on Node 24.19 (`web/`)
+- **Language / Runtime**: Go 1.27 (six production modules plus the test module under `go.work`), TypeScript on Node 24.19 (`web/`)
 - **Framework**: standard library `net/http` with `ServeMux` pattern routing; React 19 with Vite in `web/`
 - **Key dependencies**: `pgx` v5 with `sqlc`, `franz-go` (Redpanda), `goose`, `golang-jwt/jwt/v5` (Ed25519)
 - **Data**: Postgres 18, one instance per service; Redpanda single node; Garage over the S3 API
@@ -92,29 +92,27 @@ front so no feature reopens them. `$scope` owns that file.
   is the only source of gateway types, Go through `oapi-codegen` and browser through
   `openapi-typescript` (STK-10). Never hand write either.
 - In `web/`: TypeScript is strict (no `any`, exhaustive types), exports are named only, and every
-  screen meets WCAG AA with visible focus, keyboard reach, and phone first sizing. `"strict": true`
-  is missing from `web/tsconfig.app.json` today, so turning it on is the first job of
-  `$develop tooling`.
+  screen meets WCAG AA with visible focus, keyboard reach, and phone first sizing.
 - Commit messages are conventional: `feat:`, `fix:`, `docs:`, `chore:`, `test:`, `refactor:`.
 
 ## Tooling
 
-Chosen here, installed by `$develop tooling`. None of it is wired up yet.
+Installed by `$develop tooling` and enforced through the same task targets locally and in CI.
 
-- **Go**: `golangci-lint` on the pinned upstream strict config (see the `golangci-lint-strict`
-  skill), plus `gofumpt` for formatting. The `golangci-lint` binary is already installed at 2.13.1,
-  so what is missing is the versioned config file and the task target; `gofumpt` is not installed.
-  `task vet` and `task fmt` are the current stand ins.
-- **Web**: keep `oxlint` (already a dev dependency), add Prettier for TypeScript and CSS.
-- **Type check**: `tsc -b` (already inside `pnpm build`) for the web app.
-- **Before each commit**: one `task check` target running format, lint, and type check, wired to a
-  `pre-commit` hook. No hook is installed today.
+- **Go**: `.golangci.yml` starts from the pinned upstream strict config and carries the compatibility
+  adjustments for `golangci-lint` 2.13.1. `task fmt:check` runs `gofumpt`, `gci`, and `golines`
+  through `golangci-lint`; `task lint` checks every Go module.
+- **Web**: Biome 2.5.8 owns formatting, lint, and import order for TypeScript and CSS. TypeScript is
+  strict and `task web:typecheck` runs `tsc -b`. Use `task web:check` for the full Biome pass.
+- **Before each commit**: `task check` runs Go format and lint plus the Biome and TypeScript checks.
+  `.pre-commit-config.yaml` invokes those same targets and the hygiene hooks. Each checkout installs
+  it with `task hooks:install`; `task hooks:run` checks the whole tree.
 - **Tests**: Go `testing` with `testify/require`; anything touching a relay, a consumer, a
   projection, or a month end run runs against the real Postgres and Redpanda in
-  `test/compose.test.yaml` (STK-15). Playwright for the money path in the browser. `$test` sets the
-  runners up; only `pkg/vermouth/envelope_test.go` exists so far.
-- **CI**: one GitHub Actions workflow on push and on pull request: build, lint, type check, test.
-  There is no `.github/` directory yet.
+  `test/compose.test.yaml` (STK-15). Store and model integration tests are already present.
+  Playwright remains planned for the browser money path and is not installed yet.
+- **CI**: `.github/workflows/ci.yml` runs on every push and pull request. Its Go, web, and hook jobs
+  build, check formatting, lint, type check, verify generated browser types, and test.
 
 ## Git
 
