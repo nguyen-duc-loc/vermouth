@@ -18,7 +18,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 2 | Stack & scaffold | Foundation | done |
 | 3 | Coding standards & tooling | Foundation | done |
 | 4 | Data model & data ownership per service | Foundation | done |
-| 5 | Local Kubernetes platform & one command startup | Foundation | planned |
+| 5 | Local Kubernetes platform & one command startup | Foundation | in-progress |
 | 6 | Design system & UI foundation | Foundation | planned |
 | 7 | Tutor sign in & identity | Slice 1 | in-progress |
 | 8 | Core teaching loop | Slice 1 | planned |
@@ -29,7 +29,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 13 | Tuition rate & monthly calculation | Slice 4 | planned |
 | 14 | Invoice PDF with payment QR | Slice 4 | planned |
 | 15 | Invoice list, share & mark paid | Slice 4 | planned |
-| 16 | Cloud deployment for friend testing | Slice 5 | planned |
+| 16 | Cloud deployment for friend testing | Slice 5 | in-progress |
 | 17 | Daily schedule digest email | Slice 6 | planned |
 | 18 | Session documents | Slice 7 | planned |
 | 19 | Search across students, classes & sessions | Slice 8 | planned |
@@ -73,10 +73,19 @@ spec [0003](../specs/0003-data-model-and-ownership/index.md) · code in `service
 - [x] Verify it: `$check verify data model & data ownership per service`
 - [x] Test it: `$test data model & data ownership per service`
 
-### 5. Local Kubernetes platform & one command startup · needs a decision
+### 5. Local Kubernetes platform & one command startup · in-progress
 Bring the whole system up on your Azure VM cluster with one command: every service, its own database, the broker, the gateway. This is the piece that most often eats a week, so it gets its own feature rather than hiding inside another one.
 **Done when:** one command brings up every service with its own database and the broker on the local cluster, a request reaches a service through the gateway, and a service restart does not lose data.
-- [ ] Design it (spec): `$architect local kubernetes platform & one command startup`
+spec [0005](../specs/0005-local-kubernetes-platform/index.md) · code in `deploy/`, `Taskfile.yml`, `services/identity/`, `web/`
+- [x] Design it (spec): `$architect local kubernetes platform & one command startup`
+- [ ] Build it: `$develop local kubernetes platform & one command startup`
+  - [ ] Prove the first cluster thread with bootstrap, image locks, two Helm releases, Envoy Gateway, identity, notifications, Redpanda, web, gateway, migration Jobs, security boundaries, and `task thread` · AC-1, AC-2, AC-4, AC-8, AC-9, AC-10, AC-13, AC-17
+  - [ ] Add teaching, billing, their separate Postgres instances, remaining Secrets, policies, probes, and full readiness · AC-3, AC-9, AC-10, AC-17
+  - [ ] Add Garage initialization, persistent storage, stop, clean, recreate, and persistence proof · AC-5, AC-16
+  - [ ] Complete service redeploy, immutable digest handoff, bounded waits, rollback, status, logs, drift detection, and failed Job recovery · AC-7, AC-11, AC-12
+  - [ ] Prove Compose isolation, both image architectures, local OAuth disabled behavior, the resource ceiling, and all pinned inputs · AC-6, AC-8, AC-14, AC-15, AC-17
+- [ ] Verify it: `$check verify local kubernetes platform & one command startup`
+- [ ] Test it: `$test local kubernetes platform & one command startup`
 
 ### 6. Design system & UI foundation · needs a decision
 The visual language and the base components (layout, forms, tables, buttons, empty and error states) in both Vietnamese and English ready shape, so every screen after this is assembly rather than invention. Phone first, since attendance gets marked standing up.
@@ -149,10 +158,18 @@ See invoices by month and by student, open or download the PDF to send it yourse
 
 ## Slice 5: Friends can use it
 
-### 16. Cloud deployment for friend testing · needs a decision
+### 16. Cloud deployment for friend testing · in-progress
 Put the running system somewhere your friends can open in a browser, with a real address and a certificate. Separate from the local cluster on purpose, so deployment never leaks into earlier features.
 **Done when:** the whole system runs on a reachable address over a secure connection, the sign in and the invoice flow both work there, secrets are not baked into images, and you can push an update without wiping the data.
-- [ ] Design it (spec): `$architect cloud deployment for friend testing`
+spec [0006](../specs/0006-cloud-deployment-friend-testing/index.md)
+- [x] Design it (spec): `$architect cloud deployment for friend testing`
+- [ ] Build it: `$develop cloud deployment for friend testing`
+  - [ ] Align local Traefik, then bootstrap the exact Azure VM, locked static storage, free DNS, HTTPS, restricted SSH, production Secrets, and private pulls · AC-1, AC-2, AC-3, AC-5, AC-8, AC-11, AC-12
+  - [ ] Promote two architecture Docker Hub digests through manual GitHub Actions, require rate limit and migration evidence, and prove the first secure production thread · AC-4, AC-6, AC-9, AC-10, AC-13
+  - [ ] Complete the full topology, capacity gate, status, logs, retention, and guarded application rollback · AC-7, AC-14, AC-15, AC-16, AC-19, AC-20
+  - [ ] Add encrypted export and full stopped state restore, then prove every stateful marker and external path · AC-17, AC-18
+- [ ] Verify it: `$check verify cloud deployment for friend testing`
+- [ ] Test it: `$test cloud deployment for friend testing`
 
 ### 21. Rate limit the auth endpoints · needs a decision · from spec 0004
 Bound `start`, `callback` and `refresh` so nobody can spam the sign in path or grow `login_attempts` without limit. Spec 0004 leaves them unbounded on purpose, which is fine behind localhost and not fine once feature 16 gives them a public address, so this lands before that one ships.
@@ -204,6 +221,9 @@ Out of scope for this build pass, kept here so the plan stays honest.
 - **A stub Google provider for tests**: drive the browser sign in path end to end without a real Google round trip, what the empty `test/e2e/` will want · from spec 0004
 - **Sign out everywhere**: revoke every session of one tutor at once, for a lost or shared phone · from spec 0004
 - **Account linking & a second sign in provider**: one tutor with more than one way in · from spec 0004
+- **Scheduled external HTTPS checks**: add the deferred 15 minute outside health probe and notification · from spec 0006
+- **Automated production backup**: replace manual Mac export before production data becomes unacceptable to lose · from spec 0006
+- **Azure OIDC deployment**: replace the temporary restricted SSH key when the subscription permits Entra application creation · from spec 0006
 
 ## Legend
 
