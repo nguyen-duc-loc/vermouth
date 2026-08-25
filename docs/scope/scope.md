@@ -16,7 +16,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 |---|---------|-------|--------|
 | 1 | Service boundaries & communication design | Foundation | done |
 | 2 | Stack & scaffold | Foundation | done |
-| 3 | Coding standards & tooling | Foundation | in-progress |
+| 3 | Coding standards & tooling | Foundation | done |
 | 4 | Data model & data ownership per service | Foundation | in-progress |
 | 5 | Local Kubernetes platform & one command startup | Foundation | planned |
 | 6 | Design system & UI foundation | Foundation | planned |
@@ -55,7 +55,7 @@ spec [0002](../specs/0002-stack-and-scaffold/index.md) · code in `pkg/vermouth`
 Capture the conventions from the real scaffolded project, then install lint, format, type checking, and pre commit enforcement. Several services multiply the cost of inconsistent code, so this lands before the code grows.
 **Done when:** root `AGENTS.md` reflects the real stack and the shared conventions across services, and lint, format, and pre commit all run clean.
 code in `.golangci.yml`, `Taskfile.yml`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, `web/biome.jsonc`
-- [ ] Capture conventions + tooling choices: `$audit`
+- [x] Capture conventions + tooling choices: `$audit`
 - [x] Install the tooling: `$develop tooling`
 
 ### 4. Data model & data ownership per service
