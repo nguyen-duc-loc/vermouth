@@ -132,3 +132,49 @@ func TestAttendanceNeedsASessionAndAStudent(t *testing.T) {
 	})
 	require.Error(t, err, "attendance for a session that does not exist must be refused")
 }
+
+// TestTenantReferencesRejectCrossTutorChildren covers AC-4. Every owned child
+// reference must match both the parent id and its tutor id.
+func TestTenantReferencesRejectCrossTutorChildren(t *testing.T) {
+	t.Parallel()
+	q := queries(t)
+	ctx := t.Context()
+	tutorA, tutorB := newTutor(t), newTutor(t)
+	classA, studentA, sessionA := seedClassStudentAndSession(t, q, tutorA, 9)
+	classB, studentB, sessionB := seedClassStudentAndSession(t, q, tutorB, 10)
+
+	starts := time.Date(2026, time.September, 11, 3, 0, 0, 0, time.UTC)
+	_, err := q.InsertSession(ctx, sqlcgen.InsertSessionParams{
+		SessionID: newID(t), ClassID: classA, TutorID: tutorB,
+		StartsAt: starts, EndsAt: starts.Add(90 * time.Minute), LocalDate: day(time.September, 11),
+	})
+	require.Error(t, err, "a session cannot point at another tutor's class")
+
+	err = q.OpenRosterPeriod(ctx, sqlcgen.OpenRosterPeriodParams{
+		ClassID: classA, StudentID: studentB, EffectiveFrom: day(time.September, 1), TutorID: tutorA,
+	})
+	require.Error(t, err, "a roster period cannot point at another tutor's student")
+
+	err = q.OpenRosterPeriod(ctx, sqlcgen.OpenRosterPeriodParams{
+		ClassID: classB, StudentID: studentA, EffectiveFrom: day(time.September, 2), TutorID: tutorA,
+	})
+	require.Error(t, err, "a roster period cannot point at another tutor's class")
+
+	_, err = q.UpsertAttendance(ctx, sqlcgen.UpsertAttendanceParams{
+		SessionID: sessionA, StudentID: studentB, TutorID: tutorA,
+		State: "Present", MarkedAt: starts,
+	})
+	require.Error(t, err, "attendance cannot point at another tutor's student")
+
+	_, err = q.UpsertAttendance(ctx, sqlcgen.UpsertAttendanceParams{
+		SessionID: sessionB, StudentID: studentA, TutorID: tutorA,
+		State: "Present", MarkedAt: starts,
+	})
+	require.Error(t, err, "attendance cannot point at another tutor's session")
+
+	_, err = q.UpsertAttendance(ctx, sqlcgen.UpsertAttendanceParams{
+		SessionID: sessionA, StudentID: studentA, TutorID: tutorB,
+		State: "Present", MarkedAt: starts,
+	})
+	require.Error(t, err, "attendance cannot replace its parents' tenant")
+}

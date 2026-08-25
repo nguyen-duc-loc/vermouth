@@ -194,6 +194,41 @@ func TestAnIssuedInvoiceKeepsWhatItWasRenderedWith(t *testing.T) {
 		"an issued invoice keeps the account number it was rendered with (INV-9)")
 }
 
+func TestAuthoritativeReferencesRejectCrossTutorChildren(t *testing.T) {
+	t.Parallel()
+	q := queries(t)
+	ctx := t.Context()
+	tutorA, tutorB := newTutor(t), newTutor(t)
+	invoiceA, _ := issueOneInvoice(t, q, tutorA, saveCompleteProfile(t, q, tutorA, "0123456789"))
+	invoiceB, _ := issueOneInvoice(t, q, tutorB, saveCompleteProfile(t, q, tutorB, "9876543210"))
+
+	params := sqlcgen.InsertInvoiceParams{
+		InvoiceID: newID(t), TutorID: tutorB, BillingRunID: invoiceA.BillingRunID,
+		StudentID: newID(t), InvoiceNumber: "2026-9001",
+		PeriodYear: 2026, PeriodMonth: 9, TotalAmount: 250_000, Currency: "VND",
+		IssuedAt: time.Now().UTC(), StudentName: "Mai",
+		PayeeLegalName: "Nguyen Thi Lan", PayeeContactLine: "lan@example.com",
+		PayeeBankName: "Vietcombank", PayeeBankAccountNumber: "9876543210",
+		PayeeBankAccountHolder: "NGUYEN THI LAN",
+	}
+	_, err := q.InsertInvoice(ctx, params)
+	require.Error(t, err, "an invoice cannot point at another tutor's billing run")
+
+	params.InvoiceID = newID(t)
+	params.BillingRunID = invoiceB.BillingRunID
+	params.InvoiceNumber = "2026-9002"
+	params.ReplacesInvoiceID = pgtype.UUID{Bytes: invoiceA.InvoiceID, Valid: true}
+	_, err = q.InsertInvoice(ctx, params)
+	require.Error(t, err, "a replacement cannot point at another tutor's invoice")
+
+	_, err = q.InsertInvoiceLine(ctx, sqlcgen.InsertInvoiceLineParams{
+		InvoiceLineID: newID(t), InvoiceID: invoiceA.InvoiceID, TutorID: tutorB,
+		SessionID: newID(t), SessionDate: day(time.September, 14),
+		ClassName: "Maths 9A", RateAmount: 250_000, Amount: 250_000,
+	})
+	require.Error(t, err, "an invoice line cannot point at another tutor's invoice")
+}
+
 // saveCompleteProfile fills every field the completeness gate asks for, so the run
 // is allowed to proceed.
 func saveCompleteProfile(t *testing.T, q *sqlcgen.Queries, tutorID uuid.UUID, account string) sqlcgen.InvoiceProfile {

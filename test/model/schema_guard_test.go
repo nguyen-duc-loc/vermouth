@@ -224,6 +224,34 @@ func TestProjectionKeysMatchTheirEventKey(t *testing.T) {
 	}
 }
 
+func TestProjectionBookkeepingTimestampsAreComplete(t *testing.T) {
+	t.Parallel()
+	projections := map[string][]string{
+		"billing": {
+			"students", "classes", "sessions", "attendance", "roster_periods", "class_rates",
+		},
+		"notifications": {"recipients", "classes", "sessions", "roster_periods"},
+	}
+	for service, tables := range projections {
+		columns := liveColumns(t, connect(t, service))
+		found := make(map[string]map[string]bool, len(tables))
+		for _, table := range tables {
+			found[table] = make(map[string]bool)
+		}
+		for _, c := range columns {
+			if _, ok := found[c.table]; ok {
+				found[c.table][c.name] = true
+			}
+		}
+		for _, table := range tables {
+			require.True(t, found[table]["recorded_at"],
+				"%s.%s has no first insert bookkeeping timestamp (AC-3)", service, table)
+			require.True(t, found[table]["updated_at"],
+				"%s.%s has no applied upsert bookkeeping timestamp (AC-3)", service, table)
+		}
+	}
+}
+
 // TestAuthoritativeKeysAreWhatTheInvariantsNeed pins the keys the money path
 // leans on: one digest per tutor per day, one counter per tutor and year, and one
 // run per tutor, period and generation, which is what makes a double press safe

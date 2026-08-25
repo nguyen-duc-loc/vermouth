@@ -87,6 +87,87 @@ func TestProjectionUpsertsAreIdempotent(t *testing.T) {
 	require.Equal(t, once, twice, "the same delivery again must change nothing, count included (AC-7, AC-9)")
 }
 
+func TestProjectionReplayPreservesDigestRuns(t *testing.T) {
+	t.Parallel()
+	q := queries(t)
+	ctx := t.Context()
+	tutorID := newTutor(t)
+	classID, studentID, sessionID := newID(t), newID(t), newID(t)
+	theDay := day(time.September, 18)
+	starts := time.Date(2026, time.September, 18, 3, 0, 0, 0, time.UTC)
+
+	applyProjections := func() {
+		require.NoError(t, q.UpsertRecipient(ctx, sqlcgen.UpsertRecipientParams{
+			TutorID: tutorID, Email: "tutor@example.com", DisplayName: "Tutor",
+			Timezone: "Asia/Ho_Chi_Minh", Language: "vi",
+		}))
+		require.NoError(t, q.UpsertClass(ctx, sqlcgen.UpsertClassParams{
+			ClassID: classID, TutorID: tutorID, Name: "Maths 9A",
+		}))
+		require.NoError(t, q.UpsertSession(ctx, sqlcgen.UpsertSessionParams{
+			SessionID: sessionID, ClassID: classID, TutorID: tutorID,
+			StartsAt: starts, EndsAt: starts.Add(90 * time.Minute), LocalDate: theDay,
+		}))
+		require.NoError(t, q.OpenRosterPeriod(ctx, sqlcgen.OpenRosterPeriodParams{
+			ClassID: classID, StudentID: studentID,
+			EffectiveFrom: day(time.September, 1), TutorID: tutorID,
+		}))
+	}
+
+	applyProjections()
+	runBefore, err := q.InsertDigestRun(ctx, sqlcgen.InsertDigestRunParams{
+		TutorID: tutorID, LocalDate: theDay, State: "Pending",
+	})
+	require.NoError(t, err)
+	businessBefore, err := q.ListDigestSessions(ctx, sqlcgen.ListDigestSessionsParams{
+		TutorID: tutorID, LocalDate: theDay,
+	})
+	require.NoError(t, err)
+
+	applyProjections()
+
+	runAfter, err := q.GetDigestRun(ctx, sqlcgen.GetDigestRunParams{
+		TutorID: tutorID, LocalDate: theDay,
+	})
+	require.NoError(t, err)
+	require.Equal(t, runBefore, runAfter, "a projection replay cannot touch a digest run (AC-8)")
+	businessAfter, err := q.ListDigestSessions(ctx, sqlcgen.ListDigestSessionsParams{
+		TutorID: tutorID, LocalDate: theDay,
+	})
+	require.NoError(t, err)
+	require.Equal(t, businessBefore, businessAfter,
+		"replay equality covers projection keys and business fields, not bookkeeping timestamps")
+}
+
+func TestProjectionJoinsCannotCrossTutors(t *testing.T) {
+	t.Parallel()
+	q := queries(t)
+	ctx := t.Context()
+	tutorA, tutorB := newTutor(t), newTutor(t)
+	classID, studentID, sessionID := newID(t), newID(t), newID(t)
+	theDay := day(time.September, 19)
+	starts := time.Date(2026, time.September, 19, 3, 0, 0, 0, time.UTC)
+
+	require.NoError(t, q.UpsertClass(ctx, sqlcgen.UpsertClassParams{
+		ClassID: classID, TutorID: tutorA, Name: "Tutor A class",
+	}))
+	require.NoError(t, q.UpsertSession(ctx, sqlcgen.UpsertSessionParams{
+		SessionID: sessionID, ClassID: classID, TutorID: tutorB,
+		StartsAt: starts, EndsAt: starts.Add(90 * time.Minute), LocalDate: theDay,
+	}))
+	require.NoError(t, q.OpenRosterPeriod(ctx, sqlcgen.OpenRosterPeriodParams{
+		ClassID: classID, StudentID: studentID,
+		EffectiveFrom: day(time.September, 1), TutorID: tutorB,
+	}))
+
+	sessions, err := q.ListDigestSessions(ctx, sqlcgen.ListDigestSessionsParams{
+		TutorID: tutorB, LocalDate: theDay,
+	})
+	require.NoError(t, err)
+	require.Empty(t, sessions,
+		"a projection join cannot borrow another tutor's class label (AC-4)")
+}
+
 // TestACancelledSessionLeavesTheDigest holds the session transition: cancelled is
 // an end, and the morning email must not mention it.
 func TestACancelledSessionLeavesTheDigest(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/nguyen-duc-loc/vermouth/services/billing/internal/store"
 	"github.com/nguyen-duc-loc/vermouth/services/billing/internal/store/sqlcgen"
 )
 
@@ -23,6 +24,92 @@ func billableFor(t *testing.T, q *sqlcgen.Queries, tutorID uuid.UUID, month time
 	})
 	require.NoError(t, err)
 	return rows
+}
+
+func TestProjectionBookkeepingUsesTheTransactionClock(t *testing.T) {
+	t.Parallel()
+	q := queries(t)
+	ctx := t.Context()
+	tutorID := newTutor(t)
+	classID := newID(t)
+	firstDate := day(time.September, 1)
+	secondDate := day(time.September, 15)
+
+	require.NoError(t, q.UpsertClassRate(ctx, sqlcgen.UpsertClassRateParams{
+		ClassID: classID, EffectiveFrom: firstDate, TutorID: tutorID,
+		RateAmount: 250_000, Currency: "VND",
+	}))
+	firstInsert, err := q.GetClassRateBookkeeping(ctx, sqlcgen.GetClassRateBookkeepingParams{
+		TutorID: tutorID, ClassID: classID, EffectiveFrom: firstDate,
+	})
+	require.NoError(t, err)
+	require.Equal(t, firstInsert.RecordedAt, firstInsert.UpdatedAt,
+		"an insert records both bookkeeping timestamps from one transaction clock")
+
+	tx, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(teardownContext()) })
+	txQueries := store.Queries(tx)
+	require.NoError(t, txQueries.UpsertClassRate(ctx, sqlcgen.UpsertClassRateParams{
+		ClassID: classID, EffectiveFrom: firstDate, TutorID: tutorID,
+		RateAmount: 275_000, Currency: "VND",
+	}))
+	require.NoError(t, txQueries.UpsertClassRate(ctx, sqlcgen.UpsertClassRateParams{
+		ClassID: classID, EffectiveFrom: secondDate, TutorID: tutorID,
+		RateAmount: 300_000, Currency: "VND",
+	}))
+
+	firstUpdate, err := txQueries.GetClassRateBookkeeping(ctx, sqlcgen.GetClassRateBookkeepingParams{
+		TutorID: tutorID, ClassID: classID, EffectiveFrom: firstDate,
+	})
+	require.NoError(t, err)
+	secondInsert, err := txQueries.GetClassRateBookkeeping(ctx, sqlcgen.GetClassRateBookkeepingParams{
+		TutorID: tutorID, ClassID: classID, EffectiveFrom: secondDate,
+	})
+	require.NoError(t, err)
+	require.Equal(t, firstInsert.RecordedAt, firstUpdate.RecordedAt,
+		"an upsert keeps the first insert time")
+	require.NotEqual(t, firstInsert.UpdatedAt, firstUpdate.UpdatedAt,
+		"an applied upsert advances updated_at")
+	require.Equal(t, firstUpdate.UpdatedAt, secondInsert.RecordedAt,
+		"every write in one consumer transaction uses the same clock")
+	require.Equal(t, secondInsert.RecordedAt, secondInsert.UpdatedAt)
+	require.NoError(t, tx.Commit(ctx))
+}
+
+func TestProjectionJoinsCannotCrossTutors(t *testing.T) {
+	t.Parallel()
+	q := queries(t)
+	ctx := t.Context()
+	tutorA, tutorB := newTutor(t), newTutor(t)
+	classID, studentID, sessionID := newID(t), newID(t), newID(t)
+	starts := time.Date(2026, time.September, 19, 3, 0, 0, 0, time.UTC)
+
+	require.NoError(t, q.UpsertClass(ctx, sqlcgen.UpsertClassParams{
+		ClassID: classID, TutorID: tutorA, Name: "Tutor A class",
+	}))
+	require.NoError(t, q.UpsertStudent(ctx, sqlcgen.UpsertStudentParams{
+		StudentID: studentID, TutorID: tutorB, Name: "Mai",
+	}))
+	require.NoError(t, q.UpsertClassRate(ctx, sqlcgen.UpsertClassRateParams{
+		ClassID: classID, EffectiveFrom: day(time.September, 1), TutorID: tutorB,
+		RateAmount: 250_000, Currency: "VND",
+	}))
+	require.NoError(t, q.UpsertSession(ctx, sqlcgen.UpsertSessionParams{
+		SessionID: sessionID, ClassID: classID, TutorID: tutorB,
+		StartsAt: starts, EndsAt: starts.Add(90 * time.Minute), LocalDate: day(time.September, 19),
+	}))
+	require.NoError(t, q.UpsertAttendance(ctx, sqlcgen.UpsertAttendanceParams{
+		SessionID: sessionID, StudentID: studentID, TutorID: tutorB,
+		State: "Present", MarkedAt: starts,
+	}))
+	require.NoError(t, q.OpenRosterPeriod(ctx, sqlcgen.OpenRosterPeriodParams{
+		ClassID: classID, StudentID: studentID,
+		EffectiveFrom: day(time.September, 1), TutorID: tutorB,
+	}))
+
+	require.Empty(t, billableFor(t, q, tutorB, time.September),
+		"a projection join cannot borrow another tutor's class label (AC-4)")
 }
 
 // TestProjectionUpsertsAreIdempotent is AC-7 at its plainest: apply the same set
