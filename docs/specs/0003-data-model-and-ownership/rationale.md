@@ -189,6 +189,33 @@ file conflates the two foreign key cases, which it does not: there is no foreign
 all, and the invariant in `index.md` already limits a foreign key to two authoritative tables in the
 same context.
 
+## Verification boundary amendment
+
+On 2026-08-25, verification exposed a mismatch between the build boundary and `verify.md`. The value
+sourcing table deliberately reaches into future teaching, billing, invoice, and digest actions, but
+the verification refresh had made all eighteen rows mandatory for feature 4. That made a completed
+schema slice depend on features 8 through 17 even though this spec says those actions are not built
+here.
+
+Three treatments were considered. Building every action now would collapse several roadmap features
+into this foundation. Removing the future rows would reopen the unnamed value problem when those
+features arrive. Keeping the rows as design obligations while gating feature 4 only on its migrations,
+typed queries, replay path, and store behavior preserves both boundaries. The third treatment is the
+chosen one. Each later feature must verify its row when it builds the action.
+
+The independent cross check then found a separate tenant integrity gap. Filtering every query by
+`tutor_id` does not stop a child row for tutor A from referencing a globally unique parent id owned by
+tutor B. Composite same service foreign keys close that path at the database boundary. Because the
+original model migrations have already run in development, additive teaching and billing migrations
+are safer than rewriting history. They preserve data, fail visibly if a mismatch already exists, and
+reverse without touching the original tables.
+
+The same pass clarified three sources that the first draft left implicit. Handler tenant identity
+comes from the verified token, consumer tenant identity from the event envelope, and scheduler tenant
+identity from the selected recipient. Teaching derives a session calendar day from its start instant
+in the verified token timezone. Projection bookkeeping timestamps come from the consumer transaction
+clock and are excluded from business state replay comparisons.
+
 ## References
 
 **Project sources** (verifiable, in this repo):

@@ -17,7 +17,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 1 | Service boundaries & communication design | Foundation | done |
 | 2 | Stack & scaffold | Foundation | done |
 | 3 | Coding standards & tooling | Foundation | done |
-| 4 | Data model & data ownership per service | Foundation | in-progress |
+| 4 | Data model & data ownership per service | Foundation | done |
 | 5 | Local Kubernetes platform & one command startup | Foundation | planned |
 | 6 | Design system & UI foundation | Foundation | planned |
 | 7 | Tutor sign in & identity | Slice 1 | in-progress |
@@ -64,12 +64,14 @@ The core entities (tutor, student, class, session, attendance, rate, invoice, in
 spec [0003](../specs/0003-data-model-and-ownership/index.md) · code in `services/*/db/{migrations,queries}`, `services/*/internal/store`, `services/billing/internal/handler/profile.go`, `test/model`
 - [x] Design it (spec): `$architect data model & data ownership per service`
 - [x] Build it: `$develop data model & data ownership per service`
-  - [x] One migration per service, in the direction the facts flow: `identity` credentials, then the five `teaching` tables, then `billing` (six projections plus five authoritative records), then the four `notifications` tables · AC-1, AC-2, AC-3, AC-6, AC-9, AC-10, AC-11, AC-12
+  - [x] One model migration per service, in the direction the facts flow: `identity` timestamps, then the five `teaching` tables, then `billing` (six projections plus five authoritative records), then the four `notifications` tables · AC-1, AC-2, AC-3, AC-6, AC-9, AC-10, AC-11, AC-12
   - [x] Typed queries: `sqlc.yaml` for `teaching` and `billing`, the first `db/queries/` file per service with every statement filtering by `tutor_id`, then a clean apply and build from empty databases · AC-2, AC-4, AC-5
   - [x] The guard tests: no statement reads a table its service does not own, money is `bigint`, instants are `timestamptz`, and each projection's primary key matches its event key · AC-3, AC-4, AC-6, AC-7, AC-10
   - [x] The behaviour tests against the real Postgres and Redpanda: a duplicate delivery and a full replay change nothing, plus the concurrent run, concurrent number, rejoin, and completeness gate cases · AC-1, AC-7, AC-8, AC-9, AC-11, AC-12
-- [ ] Verify it: `$check verify data model & data ownership per service`
-- [ ] Test it: `$test data model & data ownership per service`
+  - [x] Tenant integrity amendment: additive teaching and billing migrations add composite tenant references and `class_rates.updated_at`, with cross tenant guards · AC-2, AC-3, AC-4, AC-6
+  - [x] Replay and trusted tenant amendment: consumers use envelope `tutor_id`, replay preserves `digest_runs`, and tests separate business fields from bookkeeping timestamps · AC-3, AC-4, AC-7, AC-8
+- [x] Verify it: `$check verify data model & data ownership per service`
+- [x] Test it: `$test data model & data ownership per service`
 
 ### 5. Local Kubernetes platform & one command startup · needs a decision
 Bring the whole system up on your Azure VM cluster with one command: every service, its own database, the broker, the gateway. This is the piece that most often eats a week, so it gets its own feature rather than hiding inside another one.
