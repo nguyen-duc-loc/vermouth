@@ -34,7 +34,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 18 | Session documents | Slice 7 | planned |
 | 19 | Search across students, classes & sessions | Slice 8 | planned |
 | 20 | English alongside Vietnamese | Slice 9 | planned |
-| 21 | Rate limit the auth endpoints | Slice 5 | planned |
+| 21 | Rate limit the auth endpoints | Slice 5 | in-progress |
 
 ## Foundations
 
@@ -171,10 +171,18 @@ spec [0006](../specs/0006-cloud-deployment-friend-testing/index.md)
 - [ ] Verify it: `$check verify cloud deployment for friend testing`
 - [ ] Test it: `$test cloud deployment for friend testing`
 
-### 21. Rate limit the auth endpoints · needs a decision · from spec 0004
+### 21. Rate limit the auth endpoints · in-progress · from spec 0004
 Bound `start`, `callback` and `refresh` so nobody can spam the sign in path or grow `login_attempts` without limit. Spec 0004 leaves them unbounded on purpose, which is fine behind localhost and not fine once feature 16 gives them a public address, so this lands before that one ships.
-**Done when:** each auth endpoint refuses a caller past a configured rate in the one error shape, a flood cannot grow the pending login table without bound, and a test exercises the limit.
-- [ ] Design it (spec): `$architect rate limit the auth endpoints`
+**Done when:** each protected auth endpoint refuses a caller past configured caller and global rates through its existing browser or API boundary, a flood cannot grow the pending login table without bound, and one evidence target exercises the limit.
+spec [0007](../specs/0007-auth-endpoint-rate-limits/index.md)
+- [x] Design it (spec): `$architect rate limit the auth endpoints`
+- [ ] Build it: `$develop rate limit the auth endpoints`
+  - [ ] Build the bounded gateway registry, paired token buckets, required configuration, trusted proxy parser, and concurrent guard tests · AC-2, AC-3, AC-6, AC-8, AC-9
+  - [ ] Prove the first limited `start` thread through gateway, identity, deployment configuration, unchanged auth state, and sampled logs · AC-1, AC-4, AC-5, AC-9, AC-10
+  - [ ] Extend the policy to callback and refresh, close cookie and `HEAD` edges, update OpenAPI, and add the accessible manual browser retry · AC-1, AC-3, AC-4, AC-5, AC-7, AC-11, AC-12, AC-13
+  - [ ] Add `task test:auth-rate-limit`, the pending attempt bounds, race coverage, and schema version 1 launch evidence · AC-3, AC-5, AC-6, AC-7, AC-8, AC-10, AC-13, AC-14
+- [ ] Verify it: `$check verify rate limit the auth endpoints`
+- [ ] Test it: `$test rate limit the auth endpoints`
 
 ## Slice 6: The daily digest
 
@@ -224,6 +232,7 @@ Out of scope for this build pass, kept here so the plan stays honest.
 - **Scheduled external HTTPS checks**: add the deferred 15 minute outside health probe and notification · from spec 0006
 - **Automated production backup**: replace manual Mac export before production data becomes unacceptable to lose · from spec 0006
 - **Azure OIDC deployment**: replace the temporary restricted SSH key when the subscription permits Entra application creation · from spec 0006
+- **Shared auth rate state for several gateway replicas**: replace or divide the in memory budgets before gateway runs more than one replica · from spec 0007
 
 ## Legend
 
