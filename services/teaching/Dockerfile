@@ -22,8 +22,14 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 FROM base AS migration-build
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    GOBIN=/out CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go install github.com/pressly/goose/v3/cmd/goose@v3.27.3
+    mkdir -p /out && \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go install github.com/pressly/goose/v3/cmd/goose@v3.27.3 && \
+    goose=/go/bin/goose && \
+    if [ -f "/go/bin/${TARGETOS}_${TARGETARCH}/goose" ]; then goose="/go/bin/${TARGETOS}_${TARGETARCH}/goose"; fi && \
+    cp "$goose" /out/goose && \
+    cd pkg/vermouth && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags="-s -w" -o /out/migrationwait ./cmd/migrationwait
 
 FROM scratch AS runtime
 COPY --from=runtime-build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
@@ -33,8 +39,8 @@ ENTRYPOINT ["/teaching"]
 
 FROM scratch AS migration
 COPY --from=migration-build /out/goose /goose
+COPY --from=migration-build /out/migrationwait /migrationwait
 COPY services/teaching/db/migrations /migrations
 USER 65534:65534
 ENV GOOSE_DRIVER=postgres GOOSE_MIGRATION_DIR=/migrations
-ENTRYPOINT ["/goose", "-env", "none"]
-CMD ["up"]
+ENTRYPOINT ["/migrationwait"]

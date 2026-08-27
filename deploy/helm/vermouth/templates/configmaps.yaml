@@ -14,16 +14,16 @@ data:
     data_dir = "/var/lib/garage/data"
     db_engine = "sqlite"
     replication_factor = 1
-    rpc_bind_addr = "[::]:3901"
+    rpc_bind_addr = "0.0.0.0:3901"
     rpc_public_addr = "garage:3901"
 
     [s3_api]
     s3_region = "garage"
-    api_bind_addr = "[::]:3900"
+    api_bind_addr = "0.0.0.0:3900"
     root_domain = ".s3.garage.localhost"
 
     [admin]
-    api_bind_addr = "[::]:3903"
+    api_bind_addr = "0.0.0.0:3903"
 {{- end }}
 {{- if .Values.application.enabled }}
 {{- $common := dict
@@ -94,5 +94,5 @@ metadata:
     vermouth.dev/decision: spec-0005
 data:
   config.json: |
-    {"googleAuthEnabled":{{ .Values.config.googleAuthEnabled }}}
+    {"schemaVersion":1,"environment":"local","googleAuthEnabled":{{ .Values.config.googleAuthEnabled }},"apiBasePath":"/api"}
 {{- end }}

@@ -1,5 +1,5 @@
 {{- if .Values.application.enabled }}
-Vermouth is ready when Gateway vermouth is Accepted and Programmed and http://vermouth.localhost/ready answers successfully.
+Vermouth is ready when packaged Traefik is Available, Ingress vermouth exists, and http://vermouth.localhost:8080/ready answers successfully.
 {{- else if .Values.foundation.enabled }}
 The foundation release owns persistent services and PVCs. Run the migration and initialization Jobs before the application release.
 {{- else }}

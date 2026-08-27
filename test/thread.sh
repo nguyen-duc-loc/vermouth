@@ -11,7 +11,7 @@ if [ "${VERMOUTH_DEV_MODE:-platform}" = host ]; then
   GATEWAY="http://localhost${GATEWAY_HTTP_ADDR:-:8080}"
   TOKEN_TASK=dev:token:host
 else
-  GATEWAY=http://vermouth.localhost
+  GATEWAY=http://vermouth.localhost:8080
   TOKEN_TASK=dev:token
 fi
 
@@ -22,8 +22,14 @@ fi
 printf 'Creating a tutor with task dev:token, no browser and no Google\n'
 REGISTERED=$(task --silent "$TOKEN_TASK")
 
-TOKEN=$(printf '%s' "$REGISTERED" | sed -n 's/.*"access_token": "\([^"]*\)".*/\1/p')
-TUTOR=$(printf '%s' "$REGISTERED" | sed -n 's/.*"tutor_id": "\([^"]*\)".*/\1/p')
+TOKEN=$(printf '%s' "$REGISTERED" | jq -er '
+  select(type == "object" and .schema_version == 1) |
+  .access_token | select(type == "string" and length > 0)
+' 2>/dev/null || true)
+TUTOR=$(printf '%s' "$REGISTERED" | jq -er '
+  select(type == "object" and .schema_version == 1) |
+  .tutor_id | select(type == "string" and length > 0)
+' 2>/dev/null || true)
 if [ -z "$TOKEN" ] || [ -z "$TUTOR" ]; then
   echo "devtoken did not answer with a tutor and a token:"
   echo "$REGISTERED"
@@ -35,15 +41,17 @@ printf 'tutor_id %s written in identity, with its event in the same transaction\
 printf 'Waiting for the relay to publish it and notifications to record it'
 START=$(date +%s)
 i=0
+THREAD=
 while [ $i -lt 40 ]; do
-  THREAD=$(curl -fsS "$GATEWAY/api/thread" -H "Authorization: Bearer $TOKEN")
-  case "$THREAD" in
-    *'"recorded":true'*)
-      ELAPSED=$(( $(date +%s) - START ))
-      printf '\n\nThe thread is complete after about %ss:\n%s\n' "$ELAPSED" "$THREAD"
-      exit 0
-      ;;
-  esac
+  if THREAD=$(curl -fsS "$GATEWAY/api/thread" -H "Authorization: Bearer $TOKEN"); then
+    case "$THREAD" in
+      *'"recorded":true'*)
+        ELAPSED=$(( $(date +%s) - START ))
+        printf '\n\nThe thread is complete after about %ss:\n%s\n' "$ELAPSED" "$THREAD"
+        exit 0
+        ;;
+    esac
+  fi
   printf '.'
   i=$((i + 1))
   sleep 1

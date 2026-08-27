@@ -1,4 +1,6 @@
 {{- if .Values.foundation.enabled }}
+{{- $matrix := .Files.Get "files/workload-matrix.yaml" | fromYaml }}
+{{- $workload := index $matrix.workloads "garage" }}
 ---
 apiVersion: v1
 kind: Service
@@ -10,6 +12,7 @@ metadata:
     vermouth.dev/decision: spec-0005
 spec:
   clusterIP: None
+  publishNotReadyAddresses: true
   selector:
     app.kubernetes.io/name: vermouth
     app.kubernetes.io/component: garage
@@ -34,7 +37,7 @@ metadata:
     vermouth.dev/decision: spec-0005
 spec:
   serviceName: garage
-  replicas: 1
+  replicas: {{ $workload.replicas }}
   selector:
     matchLabels:
       app.kubernetes.io/name: vermouth
@@ -44,14 +47,16 @@ spec:
       labels:
         app.kubernetes.io/name: vermouth
         app.kubernetes.io/component: garage
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum }}
     spec:
       serviceAccountName: garage
-      automountServiceAccountToken: false
+      automountServiceAccountToken: {{ $workload.automountServiceAccountToken }}
       securityContext:
         {{- include "vermouth.podSecurity" . | nindent 8 }}
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
+        runAsUser: {{ $workload.runAsUser }}
+        runAsGroup: {{ $workload.runAsGroup }}
+        fsGroup: {{ $workload.fsGroup }}
         fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: garage
@@ -85,23 +90,18 @@ spec:
             exec:
               command: [/garage, status]
             initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 12
+            periodSeconds: {{ $workload.readiness.periodSeconds }}
+            timeoutSeconds: {{ $workload.readiness.timeoutSeconds }}
+            failureThreshold: {{ $workload.readiness.failureThreshold }}
           livenessProbe:
             exec:
               command: [/garage, status]
             initialDelaySeconds: 30
-            periodSeconds: 20
-            timeoutSeconds: 5
-            failureThreshold: 3
+            periodSeconds: {{ $workload.liveness.periodSeconds }}
+            timeoutSeconds: {{ $workload.liveness.timeoutSeconds }}
+            failureThreshold: {{ $workload.liveness.failureThreshold }}
           resources:
-            requests:
-              cpu: 25m
-              memory: 64Mi
-            limits:
-              cpu: 250m
-              memory: 256Mi
+            {{- toYaml $workload.resources | nindent 12 }}
           volumeMounts:
             - name: config
               mountPath: /etc/garage.toml
@@ -117,29 +117,14 @@ spec:
         - name: config
           configMap:
             name: garage-config
+        - name: metadata
+          persistentVolumeClaim:
+            claimName: garage-metadata
+        - name: data
+          persistentVolumeClaim:
+            claimName: garage-data
         - name: tmp
-          emptyDir: {}
-  volumeClaimTemplates:
-    - metadata:
-        name: metadata
-        labels:
-          app.kubernetes.io/name: vermouth
-          app.kubernetes.io/component: garage
-      spec:
-        accessModes: [ReadWriteOnce]
-        storageClassName: {{ .Values.storage.className }}
-        resources:
-          requests:
-            storage: {{ .Values.storage.garageMetadata }}
-    - metadata:
-        name: data
-        labels:
-          app.kubernetes.io/name: vermouth
-          app.kubernetes.io/component: garage
-      spec:
-        accessModes: [ReadWriteOnce]
-        storageClassName: {{ .Values.storage.className }}
-        resources:
-          requests:
-            storage: {{ .Values.storage.garageData }}
+          emptyDir:
+            medium: {{ (index $workload.writableMounts 2).medium }}
+            sizeLimit: {{ (index $workload.writableMounts 2).sizeLimit }}
 {{- end }}

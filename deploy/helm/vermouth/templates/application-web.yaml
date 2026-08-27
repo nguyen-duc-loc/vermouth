@@ -1,4 +1,6 @@
 {{- if .Values.application.enabled }}
+{{- $matrix := .Files.Get "files/workload-matrix.yaml" | fromYaml }}
+{{- $workload := index $matrix.workloads "web" }}
 ---
 apiVersion: v1
 kind: Service
@@ -26,7 +28,7 @@ metadata:
   annotations:
     vermouth.dev/decision: spec-0005
 spec:
-  replicas: 1
+  replicas: {{ $workload.replicas }}
   revisionHistoryLimit: 2
   progressDeadlineSeconds: 180
   strategy:
@@ -47,11 +49,11 @@ spec:
         app.kubernetes.io/component: web
     spec:
       serviceAccountName: web
-      automountServiceAccountToken: false
+      automountServiceAccountToken: {{ $workload.automountServiceAccountToken }}
       securityContext:
         {{- include "vermouth.podSecurity" . | nindent 8 }}
-        runAsUser: 101
-        runAsGroup: 101
+        runAsUser: {{ $workload.runAsUser }}
+        runAsGroup: {{ $workload.runAsGroup }}
       containers:
         - name: web
           image: {{ include "vermouth.requireImage" (dict "name" "web" "image" .Values.images.web) }}
@@ -63,27 +65,22 @@ spec:
               containerPort: 8080
           readinessProbe:
             httpGet:
-              path: /
+              path: {{ $workload.readiness.path }}
               port: http
             initialDelaySeconds: 2
-            periodSeconds: 5
-            timeoutSeconds: 2
-            failureThreshold: 6
+            periodSeconds: {{ $workload.readiness.periodSeconds }}
+            timeoutSeconds: {{ $workload.readiness.timeoutSeconds }}
+            failureThreshold: {{ $workload.readiness.failureThreshold }}
           livenessProbe:
             httpGet:
-              path: /
+              path: {{ $workload.liveness.path }}
               port: http
             initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 2
-            failureThreshold: 3
+            periodSeconds: {{ $workload.liveness.periodSeconds }}
+            timeoutSeconds: {{ $workload.liveness.timeoutSeconds }}
+            failureThreshold: {{ $workload.liveness.failureThreshold }}
           resources:
-            requests:
-              cpu: 10m
-              memory: 32Mi
-            limits:
-              cpu: 100m
-              memory: 64Mi
+            {{- toYaml $workload.resources | nindent 12 }}
           volumeMounts:
             - name: runtime-config
               mountPath: /usr/share/nginx/html/config.json
@@ -101,11 +98,11 @@ spec:
             name: web-runtime-config
         - name: cache
           emptyDir:
-            sizeLimit: 32Mi
+            sizeLimit: {{ (index $workload.writableMounts 0).sizeLimit }}
         - name: run
           emptyDir:
-            sizeLimit: 4Mi
+            sizeLimit: {{ (index $workload.writableMounts 1).sizeLimit }}
         - name: tmp
           emptyDir:
-            sizeLimit: 16Mi
+            sizeLimit: {{ (index $workload.writableMounts 2).sizeLimit }}
 {{- end }}

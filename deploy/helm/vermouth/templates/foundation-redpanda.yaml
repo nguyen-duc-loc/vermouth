@@ -1,4 +1,6 @@
 {{- if .Values.foundation.enabled }}
+{{- $matrix := .Files.Get "files/workload-matrix.yaml" | fromYaml }}
+{{- $workload := index $matrix.workloads "redpanda" }}
 ---
 apiVersion: v1
 kind: Service
@@ -31,7 +33,7 @@ metadata:
     vermouth.dev/decision: spec-0005
 spec:
   serviceName: redpanda
-  replicas: 1
+  replicas: {{ $workload.replicas }}
   selector:
     matchLabels:
       app.kubernetes.io/name: vermouth
@@ -43,12 +45,12 @@ spec:
         app.kubernetes.io/component: redpanda
     spec:
       serviceAccountName: redpanda
-      automountServiceAccountToken: false
+      automountServiceAccountToken: {{ $workload.automountServiceAccountToken }}
       securityContext:
         {{- include "vermouth.podSecurity" . | nindent 8 }}
-        runAsUser: 101
-        runAsGroup: 101
-        fsGroup: 101
+        runAsUser: {{ $workload.runAsUser }}
+        runAsGroup: {{ $workload.runAsGroup }}
+        fsGroup: {{ $workload.fsGroup }}
         fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: redpanda
@@ -80,25 +82,20 @@ spec:
               containerPort: 9644
           readinessProbe:
             exec:
-              command: [/usr/bin/rpk, cluster, health, --brokers=localhost:9092]
+              command: [/usr/bin/rpk, cluster, health, -X, brokers=localhost:9092]
             initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 12
+            periodSeconds: {{ $workload.readiness.periodSeconds }}
+            timeoutSeconds: {{ $workload.readiness.timeoutSeconds }}
+            failureThreshold: {{ $workload.readiness.failureThreshold }}
           livenessProbe:
             exec:
-              command: [/usr/bin/rpk, cluster, health, --brokers=localhost:9092]
+              command: [/usr/bin/rpk, cluster, health, -X, brokers=localhost:9092]
             initialDelaySeconds: 30
-            periodSeconds: 20
-            timeoutSeconds: 5
-            failureThreshold: 3
+            periodSeconds: {{ $workload.liveness.periodSeconds }}
+            timeoutSeconds: {{ $workload.liveness.timeoutSeconds }}
+            failureThreshold: {{ $workload.liveness.failureThreshold }}
           resources:
-            requests:
-              cpu: 250m
-              memory: 768Mi
-            limits:
-              cpu: "1"
-              memory: 1536Mi
+            {{- toYaml $workload.resources | nindent 12 }}
           volumeMounts:
             - name: data
               mountPath: /var/lib/redpanda/data
@@ -107,20 +104,15 @@ spec:
             - name: tmp
               mountPath: /tmp
       volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: redpanda
         - name: config
-          emptyDir: {}
+          emptyDir:
+            medium: {{ (index $workload.writableMounts 1).medium }}
+            sizeLimit: {{ (index $workload.writableMounts 1).sizeLimit }}
         - name: tmp
-          emptyDir: {}
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-        labels:
-          app.kubernetes.io/name: vermouth
-          app.kubernetes.io/component: redpanda
-      spec:
-        accessModes: [ReadWriteOnce]
-        storageClassName: {{ .Values.storage.className }}
-        resources:
-          requests:
-            storage: {{ .Values.storage.redpanda }}
+          emptyDir:
+            medium: {{ (index $workload.writableMounts 2).medium }}
+            sizeLimit: {{ (index $workload.writableMounts 2).sizeLimit }}
 {{- end }}

@@ -1,3 +1,4 @@
+schemaVersion: 1
 foundation:
   enabled: false
 application:
@@ -46,6 +47,8 @@ secrets:
   billingS3: billing-s3-bootstrap
 
 config:
+  environment: local
+  apiBasePath: /api
   logLevel: info
   brokerSeeds: redpanda:9092
   topicPartitions: "3"
@@ -54,8 +57,8 @@ config:
   consumerRetryBaseDelay: 200ms
   gatewayUpstreamTimeout: 5s
   googleAuthEnabled: false
-  identityAppURL: http://vermouth.localhost
-  identityGoogleRedirectURL: http://vermouth.localhost/api/auth/google/callback
+  identityAppURL: http://vermouth.localhost:8080
+  identityGoogleRedirectURL: http://vermouth.localhost:8080/api/auth/google/callback
   identitySignupAllowlist: ""
   identityRefreshTTL: 720h
   identityTokenTTL: 15m
@@ -67,8 +70,11 @@ config:
   billingS3Bucket: vermouth-invoices
 
 storage:
-  className: local-path
+  className: vermouth-local
+  nodeName: k3d-vermouth-server-0
+  rootPath: /var/lib/vermouth
   postgres: 2Gi
   redpanda: 4Gi
   garageMetadata: 1Gi
   garageData: 5Gi
+  traefikACME: 256Mi

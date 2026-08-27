@@ -1,0 +1,194 @@
+schemaVersion: 1
+workloads:
+  go-application:
+    kind: Deployment
+    replicas: 1
+    serviceAccount: component
+    automountServiceAccountToken: false
+    runAsUser: 65534
+    runAsGroup: 65534
+    readOnlyRootFilesystem: true
+    resources:
+      requests: {cpu: 25m, memory: 32Mi}
+      limits: {cpu: 250m, memory: 128Mi}
+    readiness:
+      type: http
+      path: /ready
+      periodSeconds: 5
+      timeoutSeconds: 2
+      failureThreshold: 12
+    liveness:
+      type: http
+      path: /health
+      periodSeconds: 10
+      timeoutSeconds: 2
+      failureThreshold: 3
+    writableMounts:
+      - {name: tmp, mountPath: /tmp, medium: Memory, sizeLimit: 16Mi}
+  web:
+    kind: Deployment
+    replicas: 1
+    serviceAccount: web
+    automountServiceAccountToken: false
+    runAsUser: 101
+    runAsGroup: 101
+    readOnlyRootFilesystem: true
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {cpu: 100m, memory: 64Mi}
+    readiness:
+      type: http
+      path: /
+      periodSeconds: 5
+      timeoutSeconds: 2
+      failureThreshold: 6
+    liveness:
+      type: http
+      path: /
+      periodSeconds: 10
+      timeoutSeconds: 2
+      failureThreshold: 3
+    writableMounts:
+      - {name: cache, mountPath: /var/cache/nginx, medium: Disk, sizeLimit: 32Mi}
+      - {name: run, mountPath: /var/run, medium: Disk, sizeLimit: 4Mi}
+      - {name: tmp, mountPath: /tmp, medium: Disk, sizeLimit: 16Mi}
+  postgres:
+    kind: StatefulSet
+    replicas: 1
+    serviceAccount: component
+    automountServiceAccountToken: false
+    runAsUser: 70
+    runAsGroup: 70
+    fsGroup: 70
+    readOnlyRootFilesystem: true
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {cpu: 300m, memory: 384Mi}
+    readiness:
+      type: exec
+      command: [pg_isready, -U, "{role}", -d, "{role}"]
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 12
+    liveness:
+      type: exec
+      command: [pg_isready, -U, "{role}", -d, "{role}"]
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    writableMounts:
+      - {name: data, mountPath: /var/lib/postgresql, medium: Persistent, sizeLimit: 2Gi}
+      - {name: run, mountPath: /var/run/postgresql, medium: Memory, sizeLimit: 16Mi}
+      - {name: tmp, mountPath: /tmp, medium: Memory, sizeLimit: 64Mi}
+  redpanda:
+    kind: StatefulSet
+    replicas: 1
+    serviceAccount: redpanda
+    automountServiceAccountToken: false
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
+    readOnlyRootFilesystem: true
+    resources:
+      requests: {cpu: 250m, memory: 768Mi}
+      limits: {cpu: 1000m, memory: 1536Mi}
+    readiness:
+      type: exec
+      command: [/usr/bin/rpk, cluster, health, -X, brokers=localhost:9092]
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 12
+    liveness:
+      type: exec
+      command: [/usr/bin/rpk, cluster, health, -X, brokers=localhost:9092]
+      periodSeconds: 20
+      timeoutSeconds: 5
+      failureThreshold: 3
+    writableMounts:
+      - {name: data, mountPath: /var/lib/redpanda/data, medium: Persistent, sizeLimit: 4Gi}
+      - {name: config, mountPath: /etc/redpanda, medium: Memory, sizeLimit: 16Mi}
+      - {name: tmp, mountPath: /tmp, medium: Memory, sizeLimit: 64Mi}
+  garage:
+    kind: StatefulSet
+    replicas: 1
+    serviceAccount: garage
+    automountServiceAccountToken: false
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    readOnlyRootFilesystem: true
+    resources:
+      requests: {cpu: 25m, memory: 64Mi}
+      limits: {cpu: 250m, memory: 256Mi}
+    readiness:
+      type: exec
+      command: [/garage, status]
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 12
+    liveness:
+      type: exec
+      command: [/garage, status]
+      periodSeconds: 20
+      timeoutSeconds: 5
+      failureThreshold: 3
+    writableMounts:
+      - {name: metadata, mountPath: /var/lib/garage/meta, medium: Persistent, sizeLimit: 1Gi}
+      - {name: data, mountPath: /var/lib/garage/data, medium: Persistent, sizeLimit: 5Gi}
+      - {name: tmp, mountPath: /tmp, medium: Memory, sizeLimit: 64Mi}
+  migration:
+    kind: Job
+    replicas: 1
+    serviceAccount: component
+    automountServiceAccountToken: false
+    runAsUser: 65534
+    runAsGroup: 65534
+    readOnlyRootFilesystem: true
+    activeDeadlineSeconds: 300
+    backoffLimit: 1
+    resources:
+      requests: {cpu: 25m, memory: 32Mi}
+      limits: {cpu: 250m, memory: 128Mi}
+    writableMounts:
+      - {name: tmp, mountPath: /tmp, medium: Memory, sizeLimit: 8Mi}
+  garage-init:
+    kind: Job
+    replicas: 1
+    serviceAccount: garage-init
+    automountServiceAccountToken: false
+    runAsUser: 65534
+    runAsGroup: 65534
+    readOnlyRootFilesystem: true
+    activeDeadlineSeconds: 300
+    backoffLimit: 1
+    resources:
+      requests: {cpu: 25m, memory: 32Mi}
+      limits: {cpu: 100m, memory: 64Mi}
+    writableMounts:
+      - {name: tmp, mountPath: /tmp, medium: Memory, sizeLimit: 8Mi}
+  devtoken:
+    kind: Job
+    replicas: 1
+    serviceAccount: devtoken
+    automountServiceAccountToken: false
+    runAsUser: 65534
+    runAsGroup: 65534
+    readOnlyRootFilesystem: true
+    activeDeadlineSeconds: 120
+    backoffLimit: 0
+    resources:
+      requests: {cpu: 25m, memory: 32Mi}
+      limits: {cpu: 250m, memory: 128Mi}
+    writableMounts: []
+  traefik:
+    kind: Deployment
+    replicas: 1
+    serviceAccount: packaged
+    automountServiceAccountToken: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    readOnlyRootFilesystem: false
+    resources:
+      requests: {cpu: 25m, memory: 64Mi}
+      limits: {cpu: 250m, memory: 256Mi}
+    writableMounts: []

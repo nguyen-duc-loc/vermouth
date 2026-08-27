@@ -1,4 +1,6 @@
+{{- $matrix := .Files.Get "files/workload-matrix.yaml" | fromYaml }}
 {{- if .Values.jobs.migrations.enabled }}
+{{- $workload := index $matrix.workloads "migration" }}
 {{- if not .Values.jobs.runID }}{{ fail "jobs.runID is required for migration Jobs" }}{{- end }}
 {{- range $name := .Values.jobs.migrations.services }}
 {{- $secret := index $.Values.secrets $name }}
@@ -14,8 +16,8 @@ metadata:
   annotations:
     vermouth.dev/decision: spec-0005
 spec:
-  activeDeadlineSeconds: 300
-  backoffLimit: 1
+  activeDeadlineSeconds: {{ $workload.activeDeadlineSeconds }}
+  backoffLimit: {{ $workload.backoffLimit }}
   template:
     metadata:
       labels:
@@ -25,11 +27,11 @@ spec:
     spec:
       restartPolicy: Never
       serviceAccountName: {{ printf "migrate-%s" $name }}
-      automountServiceAccountToken: false
+      automountServiceAccountToken: {{ $workload.automountServiceAccountToken }}
       securityContext:
         {{- include "vermouth.podSecurity" $ | nindent 8 }}
-        runAsUser: 65534
-        runAsGroup: 65534
+        runAsUser: {{ $workload.runAsUser }}
+        runAsGroup: {{ $workload.runAsGroup }}
       containers:
         - name: migrate
           image: {{ include "vermouth.requireImage" (dict "name" (printf "%s migration" $name) "image" (index $.Values.images.migrations $name)) }}
@@ -43,23 +45,19 @@ spec:
                   name: {{ $secret }}
                   key: {{ printf "%s_DATABASE_URL" (upper $name) }}
           resources:
-            requests:
-              cpu: 25m
-              memory: 32Mi
-            limits:
-              cpu: 250m
-              memory: 128Mi
+            {{- toYaml $workload.resources | nindent 12 }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
       volumes:
         - name: tmp
           emptyDir:
-            medium: Memory
-            sizeLimit: 8Mi
+            medium: {{ (index $workload.writableMounts 0).medium }}
+            sizeLimit: {{ (index $workload.writableMounts 0).sizeLimit }}
 {{- end }}
 {{- end }}
 {{- if .Values.jobs.garageInit.enabled }}
+{{- $workload := index $matrix.workloads "garage-init" }}
 {{- if not .Values.jobs.runID }}{{ fail "jobs.runID is required for the Garage initialization Job" }}{{- end }}
 ---
 apiVersion: batch/v1
@@ -72,8 +70,8 @@ metadata:
   annotations:
     vermouth.dev/decision: spec-0005
 spec:
-  activeDeadlineSeconds: 300
-  backoffLimit: 1
+  activeDeadlineSeconds: {{ $workload.activeDeadlineSeconds }}
+  backoffLimit: {{ $workload.backoffLimit }}
   template:
     metadata:
       labels:
@@ -83,11 +81,11 @@ spec:
     spec:
       restartPolicy: Never
       serviceAccountName: garage-init
-      automountServiceAccountToken: false
+      automountServiceAccountToken: {{ $workload.automountServiceAccountToken }}
       securityContext:
         {{- include "vermouth.podSecurity" . | nindent 8 }}
-        runAsUser: 65534
-        runAsGroup: 65534
+        runAsUser: {{ $workload.runAsUser }}
+        runAsGroup: {{ $workload.runAsGroup }}
       containers:
         - name: garage-init
           image: {{ include "vermouth.requireImage" (dict "name" "garage init" "image" .Values.images.garageInit) }}
@@ -95,13 +93,8 @@ spec:
           securityContext:
             {{- include "vermouth.containerSecurity" . | nindent 12 }}
           env:
-            - name: GARAGE_CONFIG_FILE
-              value: /etc/garage.toml
-            - name: GARAGE_RPC_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.secrets.garage }}
-                  key: GARAGE_RPC_SECRET
+            - name: GARAGE_ADMIN_ENDPOINT
+              value: http://garage:3903
             - name: GARAGE_ADMIN_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -123,31 +116,25 @@ spec:
               value: billing
             - name: GARAGE_ZONE
               value: local
-            - name: GARAGE_CAPACITY
-              value: 5G
+            - name: GARAGE_S3_ENDPOINT
+              value: http://garage:3900
+            - name: GARAGE_S3_REGION
+              value: garage
+            - name: VERMOUTH_RUN_ID
+              value: {{ .Values.jobs.runID }}
           resources:
-            requests:
-              cpu: 25m
-              memory: 32Mi
-            limits:
-              cpu: 100m
-              memory: 64Mi
+            {{- toYaml $workload.resources | nindent 12 }}
           volumeMounts:
-            - name: config
-              mountPath: /etc/garage.toml
-              subPath: garage.toml
-              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
-        - name: config
-          configMap:
-            name: garage-config
         - name: tmp
           emptyDir:
-            sizeLimit: 8Mi
+            medium: {{ (index $workload.writableMounts 0).medium }}
+            sizeLimit: {{ (index $workload.writableMounts 0).sizeLimit }}
 {{- end }}
 {{- if .Values.jobs.devtoken.enabled }}
+{{- $workload := index $matrix.workloads "devtoken" }}
 {{- if not .Values.jobs.runID }}{{ fail "jobs.runID is required for the development token Job" }}{{- end }}
 {{- if not .Values.secrets.identity }}{{ fail "identity runtime Secret name is required for the development token Job" }}{{- end }}
 ---
@@ -161,8 +148,8 @@ metadata:
   annotations:
     vermouth.dev/decision: spec-0005
 spec:
-  activeDeadlineSeconds: 120
-  backoffLimit: 0
+  activeDeadlineSeconds: {{ $workload.activeDeadlineSeconds }}
+  backoffLimit: {{ $workload.backoffLimit }}
   template:
     metadata:
       labels:
@@ -172,11 +159,11 @@ spec:
     spec:
       restartPolicy: Never
       serviceAccountName: devtoken
-      automountServiceAccountToken: false
+      automountServiceAccountToken: {{ $workload.automountServiceAccountToken }}
       securityContext:
         {{- include "vermouth.podSecurity" . | nindent 8 }}
-        runAsUser: 65534
-        runAsGroup: 65534
+        runAsUser: {{ $workload.runAsUser }}
+        runAsGroup: {{ $workload.runAsGroup }}
       containers:
         - name: devtoken
           image: {{ include "vermouth.requireImage" (dict "name" "devtoken" "image" .Values.images.devtoken) }}
@@ -191,10 +178,5 @@ spec:
             - secretRef:
                 name: {{ .Values.secrets.identity }}
           resources:
-            requests:
-              cpu: 25m
-              memory: 32Mi
-            limits:
-              cpu: 250m
-              memory: 128Mi
+            {{- toYaml $workload.resources | nindent 12 }}
 {{- end }}

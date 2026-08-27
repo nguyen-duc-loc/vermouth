@@ -1,4 +1,6 @@
 {{- if .Values.application.enabled }}
+{{- $matrix := .Files.Get "files/workload-matrix.yaml" | fromYaml }}
+{{- $workload := index $matrix.workloads "go-application" }}
 {{- range $name, $port := dict "gateway" 8080 "identity" 8081 "teaching" 8082 "billing" 8083 "notifications" 8084 }}
 {{- $image := index $.Values.images $name }}
 {{- $secret := index $.Values.secrets $name }}
@@ -31,7 +33,7 @@ metadata:
   annotations:
     vermouth.dev/decision: spec-0005
 spec:
-  replicas: 1
+  replicas: {{ $workload.replicas }}
   revisionHistoryLimit: 2
   progressDeadlineSeconds: 300
   strategy:
@@ -52,11 +54,11 @@ spec:
         app.kubernetes.io/component: {{ $name }}
     spec:
       serviceAccountName: {{ $name }}
-      automountServiceAccountToken: false
+      automountServiceAccountToken: {{ $workload.automountServiceAccountToken }}
       securityContext:
         {{- include "vermouth.podSecurity" $ | nindent 8 }}
-        runAsUser: 65534
-        runAsGroup: 65534
+        runAsUser: {{ $workload.runAsUser }}
+        runAsGroup: {{ $workload.runAsGroup }}
       containers:
         - name: {{ $name }}
           image: {{ include "vermouth.requireImage" (dict "name" $name "image" $image) }}
@@ -77,31 +79,26 @@ spec:
               path: /ready
               port: http
             initialDelaySeconds: 2
-            periodSeconds: 5
-            timeoutSeconds: 2
-            failureThreshold: 12
+            periodSeconds: {{ $workload.readiness.periodSeconds }}
+            timeoutSeconds: {{ $workload.readiness.timeoutSeconds }}
+            failureThreshold: {{ $workload.readiness.failureThreshold }}
           livenessProbe:
             httpGet:
               path: /health
               port: http
             initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 2
-            failureThreshold: 3
+            periodSeconds: {{ $workload.liveness.periodSeconds }}
+            timeoutSeconds: {{ $workload.liveness.timeoutSeconds }}
+            failureThreshold: {{ $workload.liveness.failureThreshold }}
           resources:
-            requests:
-              cpu: 25m
-              memory: 32Mi
-            limits:
-              cpu: 250m
-              memory: 128Mi
+            {{- toYaml $workload.resources | nindent 12 }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
       volumes:
         - name: tmp
           emptyDir:
-            medium: Memory
-            sizeLimit: 16Mi
+            medium: {{ (index $workload.writableMounts 0).medium }}
+            sizeLimit: {{ (index $workload.writableMounts 0).sizeLimit }}
 {{- end }}
 {{- end }}

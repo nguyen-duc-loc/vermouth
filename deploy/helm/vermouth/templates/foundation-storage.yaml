@@ -1,0 +1,70 @@
+{{- if .Values.foundation.enabled }}
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.storage.className }}
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "storage") | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+provisioner: kubernetes.io/no-provisioner
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: false
+{{- $volumes := dict
+  "postgres-identity" .Values.storage.postgres
+  "postgres-teaching" .Values.storage.postgres
+  "postgres-billing" .Values.storage.postgres
+  "postgres-notifications" .Values.storage.postgres
+  "redpanda" .Values.storage.redpanda
+  "garage-metadata" .Values.storage.garageMetadata
+  "garage-data" .Values.storage.garageData
+  "traefik-acme" .Values.storage.traefikACME
+}}
+{{- range $name, $size := $volumes }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" $ "component" $name) | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  capacity:
+    storage: {{ $size }}
+  volumeMode: Filesystem
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ $.Values.storage.className }}
+  local:
+    path: {{ printf "%s/%s" $.Values.storage.rootPath $name | quote }}
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [{{ $.Values.storage.nodeName | quote }}]
+{{- if ne $name "traefik-acme" }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" $ "component" $name) | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ $.Values.storage.className }}
+  resources:
+    requests:
+      storage: {{ $size }}
+  volumeName: {{ $name }}
+{{- end }}
+{{- end }}
+{{- end }}

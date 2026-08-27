@@ -18,7 +18,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 2 | Stack & scaffold | Foundation | done |
 | 3 | Coding standards & tooling | Foundation | done |
 | 4 | Data model & data ownership per service | Foundation | done |
-| 5 | Local Kubernetes platform & one command startup | Foundation | in-progress |
+| 5 | Local Kubernetes platform & one command startup | Foundation | done |
 | 6 | Design system & UI foundation | Foundation | planned |
 | 7 | Tutor sign in & identity | Slice 1 | in-progress |
 | 8 | Core teaching loop | Slice 1 | planned |
@@ -73,19 +73,20 @@ spec [0003](../specs/0003-data-model-and-ownership/index.md) · code in `service
 - [x] Verify it: `$check verify data model & data ownership per service`
 - [x] Test it: `$test data model & data ownership per service`
 
-### 5. Local Kubernetes platform & one command startup · in-progress
+### 5. Local Kubernetes platform & one command startup · done
 Bring the whole system up on your Azure VM cluster with one command: every service, its own database, the broker, the gateway. This is the piece that most often eats a week, so it gets its own feature rather than hiding inside another one.
 **Done when:** one command brings up every service with its own database and the broker on the local cluster, a request reaches a service through the gateway, and a service restart does not lose data.
-spec [0005](../specs/0005-local-kubernetes-platform/index.md) · code in `deploy/`, `Taskfile.yml`, `services/identity/`, `web/`
+spec [0005](../specs/0005-local-kubernetes-platform/index.md) · code in `deploy/`, `Taskfile.yml`, `pkg/vermouth/`, `services/identity/`, `web/`
 - [x] Design it (spec): `$architect local kubernetes platform & one command startup`
-- [ ] Build it: `$develop local kubernetes platform & one command startup`
-  - [ ] Prove the first cluster thread with bootstrap, image locks, two Helm releases, Envoy Gateway, identity, notifications, Redpanda, web, gateway, migration Jobs, security boundaries, and `task thread` · AC-1, AC-2, AC-4, AC-8, AC-9, AC-10, AC-13, AC-17
-  - [ ] Add teaching, billing, their separate Postgres instances, remaining Secrets, policies, probes, and full readiness · AC-3, AC-9, AC-10, AC-17
-  - [ ] Add Garage initialization, persistent storage, stop, clean, recreate, and persistence proof · AC-5, AC-16
-  - [ ] Complete service redeploy, immutable digest handoff, bounded waits, rollback, status, logs, drift detection, and failed Job recovery · AC-7, AC-11, AC-12
-  - [ ] Prove Compose isolation, both image architectures, local OAuth disabled behavior, the resource ceiling, and all pinned inputs · AC-6, AC-8, AC-14, AC-15, AC-17
-- [ ] Verify it: `$check verify local kubernetes platform & one command startup`
-- [ ] Test it: `$test local kubernetes platform & one command startup`
+- [x] Build it: `$develop local kubernetes platform & one command startup`
+  - [x] Prove executable platform inputs and generated state schemas, canonical image identities, exact k3d registry and volume identities, unprivileged `127.0.0.1:8080` application transport with no Colima profile change, cold node pull proof, packaged Traefik, two Helm releases, the first identity to notifications thread, security matrices, recovery guards, and `task thread` · AC-1, AC-2, AC-4, AC-8, AC-9, AC-10, AC-11, AC-12, AC-13, AC-17
+  - [x] Add teaching, billing, their separate Postgres instances, remaining Secrets, policies, probes, and full readiness · AC-3, AC-9, AC-10, AC-17
+  - [x] Add Garage initialization, signed live credential proof, persistent storage, labelled Docker volume ownership, stop, clean, recreate, and persistence proof · AC-5, AC-16
+  - [x] Complete service redeploy, remote descriptor handoff, atomic image and Secret state, explicit context targeting, mutation locks, bounded waits, exact Helm recovery, registry aware status, logs, drift detection, and failed Job recovery · AC-7, AC-11, AC-12, AC-17
+  - [x] Prove Compose isolation, staged two architecture publication, both architecture web smoke checks, local OAuth disabled behavior, the exact resource formula, and all pinned inputs · AC-6, AC-8, AC-14, AC-15, AC-17
+  - [x] Remove project owned host images after publication and add confirmed shared BuildKit cache cleanup · AC-8, AC-17
+- [x] Verify it: `$check verify local kubernetes platform & one command startup`
+- [x] Test it: `$test local kubernetes platform & one command startup`
 
 ### 6. Design system & UI foundation · needs a decision
 The visual language and the base components (layout, forms, tables, buttons, empty and error states) in both Vietnamese and English ready shape, so every screen after this is assembly rather than invention. Phone first, since attendance gets marked standing up.

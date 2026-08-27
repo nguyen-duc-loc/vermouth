@@ -2,6 +2,7 @@ package route
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -169,8 +170,14 @@ func passThrough(ctx context.Context, logger *slog.Logger, w http.ResponseWriter
 
 // passThroughAuth forwards a sign in answer with the two headers a session needs:
 // Location, because the browser has to follow the redirect itself, and every
-// Set-Cookie, because the refresh cookie is identity's to write.
+// Set-Cookie, because the refresh cookie is identity's to write. The declared
+// auth_unavailable response is decoded before it crosses the boundary, while
+// every other 5xx is still masked.
 func passThroughAuth(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, response aggregate.Response) {
+	if unavailable, ok := declaredAuthUnavailable(response); ok {
+		vermouth.WriteJSON(ctx, logger, w, http.StatusServiceUnavailable, unavailable)
+		return
+	}
 	if response.Status >= http.StatusInternalServerError {
 		logger.ErrorContext(ctx, "Service failed",
 			slog.Int("status", response.Status),
@@ -193,6 +200,21 @@ func passThroughAuth(ctx context.Context, logger *slog.Logger, w http.ResponseWr
 	if err != nil {
 		logger.ErrorContext(ctx, "Write answer", slog.String("error", err.Error()))
 	}
+}
+
+func declaredAuthUnavailable(response aggregate.Response) (vermouth.APIError, bool) {
+	var answer vermouth.APIError
+	if response.Status != http.StatusServiceUnavailable {
+		return answer, false
+	}
+	err := json.Unmarshal(response.Body, &answer)
+	if err != nil {
+		return answer, false
+	}
+	valid := answer.Error.Code == "auth_unavailable" &&
+		answer.Error.Message != "" &&
+		answer.Error.RequestID != ""
+	return answer, valid
 }
 
 // upstreamFailed answers when a service could not be reached at all.

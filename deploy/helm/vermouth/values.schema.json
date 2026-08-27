@@ -2,14 +2,15 @@
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
   "additionalProperties": false,
-  "required": ["foundation", "application", "jobs", "images", "secrets", "config", "storage"],
+  "required": ["schemaVersion", "jobs", "images", "secrets", "config"],
   "properties": {
+    "schemaVersion": { "const": 1 },
     "foundation": { "$ref": "#/definitions/gate" },
     "application": { "$ref": "#/definitions/gate" },
     "jobs": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["runID", "migrations", "garageInit", "devtoken"],
+      "required": ["runID"],
       "properties": {
         "runID": { "type": "string", "pattern": "^$|^[0-9a-f]{12}$" },
         "migrations": {
@@ -41,7 +42,7 @@
     "images": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["postgres", "redpanda", "garage", "garageInit", "gateway", "identity", "teaching", "billing", "notifications", "web", "devtoken", "migrations"],
+      "required": ["garageInit", "gateway", "identity", "teaching", "billing", "notifications", "web", "devtoken", "migrations"],
       "properties": {
         "postgres": { "$ref": "#/definitions/image" },
         "redpanda": { "$ref": "#/definitions/image" },
@@ -67,9 +68,74 @@
         }
       }
     },
-    "secrets": { "type": "object" },
-    "config": { "type": "object" },
-    "storage": { "type": "object" }
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gateway", "identity", "teaching", "billing", "notifications"],
+      "properties": {
+        "gateway": { "$ref": "#/definitions/secretName" },
+        "identity": { "$ref": "#/definitions/secretName" },
+        "teaching": { "$ref": "#/definitions/secretName" },
+        "billing": { "$ref": "#/definitions/secretName" },
+        "notifications": { "$ref": "#/definitions/secretName" },
+        "postgres": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["identity", "teaching", "billing", "notifications"],
+          "properties": {
+            "identity": { "$ref": "#/definitions/secretName" },
+            "teaching": { "$ref": "#/definitions/secretName" },
+            "billing": { "$ref": "#/definitions/secretName" },
+            "notifications": { "$ref": "#/definitions/secretName" }
+          }
+        },
+        "garage": { "$ref": "#/definitions/secretName" },
+        "billingS3": { "$ref": "#/definitions/secretName" }
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["environment", "apiBasePath", "googleAuthEnabled"],
+      "properties": {
+        "environment": { "const": "local" },
+        "apiBasePath": { "const": "/api" },
+        "logLevel": { "type": "string" },
+        "brokerSeeds": { "type": "string" },
+        "topicPartitions": { "type": "string" },
+        "relayInterval": { "type": "string" },
+        "consumerRetryMax": { "type": "string" },
+        "consumerRetryBaseDelay": { "type": "string" },
+        "gatewayUpstreamTimeout": { "type": "string" },
+        "googleAuthEnabled": { "type": "boolean" },
+        "identityAppURL": { "type": "string" },
+        "identityGoogleRedirectURL": { "type": "string" },
+        "identitySignupAllowlist": { "type": "string" },
+        "identityRefreshTTL": { "type": "string" },
+        "identityTokenTTL": { "type": "string" },
+        "identityRefreshGrace": { "type": "string" },
+        "identitySweepInterval": { "type": "string" },
+        "identityCookieSecure": { "type": "string" },
+        "billingS3Endpoint": { "type": "string" },
+        "billingS3Region": { "type": "string" },
+        "billingS3Bucket": { "type": "string" }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["className", "nodeName", "rootPath", "postgres", "redpanda", "garageMetadata", "garageData", "traefikACME"],
+      "properties": {
+        "className": { "const": "vermouth-local" },
+        "nodeName": { "const": "k3d-vermouth-server-0" },
+        "rootPath": { "const": "/var/lib/vermouth" },
+        "postgres": { "$ref": "#/definitions/storageSize" },
+        "redpanda": { "$ref": "#/definitions/storageSize" },
+        "garageMetadata": { "$ref": "#/definitions/storageSize" },
+        "garageData": { "$ref": "#/definitions/storageSize" },
+        "traefikACME": { "$ref": "#/definitions/storageSize" }
+      }
+    }
   },
   "definitions": {
     "gate": {
@@ -81,6 +147,14 @@
     "image": {
       "type": "string",
       "pattern": "^$|^\\S+@sha256:[0-9a-f]{64}$"
+    },
+    "secretName": {
+      "type": "string",
+      "pattern": "^$|^[a-z][a-z0-9-]*$"
+    },
+    "storageSize": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*(Mi|Gi)$"
     }
   }
 }

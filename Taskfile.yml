@@ -56,6 +56,7 @@ tasks:
           value=$(grep "^$line=" .tmp/keys.env)
           if grep -q "^$line=" .env; then
             awk -v key="$line" -v repl="$value" 'index($0, key "=") == 1 { print repl; next } { print }' .env > .env.next
+            chmod 0600 .env.next
             mv .env.next .env
           else
             echo "$value" >> .env
@@ -407,7 +408,7 @@ tasks:
       - ./deploy/platform/platform.sh doctor
 
   platform:bootstrap:
-    desc: Reconcile local config, Colima, k3d, the registry, and Envoy Gateway
+    desc: Reconcile local config, Colima, k3d, the registry, and packaged Traefik
     cmds:
       - ./deploy/platform/platform.sh bootstrap
 
@@ -416,13 +417,18 @@ tasks:
     cmds:
       - ./deploy/platform/platform.sh validate
 
+  platform:locks:verify:
+    desc: Verify every external image tag still resolves to its pinned digest and platforms
+    cmds:
+      - ./deploy/platform/platform.sh locks-verify
+
   platform:secrets:
     desc: Create stable foundation Secrets and content named runtime Secrets
     cmds:
       - ./deploy/platform/platform.sh secrets
 
   platform:status:
-    desc: Show releases, workloads, Gateway state, Jobs, storage, registry, and readiness
+    desc: Show releases, workloads, Ingress state, Jobs, storage, registry, and readiness
     cmds:
       - ./deploy/platform/platform.sh status
 
@@ -441,15 +447,30 @@ tasks:
     cmds:
       - ./deploy/platform/platform.sh clean
 
+  platform:cache:clean:
+    desc: Report and clear the shared Colima BuildKit cache after typed confirmation
+    cmds:
+      - ./deploy/platform/platform.sh cache-clean
+
   platform:recreate:
     desc: Delete the local platform after typed confirmation, then bootstrap an empty one
     cmds:
       - ./deploy/platform/platform.sh recreate
 
   platform:jobs:clean:
-    desc: Delete one named completed or failed Job and its Pod
+    desc: Delete one named failed Job and its Pod after diagnosis
     cmds:
       - ./deploy/platform/platform.sh jobs-clean {{.CLI_ARGS}}
+
+  platform:lock:clear:
+    desc: Clear a stale platform mutation lock after typed confirmation
+    cmds:
+      - ./deploy/platform/platform.sh lock-clear
+
+  platform:measure:
+    desc: Measure the ready platform every five seconds for five minutes
+    cmds:
+      - ./deploy/platform/platform.sh measure
 
   dev:
     desc: Build and start the whole Kubernetes platform, then print its local address

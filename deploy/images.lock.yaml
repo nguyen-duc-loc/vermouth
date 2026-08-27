@@ -37,63 +37,185 @@ external:
     digest: sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
     platforms: [linux/arm64, linux/amd64]
   k3s:
-    image: rancher/k3s:v1.35.5-k3s1
-    digest: sha256:2074403abe1bded11ef3dde09d457e13be8e0b64c218b1c4f8269b4565cfbc65
+    image: rancher/k3s:v1.36.3-k3s1
+    digest: sha256:d0f79175794edd9694b4a12bafc5c52ae1977369a2f7cf256264e7bd2dae0be9
     platforms: [linux/arm64, linux/amd64]
-  envoyGateway:
-    image: docker.io/envoyproxy/gateway:v1.9.0
-    digest: sha256:6f40c7b218b4ff1c4cb481923ed2c9a7634580365913434dd5dda9e954c0114b
+  traefik:
+    image: rancher/mirrored-library-traefik:3.7.8
+    digest: sha256:4299bbed850421258fc5448c2e0e6ad350981d4d335a68de11b92448aedbefe5
     platforms: [linux/arm64, linux/amd64]
-  envoyProxy:
-    image: docker.io/envoyproxy/envoy:distroless-v1.39.0
-    digest: sha256:7877ad87afd7459e1bd2a077ff601fec7c93aeecd62e71664560d96328c62cf4
-    platforms: [linux/arm64, linux/amd64]
+probe:
+  dockerfile: deploy/images/platform-probe/Dockerfile
+  inputSHA256: 1726c87f45423633569f8dd7ca51dfdafaf332732f12b72dc0d011e841bb5778
+  platform: linux/arm64
+  repositoryPath: vermouth/platform-probe
+  baseLocks: [dockerfileFrontend, alpine]
 built:
   gateway:
+    workload: gateway
+    repositoryPath: vermouth/gateway
     dockerfile: gateway/Dockerfile
     target: runtime
-    platforms: [linux/arm64, linux/amd64]
+    nativePlatforms: [linux/arm64]
+    multiPlatforms: [linux/arm64, linux/amd64]
+    inputs: [gateway, pkg/vermouth]
+    buildArgs: {}
+    baseLocks: [dockerfileFrontend, goBuilder]
+    hashSchema: vermouth-image-v1
+    nativeTagTemplate: dev-{hash12}
+    multiTagTemplate: multi-{hash12}
+    childTagTemplate: multi-{hash12}-{architecture}
   identity:
+    workload: identity
+    repositoryPath: vermouth/identity
     dockerfile: services/identity/Dockerfile
     target: runtime
-    platforms: [linux/arm64, linux/amd64]
+    nativePlatforms: [linux/arm64]
+    multiPlatforms: [linux/arm64, linux/amd64]
+    inputs: [services/identity, pkg/vermouth]
+    buildArgs: {}
+    baseLocks: [dockerfileFrontend, goBuilder]
+    hashSchema: vermouth-image-v1
+    nativeTagTemplate: dev-{hash12}
+    multiTagTemplate: multi-{hash12}
+    childTagTemplate: multi-{hash12}-{architecture}
   teaching:
+    workload: teaching
+    repositoryPath: vermouth/teaching
     dockerfile: services/teaching/Dockerfile
     target: runtime
-    platforms: [linux/arm64, linux/amd64]
+    nativePlatforms: [linux/arm64]
+    multiPlatforms: [linux/arm64, linux/amd64]
+    inputs: [services/teaching, pkg/vermouth]
+    buildArgs: {}
+    baseLocks: [dockerfileFrontend, goBuilder]
+    hashSchema: vermouth-image-v1
+    nativeTagTemplate: dev-{hash12}
+    multiTagTemplate: multi-{hash12}
+    childTagTemplate: multi-{hash12}-{architecture}
   billing:
+    workload: billing
+    repositoryPath: vermouth/billing
     dockerfile: services/billing/Dockerfile
     target: runtime
-    platforms: [linux/arm64, linux/amd64]
+    nativePlatforms: [linux/arm64]
+    multiPlatforms: [linux/arm64, linux/amd64]
+    inputs: [services/billing, pkg/vermouth]
+    buildArgs: {}
+    baseLocks: [dockerfileFrontend, goBuilder]
+    hashSchema: vermouth-image-v1
+    nativeTagTemplate: dev-{hash12}
+    multiTagTemplate: multi-{hash12}
+    childTagTemplate: multi-{hash12}-{architecture}
   notifications:
+    workload: notifications
+    repositoryPath: vermouth/notifications
     dockerfile: services/notifications/Dockerfile
     target: runtime
-    platforms: [linux/arm64, linux/amd64]
+    nativePlatforms: [linux/arm64]
+    multiPlatforms: [linux/arm64, linux/amd64]
+    inputs: [services/notifications, pkg/vermouth]
+    buildArgs: {}
+    baseLocks: [dockerfileFrontend, goBuilder]
+    hashSchema: vermouth-image-v1
+    nativeTagTemplate: dev-{hash12}
+    multiTagTemplate: multi-{hash12}
+    childTagTemplate: multi-{hash12}-{architecture}
   web:
+    workload: web
+    repositoryPath: vermouth/web
     dockerfile: deploy/images/web/Dockerfile
     target: runtime
-    platforms: [linux/arm64, linux/amd64]
-  identityMigration:
+    nativePlatforms: [linux/arm64]
+    multiPlatforms: [linux/arm64, linux/amd64]
+    inputs: [deploy/images/web, web, package.json, pnpm-lock.yaml, pnpm-workspace.yaml]
+    buildArgs: {}
+    baseLocks: [dockerfileFrontend, nodeBuilder, webRuntime]
+    hashSchema: vermouth-image-v1
+    nativeTagTemplate: dev-{hash12}
+    multiTagTemplate: multi-{hash12}
+    childTagTemplate: multi-{hash12}-{architecture}
+  identity-migration:
+    workload: identity-migration
+    repositoryPath: vermouth/identity-migration
     dockerfile: services/identity/Dockerfile
     target: migration
-    platforms: [linux/arm64, linux/amd64]
-  teachingMigration:
+    nativePlatforms: [linux/arm64]
+    multiPlatforms: [linux/arm64, linux/amd64]
+    inputs: [services/identity, pkg/vermouth]
+    buildArgs: {}
+    baseLocks: [dockerfileFrontend, goBuilder]
+    hashSchema: vermouth-image-v1
+    nativeTagTemplate: dev-{hash12}
+    multiTagTemplate: multi-{hash12}
+    childTagTemplate: multi-{hash12}-{architecture}
+  teaching-migration:
+    workload: teaching-migration
+    repositoryPath: vermouth/teaching-migration
     dockerfile: services/teaching/Dockerfile
     target: migration
-    platforms: [linux/arm64, linux/amd64]
-  billingMigration:
+    nativePlatforms: [linux/arm64]
+    multiPlatforms: [linux/arm64, linux/amd64]
+    inputs: [services/teaching, pkg/vermouth]
+    buildArgs: {}
+    baseLocks: [dockerfileFrontend, goBuilder]
+    hashSchema: vermouth-image-v1
+    nativeTagTemplate: dev-{hash12}
+    multiTagTemplate: multi-{hash12}
+    childTagTemplate: multi-{hash12}-{architecture}
+  billing-migration:
+    workload: billing-migration
+    repositoryPath: vermouth/billing-migration
     dockerfile: services/billing/Dockerfile
     target: migration
-    platforms: [linux/arm64, linux/amd64]
-  notificationsMigration:
+    nativePlatforms: [linux/arm64]
+    multiPlatforms: [linux/arm64, linux/amd64]
+    inputs: [services/billing, pkg/vermouth]
+    buildArgs: {}
+    baseLocks: [dockerfileFrontend, goBuilder]
+    hashSchema: vermouth-image-v1
+    nativeTagTemplate: dev-{hash12}
+    multiTagTemplate: multi-{hash12}
+    childTagTemplate: multi-{hash12}-{architecture}
+  notifications-migration:
+    workload: notifications-migration
+    repositoryPath: vermouth/notifications-migration
     dockerfile: services/notifications/Dockerfile
     target: migration
-    platforms: [linux/arm64, linux/amd64]
-  devtoken:
-    dockerfile: services/identity/Dockerfile
-    target: devtoken
-    platforms: [linux/arm64]
-  garageInit:
+    nativePlatforms: [linux/arm64]
+    multiPlatforms: [linux/arm64, linux/amd64]
+    inputs: [services/notifications, pkg/vermouth]
+    buildArgs: {}
+    baseLocks: [dockerfileFrontend, goBuilder]
+    hashSchema: vermouth-image-v1
+    nativeTagTemplate: dev-{hash12}
+    multiTagTemplate: multi-{hash12}
+    childTagTemplate: multi-{hash12}-{architecture}
+  garage-init:
+    workload: garage-init
+    repositoryPath: vermouth/garage-init
     dockerfile: deploy/images/garage-init/Dockerfile
     target: runtime
-    platforms: [linux/arm64, linux/amd64]
+    nativePlatforms: [linux/arm64]
+    multiPlatforms: [linux/arm64, linux/amd64]
+    inputs: [deploy/images/garage-init, pkg/vermouth]
+    buildArgs: {}
+    baseLocks: [dockerfileFrontend, alpine, goBuilder]
+    hashSchema: vermouth-image-v1
+    nativeTagTemplate: dev-{hash12}
+    multiTagTemplate: multi-{hash12}
+    childTagTemplate: multi-{hash12}-{architecture}
+  devtoken:
+    workload: devtoken
+    repositoryPath: vermouth/devtoken
+    dockerfile: services/identity/Dockerfile
+    target: devtoken
+    nativePlatforms: [linux/arm64]
+    multiPlatforms: []
+    inputs: [services/identity, pkg/vermouth]
+    buildArgs: {}
+    baseLocks: [dockerfileFrontend, goBuilder]
+    hashSchema: vermouth-image-v1
+    nativeTagTemplate: dev-{hash12}
+    multiTagTemplate: ""
+    childTagTemplate: ""

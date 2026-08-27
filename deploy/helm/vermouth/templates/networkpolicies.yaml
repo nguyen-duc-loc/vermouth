@@ -1,350 +1,130 @@
 {{- if .Values.foundation.enabled }}
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: default-deny-all
-  labels:
-    {{- include "vermouth.componentLabels" (dict "root" . "component" "network-boundary") | nindent 4 }}
-  annotations:
-    vermouth.dev/decision: spec-0005
-spec:
-  podSelector: {}
-  policyTypes: [Ingress, Egress]
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-dns
-  labels:
-    {{- include "vermouth.componentLabels" (dict "root" . "component" "network-boundary") | nindent 4 }}
-  annotations:
-    vermouth.dev/decision: spec-0005
-spec:
-  podSelector: {}
-  policyTypes: [Egress]
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
-{{- range $target := list "web" "gateway" }}
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {{ printf "allow-envoy-to-%s" $target }}
-  labels:
-    {{- include "vermouth.componentLabels" (dict "root" $ "component" "network-boundary") | nindent 4 }}
-  annotations:
-    vermouth.dev/decision: spec-0005
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: vermouth
-      app.kubernetes.io/component: {{ $target }}
-  policyTypes: [Ingress]
-  ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: envoy-gateway-system
-          podSelector:
-            matchLabels:
-              gateway.envoyproxy.io/owning-gateway-name: vermouth
-      ports:
-        - protocol: TCP
-          port: 8080
+{{- $matrix := .Files.Get "files/traffic-matrix.yaml" | fromYaml }}
+{{- if ne (int $matrix.schemaVersion) 1 }}{{ fail "traffic matrix schemaVersion must be 1" }}{{- end }}
+{{- $policies := dict }}
+{{- range $row := $matrix.rows }}
+  {{- $enabled := or (eq $row.environment "all") (and (eq $row.environment "google-enabled") $.Values.config.googleAuthEnabled) }}
+  {{- if $enabled }}
+    {{- $rows := get $policies $row.policyName | default (list) }}
+    {{- $_ := set $policies $row.policyName (append $rows $row) }}
+  {{- end }}
 {{- end }}
+{{- range $policyName := keys $policies | sortAlpha }}
+{{- $rows := get $policies $policyName }}
+{{- $first := index $rows 0 }}
+{{- $ids := list }}
+{{- range $row := $rows }}{{ $ids = append $ids $row.id }}{{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: gateway-to-services
-  labels:
-    {{- include "vermouth.componentLabels" (dict "root" . "component" "network-boundary") | nindent 4 }}
-  annotations:
-    vermouth.dev/decision: spec-0005
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: vermouth
-      app.kubernetes.io/component: gateway
-  policyTypes: [Egress]
-  egress:
-    {{- range $name, $port := dict "identity" 8081 "teaching" 8082 "billing" 8083 "notifications" 8084 }}
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: vermouth
-              app.kubernetes.io/component: {{ $name }}
-      ports:
-        - protocol: TCP
-          port: {{ $port }}
-    {{- end }}
-{{- range $name, $port := dict "identity" 8081 "teaching" 8082 "billing" 8083 "notifications" 8084 }}
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {{ printf "allow-gateway-to-%s" $name }}
+  name: {{ $policyName }}
   labels:
     {{- include "vermouth.componentLabels" (dict "root" $ "component" "network-boundary") | nindent 4 }}
   annotations:
     vermouth.dev/decision: spec-0005
+    vermouth.dev/traffic-row-ids: {{ join "," $ids | quote }}
 spec:
   podSelector:
+    {{- if $first.podSelector }}
+    matchLabels:
+      {{- toYaml $first.podSelector | nindent 6 }}
+    {{- else if $first.podSelectorExpression }}
     matchLabels:
       app.kubernetes.io/name: vermouth
-      app.kubernetes.io/component: {{ $name }}
-  policyTypes: [Ingress]
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: vermouth
-              app.kubernetes.io/component: gateway
-      ports:
-        - protocol: TCP
-          port: {{ $port }}
-{{- end }}
-{{- range $name := list "identity" "teaching" "billing" "notifications" }}
-{{- $sources := list $name (printf "migrate-%s" $name) }}
-{{- if eq $name "identity" }}{{ $sources = append $sources "devtoken" }}{{- end }}
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {{ printf "%s-to-own-postgres" $name }}
-  labels:
-    {{- include "vermouth.componentLabels" (dict "root" $ "component" "network-boundary") | nindent 4 }}
-  annotations:
-    vermouth.dev/decision: spec-0005
-spec:
-  podSelector:
     matchExpressions:
-      - key: app.kubernetes.io/name
-        operator: In
-        values: [vermouth]
-      - key: app.kubernetes.io/component
+      - key: {{ $first.podSelectorExpression.key }}
         operator: In
         values:
-          {{- toYaml $sources | nindent 10 }}
-  policyTypes: [Egress]
-  egress:
-    - to:
-        - podSelector:
+          {{- toYaml $first.podSelectorExpression.values | nindent 10 }}
+    {{- else }}
+    {}
+    {{- end }}
+  policyTypes:
+    {{- if eq $first.direction "Both" }}
+    - Ingress
+    - Egress
+    {{- else }}
+    - {{ $first.direction }}
+    {{- end }}
+  {{- if eq $first.direction "Ingress" }}
+  ingress:
+    {{- range $row := $rows }}
+    - from:
+        {{- range $peer := $row.peers }}
+        - {{- if $peer.namespaceSelector }}
+          namespaceSelector:
+            matchLabels:
+              {{- toYaml $peer.namespaceSelector | nindent 14 }}
+          {{- end }}
+          {{- if $peer.podSelector }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $peer.podSelector | nindent 14 }}
+          {{- else if $peer.podSelectorExpression }}
+          podSelector:
             matchLabels:
               app.kubernetes.io/name: vermouth
-              app.kubernetes.io/component: {{ printf "postgres-%s" $name }}
-      ports:
-        - protocol: TCP
-          port: 5432
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {{ printf "allow-%s-postgres-clients" $name }}
-  labels:
-    {{- include "vermouth.componentLabels" (dict "root" $ "component" "network-boundary") | nindent 4 }}
-  annotations:
-    vermouth.dev/decision: spec-0005
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: vermouth
-      app.kubernetes.io/component: {{ printf "postgres-%s" $name }}
-  policyTypes: [Ingress]
-  ingress:
-    - from:
-        - podSelector:
             matchExpressions:
-              - key: app.kubernetes.io/name
-                operator: In
-                values: [vermouth]
-              - key: app.kubernetes.io/component
+              - key: {{ $peer.podSelectorExpression.key }}
                 operator: In
                 values:
-                  {{- toYaml $sources | nindent 18 }}
-      ports:
-        - protocol: TCP
-          port: 5432
-{{- end }}
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: services-to-redpanda
-  labels:
-    {{- include "vermouth.componentLabels" (dict "root" . "component" "network-boundary") | nindent 4 }}
-  annotations:
-    vermouth.dev/decision: spec-0005
-spec:
-  podSelector:
-    matchExpressions:
-      - key: app.kubernetes.io/name
-        operator: In
-        values: [vermouth]
-      - key: app.kubernetes.io/component
-        operator: In
-        values: [identity, teaching, billing, notifications]
-  policyTypes: [Egress]
-  egress:
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: vermouth
-              app.kubernetes.io/component: redpanda
-      ports:
-        - protocol: TCP
-          port: 9092
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-services-to-redpanda
-  labels:
-    {{- include "vermouth.componentLabels" (dict "root" . "component" "network-boundary") | nindent 4 }}
-  annotations:
-    vermouth.dev/decision: spec-0005
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: vermouth
-      app.kubernetes.io/component: redpanda
-  policyTypes: [Ingress]
-  ingress:
-    - from:
-        - podSelector:
-            matchExpressions:
-              - key: app.kubernetes.io/name
-                operator: In
-                values: [vermouth]
-              - key: app.kubernetes.io/component
-                operator: In
-                values: [identity, teaching, billing, notifications]
-      ports:
-        - protocol: TCP
-          port: 9092
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: billing-to-garage
-  labels:
-    {{- include "vermouth.componentLabels" (dict "root" . "component" "network-boundary") | nindent 4 }}
-  annotations:
-    vermouth.dev/decision: spec-0005
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: vermouth
-      app.kubernetes.io/component: billing
-  policyTypes: [Egress]
-  egress:
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: vermouth
-              app.kubernetes.io/component: garage
-      ports:
-        - protocol: TCP
-          port: 3900
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: garage-init-to-garage
-  labels:
-    {{- include "vermouth.componentLabels" (dict "root" . "component" "network-boundary") | nindent 4 }}
-  annotations:
-    vermouth.dev/decision: spec-0005
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: vermouth
-      app.kubernetes.io/component: garage-init
-  policyTypes: [Egress]
-  egress:
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: vermouth
-              app.kubernetes.io/component: garage
-      ports:
-        - protocol: TCP
-          port: 3901
-        - protocol: TCP
-          port: 3903
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-garage-clients
-  labels:
-    {{- include "vermouth.componentLabels" (dict "root" . "component" "network-boundary") | nindent 4 }}
-  annotations:
-    vermouth.dev/decision: spec-0005
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: vermouth
-      app.kubernetes.io/component: garage
-  policyTypes: [Ingress]
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: vermouth
-              app.kubernetes.io/component: billing
-      ports:
-        - protocol: TCP
-          port: 3900
-    - from:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: vermouth
-              app.kubernetes.io/component: garage-init
-      ports:
-        - protocol: TCP
-          port: 3901
-        - protocol: TCP
-          port: 3903
-{{- if .Values.config.googleAuthEnabled }}
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: identity-google-oauth
-  labels:
-    {{- include "vermouth.componentLabels" (dict "root" . "component" "network-boundary") | nindent 4 }}
-  annotations:
-    vermouth.dev/decision: spec-0005
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: vermouth
-      app.kubernetes.io/component: identity
-  policyTypes: [Egress]
-  egress:
-    - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
+                  {{- toYaml $peer.podSelectorExpression.values | nindent 18 }}
+          {{- end }}
+          {{- if $peer.ipBlock }}
+          ipBlock:
+            cidr: {{ $peer.ipBlock.cidr }}
+            {{- with $peer.ipBlock.except }}
             except:
-              - 10.0.0.0/8
-              - 172.16.0.0/12
-              - 192.168.0.0/16
-              - 169.254.0.0/16
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
       ports:
-        - protocol: TCP
-          port: 443
+        {{- range $port := $row.ports }}
+        - protocol: {{ $port.protocol }}
+          port: {{ $port.port }}
+        {{- end }}
+    {{- end }}
+  {{- else if eq $first.direction "Egress" }}
+  egress:
+    {{- range $row := $rows }}
+    - to:
+        {{- range $peer := $row.peers }}
+        - {{- if $peer.namespaceSelector }}
+          namespaceSelector:
+            matchLabels:
+              {{- toYaml $peer.namespaceSelector | nindent 14 }}
+          {{- end }}
+          {{- if $peer.podSelector }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $peer.podSelector | nindent 14 }}
+          {{- else if $peer.podSelectorExpression }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vermouth
+            matchExpressions:
+              - key: {{ $peer.podSelectorExpression.key }}
+                operator: In
+                values:
+                  {{- toYaml $peer.podSelectorExpression.values | nindent 18 }}
+          {{- end }}
+          {{- if $peer.ipBlock }}
+          ipBlock:
+            cidr: {{ $peer.ipBlock.cidr }}
+            {{- with $peer.ipBlock.except }}
+            except:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+      ports:
+        {{- range $port := $row.ports }}
+        - protocol: {{ $port.protocol }}
+          port: {{ $port.port }}
+        {{- end }}
+    {{- end }}
+  {{- end }}
 {{- end }}
 {{- end }}

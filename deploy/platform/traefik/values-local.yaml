@@ -1,0 +1,13 @@
+ports:
+  web:
+    expose:
+      default: true
+    exposedPort: 80
+  websecure:
+    expose:
+      default: false
+service:
+  spec:
+    type: LoadBalancer
+persistence:
+  enabled: false
