@@ -16,6 +16,9 @@ env_value() {
 ensure_env_value() {
   name=$1
   value=$2
+  if [ -s "$ROOT/.env" ] && [ -n "$(tail -c 1 "$ROOT/.env")" ]; then
+    printf '\n' >>"$ROOT/.env"
+  fi
   current=$(env_value "$name")
   if ! printf '%s' "$current" | grep -q '[^[:space:]]'; then current=; fi
   [ -z "$current" ] || return 0
@@ -27,6 +30,7 @@ ensure_env_value() {
   else
     printf '%s=%s\n' "$name" "$value" >>"$ROOT/.env"
   fi
+  chmod 0600 "$ROOT/.env"
 }
 
 require_env_value() {

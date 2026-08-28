@@ -149,3 +149,29 @@ func TestEnsureEnvValuePreservesExistingValuesAndFillsBlankOnes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 }
+
+func TestEnsureEnvValueAppendsAfterMissingTrailingNewline(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	envPath := filepath.Join(root, ".env")
+	require.NoError(t, os.WriteFile(envPath, []byte("KEEP=original"), 0o644))
+	result := runSourcedShell(
+		t,
+		[]string{
+			repoFile(t, "deploy", "platform", "common.sh"),
+			repoFile(t, "deploy", "platform", "secrets.sh"),
+		},
+		"ROOT=$TEST_ROOT\nensure_env_value ADDED value\n",
+		"",
+		map[string]string{"TEST_ROOT": root},
+	)
+	require.NoError(t, result.err, result.stderr)
+
+	content, err := os.ReadFile(envPath)
+	require.NoError(t, err)
+	require.Equal(t, "KEEP=original\nADDED=value\n", string(content))
+	info, err := os.Stat(envPath)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+}
