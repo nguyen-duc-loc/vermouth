@@ -15,10 +15,11 @@ generates its Go types from, so a contract change breaks the build rather than a
   lockfile holds the exact version, so nothing moves until you ask for it with `pnpm update`.
   `@types/node` tracks the Node major, so it stays on `^24` even though 26 is out
 - **Framework**: React 19 with Vite 8, TanStack Router, TanStack Query v5
-- **Styling**: Tailwind CSS v4 through `@tailwindcss/vite`. `shadcn/ui` primitives arrive with feature 6
+- **Styling**: Tailwind CSS v4 through `@tailwindcss/vite`, shadcn/ui New York primitives on the Zinc base, and the Aceternity registry with Motion for reviewed source owned components
 - **API types**: `openapi-typescript` into `src/api/schema.d.ts`, called through `openapi-fetch`
-- **Planned, not installed yet**: GSAP for animation, `react-i18next` with Vietnamese as the default
-  language (feature 20), Vitest for units, Playwright for the money path
+- **Tests**: Vitest with jsdom and Testing Library, configured by `vitest.config.ts`
+- **Planned, not installed yet**: `react-i18next` with Vietnamese as the default language (feature
+  20), Playwright for the money path
 
 ## Key files
 
@@ -30,6 +31,7 @@ generates its Go types from, so a contract change breaks the build rather than a
 | `src/api/client.ts` | The single `openapi-fetch` client and the auth header |
 | `src/api/schema.d.ts` | Generated. Never edit by hand; run `task web:generate` |
 | `src/api/thread.ts` | Typed calls and the shared `ApiError` shape, both taken from the schema |
+| `design.md` | The visual direction and component usage contract; token values remain in CSS |
 | `src/styles.css` | The Tailwind v4 entry point |
 | `vite.config.ts` | The dev server on port 5173 and the proxy to the gateway |
 
@@ -42,6 +44,7 @@ task web:build       # tsc -b then vite build
 task web:generate    # regenerate src/api/schema.d.ts from ../api/openapi.yaml
 pnpm check           # Biome formatting, lint and import order
 pnpm typecheck       # strict TypeScript through tsc -b
+pnpm exec vitest run # the web unit and component suite
 pnpm lint            # Biome lint only
 ```
 
@@ -58,6 +61,7 @@ path. Running `pnpm` directly works in your own shell.
 - TanStack Query's cache is where eventual consistency is made honest: a projection that has not
   caught up yet is refetched rather than assumed. Invalidate after a write instead of guessing.
 - Money arrives as an integer count of dong and is formatted here, at the edge, never earlier.
+- Design system: build all UI to `design.md`; token values live in `src/styles.css`.
 
 ## Gotchas
 
@@ -68,8 +72,8 @@ path. Running `pnpm` directly works in your own shell.
   CORS at the gateway in the same change.
 - The relay polls, so an event reaches a projection 500ms to 1s after the write commits. A screen
   reading a projection must tolerate that window rather than assert on it immediately.
-- There is no test library in `package.json` yet. The current web gate is `pnpm check` plus
-  `pnpm typecheck`; `pnpm build` also runs the compiler before Vite builds.
+- Vitest runs beside the source with jsdom and Testing Library. The repository wide `task test`
+  remains the Go module suite, so run `pnpm exec vitest run` from `web/` for browser component tests.
 - TypeScript 7 ships the compiler as a binary and none of the old JavaScript compiler API:
   `ts.factory`, `ts.SyntaxKind`, and `ts.createPrinter` all read as `undefined`. `openapi-typescript`
   builds `src/api/schema.d.ts` by calling that API, so it dies on TypeScript 7. That is why the
@@ -85,6 +89,9 @@ path. Running `pnpm` directly works in your own shell.
 ## Agent skills
 
 - [frontend-design](../.agents/skills/frontend-design/): `anthropics/skills`, visual direction that does not read as a template
+- [shadcn-ui](../.agents/skills/shadcn-ui/): `jezweb/claude-skills`, installing and composing the owned Radix primitives
+- [aceternity-ui](../.agents/skills/aceternity-ui/): `secondsky/claude-skills`, selecting and adapting Aceternity components to the Vermouth token and accessibility contracts
+- [framer-motion](../.agents/skills/framer-motion/): `mindrally/skills`, Motion for React patterns used by reviewed Aceternity components
 - [tailwindcss-fundamentals-v4](../.agents/skills/tailwindcss-fundamentals-v4/): `josiahsiegel/claude-plugin-marketplace`, v4's CSS first configuration and `@theme`
 - [tailwindcss-accessibility](../.agents/skills/tailwindcss-accessibility/): `josiahsiegel/claude-plugin-marketplace`, the WCAG AA checklist, focus rings, and touch target sizes
 - [react19-concurrent-patterns](../.agents/skills/react19-concurrent-patterns/): `github/awesome-copilot`, transitions, Suspense, and Actions
@@ -113,6 +120,6 @@ developing Playwright itself).
 ## Related specs
 
 - [0002 stack and scaffold](../docs/specs/0002-stack-and-scaffold/index.md) (the web app, styling, API contract, and testing rows)
-- Feature 6 (design system and UI foundation) owns the component set and has no spec yet
+- [0008 design system and UI foundation](../docs/specs/0008-design-system-ui-foundation/index.md) owns the component set, themes, responsive shell, and gallery
 
 _Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

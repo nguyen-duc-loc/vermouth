@@ -19,7 +19,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 3 | Coding standards & tooling | Foundation | done |
 | 4 | Data model & data ownership per service | Foundation | done |
 | 5 | Local Kubernetes platform & one command startup | Foundation | done |
-| 6 | Design system & UI foundation | Foundation | planned |
+| 6 | Design system & UI foundation | Foundation | done |
 | 7 | Tutor sign in & identity | Slice 1 | in-progress |
 | 8 | Core teaching loop | Slice 1 | planned |
 | 9 | Tracing, central logs & error alerts | Slice 2 | planned |
@@ -29,36 +29,36 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 13 | Tuition rate & monthly calculation | Slice 4 | planned |
 | 14 | Invoice PDF with payment QR | Slice 4 | planned |
 | 15 | Invoice list, share & mark paid | Slice 4 | planned |
+| 21 | Rate limit the auth endpoints | Slice 5 | in-progress |
 | 16 | Cloud deployment for friend testing | Slice 5 | in-progress |
 | 17 | Daily schedule digest email | Slice 6 | planned |
 | 18 | Session documents | Slice 7 | planned |
 | 19 | Search across students, classes & sessions | Slice 8 | planned |
 | 20 | English alongside Vietnamese | Slice 9 | planned |
-| 21 | Rate limit the auth endpoints | Slice 5 | in-progress |
 
 ## Foundations
 
-### 1. Service boundaries & communication design
+### 1. Service boundaries & communication design · done
 Split Vermouth into services along real business boundaries, and decide how they talk: which calls are synchronous through a gateway, and which facts travel as events through a message broker. This is the learning goal of the project and the ground every later feature stands on, so it comes before any tool choice.
 **Done when:** the spec names each service, states in one sentence what it owns and what it must never own, lists the events it publishes and reacts to, marks each interaction synchronous or asynchronous with a reason, and walks the two hard flows (month end invoice generation, the daily digest) step by step across services.
 spec [0001](../specs/0001-service-boundaries-and-communication/index.md)
 - [x] Design it (spec): `$architect service boundaries & communication design`
 
-### 2. Stack & scaffold
+### 2. Stack & scaffold · done
 Pick the language, the framework per service, the database engine, the message broker, the gateway, and the repository layout, then scaffold a runnable skeleton. One place where tools are chosen, so nothing later has to guess.
 **Done when:** the spec records every tool choice with a reason, and the scaffolded skeleton builds and starts locally with at least one service answering a health check through the gateway.
 spec [0002](../specs/0002-stack-and-scaffold/index.md) · code in `pkg/vermouth`, `gateway`, `services/*`, `web`, `api/openapi.yaml`, `test/compose.test.yaml`, `Taskfile.yml`
 - [x] Decide the stack (spec): `$architect stack & scaffold`
 - [x] Scaffold from the decision: `$develop stack & scaffold`
 
-### 3. Coding standards & tooling
+### 3. Coding standards & tooling · done
 Capture the conventions from the real scaffolded project, then install lint, format, type checking, and pre commit enforcement. Several services multiply the cost of inconsistent code, so this lands before the code grows.
 **Done when:** root `AGENTS.md` reflects the real stack and the shared conventions across services, and lint, format, and pre commit all run clean.
 code in `.golangci.yml`, `Taskfile.yml`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, `web/biome.jsonc`
 - [x] Capture conventions + tooling choices: `$audit`
 - [x] Install the tooling: `$develop tooling`
 
-### 4. Data model & data ownership per service
+### 4. Data model & data ownership per service · done
 The core entities (tutor, student, class, session, attendance, rate, invoice, invoice line, document) and, just as important, which service owns each one and what the others are allowed to keep a copy of. A wrong ownership split is the most expensive thing to redo in this architecture.
 **Done when:** every entity has exactly one owning service, each service has its own schema that no other service reads directly, the duplicated fields carried in events are named and justified, and the migration for each service applies cleanly.
 spec [0003](../specs/0003-data-model-and-ownership/index.md) · code in `services/*/db/{migrations,queries}`, `services/*/internal/store`, `services/billing/internal/handler/profile.go`, `test/model`
@@ -88,16 +88,24 @@ spec [0005](../specs/0005-local-kubernetes-platform/index.md) · code in `deploy
 - [x] Verify it: `$check verify local kubernetes platform & one command startup`
 - [x] Test it: `$test local kubernetes platform & one command startup`
 
-### 6. Design system & UI foundation · needs a decision
+### 6. Design system & UI foundation · done
 The visual language and the base components (layout, forms, tables, buttons, empty and error states) in both Vietnamese and English ready shape, so every screen after this is assembly rather than invention. Phone first, since attendance gets marked standing up.
 **Done when:** `design.md` covers type, colour, spacing, and the component set; base components have visible focus states, work by keyboard, and read well on a phone screen.
-- [ ] Design it (spec): `$architect design system & UI foundation`
+spec [0008](../specs/0008-design-system-ui-foundation/index.md) · code in `web/design.md`, `web/src/{appearance,components,design-system,lib,pages}`, `web/src/{main.tsx,routes.tsx,styles.css}`
+- [x] Design it (spec): `$architect design system & UI foundation`
+- [x] Build it: `$develop design system & UI foundation`
+  - [x] Prove the first end to end design thread: `design.md`, Montserrat, light and dark semantic tokens, appearance boot and storage, one primitive, one class color, and the development gallery · AC-1, AC-2, AC-3, AC-5, AC-8, AC-10
+  - [x] Add the seven accents and class colors, appearance panel, shadcn primitives, typed variants, Lucide icons, and every component state · AC-2, AC-3, AC-4, AC-5, AC-10
+  - [x] Compose the app shell, responsive table, form and feedback patterns, with phone, keyboard, zoom, and long Vietnamese behavior · AC-4, AC-5, AC-6, AC-7
+  - [x] Add date formatting and scoped GSAP motion, rebuild the temporary screens from the foundation, and prove the production bundle excludes the gallery · AC-1, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9
+- [x] Verify it: `$check verify design system & UI foundation`
+- [x] Test it: `$test design system & UI foundation`
 
 ## Slice 1: The core thread
 
 This slice is the walking skeleton. It is narrow on purpose and everything in it is real: real sign in, real databases, real service to service traffic, a real screen.
 
-### 7. Tutor sign in & identity
+### 7. Tutor sign in & identity · in-progress
 A tutor signs in with their Google account, and every request after that carries an identity the other services can trust. In a split system this is the first real boundary question: who checks the token, the gateway or each service.
 **Done when:** a tutor can sign in with Google, a first sign in creates the tutor only for an allowed email, the session survives a reload and sign out ends it, a signed in request is identified at the gateway and trusted downstream, an unsigned request is refused, no password exists anywhere in the repository, and one tutor can never read another tutor's data.
 spec [0004](../specs/0004-tutor-sign-in-google-oauth/index.md) · code in `services/identity/{db,internal/handler,internal/http,cmd/devtoken}`, `gateway/internal/{route,aggregate}`, `api/openapi.yaml`, `web/src/{api/session.ts,pages/SignInPage.tsx,routes.tsx}`
@@ -159,19 +167,6 @@ See invoices by month and by student, open or download the PDF to send it yourse
 
 ## Slice 5: Friends can use it
 
-### 16. Cloud deployment for friend testing · in-progress
-Put the running system somewhere your friends can open in a browser, with a real address and a certificate. Separate from the local cluster on purpose, so deployment never leaks into earlier features.
-**Done when:** the whole system runs on a reachable address over a secure connection, the sign in and the invoice flow both work there, secrets are not baked into images, and you can push an update without wiping the data.
-spec [0006](../specs/0006-cloud-deployment-friend-testing/index.md)
-- [x] Design it (spec): `$architect cloud deployment for friend testing`
-- [ ] Build it: `$develop cloud deployment for friend testing`
-  - [ ] Align local Traefik, then bootstrap the exact Azure VM, locked static storage, free DNS, HTTPS, restricted SSH, production Secrets, and private pulls · AC-1, AC-2, AC-3, AC-5, AC-8, AC-11, AC-12
-  - [ ] Promote two architecture Docker Hub digests through manual GitHub Actions, require rate limit and migration evidence, and prove the first secure production thread · AC-4, AC-6, AC-9, AC-10, AC-13
-  - [ ] Complete the full topology, capacity gate, status, logs, retention, and guarded application rollback · AC-7, AC-14, AC-15, AC-16, AC-19, AC-20
-  - [ ] Add encrypted export and full stopped state restore, then prove every stateful marker and external path · AC-17, AC-18
-- [ ] Verify it: `$check verify cloud deployment for friend testing`
-- [ ] Test it: `$test cloud deployment for friend testing`
-
 ### 21. Rate limit the auth endpoints · in-progress · from spec 0004
 Bound `start`, `callback` and `refresh` so nobody can spam the sign in path or grow `login_attempts` without limit. Spec 0004 leaves them unbounded on purpose, which is fine behind localhost and not fine once feature 16 gives them a public address, so this lands before that one ships.
 **Done when:** each protected auth endpoint refuses a caller past configured caller and global rates through its existing browser or API boundary, a flood cannot grow the pending login table without bound, and one evidence target exercises the limit.
@@ -184,6 +179,19 @@ spec [0007](../specs/0007-auth-endpoint-rate-limits/index.md)
   - [ ] Add `task test:auth-rate-limit`, the pending attempt bounds, race coverage, and schema version 1 launch evidence · AC-3, AC-5, AC-6, AC-7, AC-8, AC-10, AC-13, AC-14
 - [ ] Verify it: `$check verify rate limit the auth endpoints`
 - [ ] Test it: `$test rate limit the auth endpoints`
+
+### 16. Cloud deployment for friend testing · in-progress
+Put the running system somewhere your friends can open in a browser, with a real address and a certificate. Separate from the local cluster on purpose, so deployment never leaks into earlier features.
+**Done when:** the whole system runs on a reachable address over a secure connection, the sign in and the invoice flow both work there, secrets are not baked into images, and you can push an update without wiping the data.
+spec [0006](../specs/0006-cloud-deployment-friend-testing/index.md)
+- [x] Design it (spec): `$architect cloud deployment for friend testing`
+- [ ] Build it: `$develop cloud deployment for friend testing`
+  - [ ] Align local Traefik, then bootstrap the exact Azure VM, locked static storage, free DNS, HTTPS, restricted SSH, production Secrets, and private pulls · AC-1, AC-2, AC-3, AC-5, AC-8, AC-11, AC-12
+  - [ ] Promote two architecture Docker Hub digests through manual GitHub Actions, require rate limit and migration evidence, and prove the first secure production thread · AC-4, AC-6, AC-9, AC-10, AC-13
+  - [ ] Complete the full topology, capacity gate, status, logs, retention, and guarded application rollback · AC-7, AC-14, AC-15, AC-16, AC-19, AC-20
+  - [ ] Add encrypted export and full stopped state restore, then prove every stateful marker and external path · AC-17, AC-18
+- [ ] Verify it: `$check verify cloud deployment for friend testing`
+- [ ] Test it: `$test cloud deployment for friend testing`
 
 ## Slice 6: The daily digest
 

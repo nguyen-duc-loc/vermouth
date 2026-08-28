@@ -1,7 +1,7 @@
 # 0007. Auth endpoint rate limits
 
 **Date**: 2026-08-25
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 
