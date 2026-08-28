@@ -5,6 +5,7 @@ import {
   Outlet,
   redirect,
 } from '@tanstack/react-router'
+import { lazy, Suspense } from 'react'
 
 import { hasAccessToken } from './api/client'
 import { SignInPage } from './pages/SignInPage'
@@ -12,7 +13,7 @@ import { ThreadPage } from './pages/ThreadPage'
 
 const rootRoute = createRootRoute({
   component: () => (
-    <div className="min-h-screen bg-neutral-50 text-neutral-900">
+    <div className="min-h-screen bg-background text-foreground">
       <Outlet />
     </div>
   ),
@@ -39,8 +40,38 @@ const threadRoute = createRoute({
   },
 })
 
+function routeTree() {
+  if (import.meta.env.DEV) {
+    const DesignSystemPage = lazy(() =>
+      import('./pages/DesignSystemPage').then((module) => ({ default: module.DesignSystemPage })),
+    )
+    const designSystemRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/design-system',
+      component: () => (
+        <Suspense
+          fallback={
+            <div
+              role="status"
+              className="grid min-h-screen place-items-center text-sm text-muted-foreground"
+            >
+              Đang mở thư viện giao diện…
+            </div>
+          }
+        >
+          <DesignSystemPage />
+        </Suspense>
+      ),
+    })
+
+    return rootRoute.addChildren([threadRoute, signInRoute, designSystemRoute])
+  }
+
+  return rootRoute.addChildren([threadRoute, signInRoute])
+}
+
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([threadRoute, signInRoute]),
+  routeTree: routeTree(),
 })
 
 declare module '@tanstack/react-router' {
