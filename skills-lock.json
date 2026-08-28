@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "aceternity-ui": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/aceternity-ui/skills/aceternity-ui/SKILL.md",
+      "computedHash": "e92b2ec7cfd5d27ba88b0a42079aa8c7fddb506d1e0f65d7fa198756a7894a21"
+    },
     "architect": {
       "source": "jsmastery-pro/skills",
       "sourceType": "github",
@@ -66,6 +72,12 @@
       "sourceType": "github",
       "skillPath": "skills/document/SKILL.md",
       "computedHash": "90933443f204d2ed29c84730be87b7b5470f6819fccde6129aedad1df517fb92"
+    },
+    "framer-motion": {
+      "source": "mindrally/skills",
+      "sourceType": "github",
+      "skillPath": "framer-motion/SKILL.md",
+      "computedHash": "39a33b58952788812d305f7b676b86ee800d3d5be9752e10392435d7fae73d8a"
     },
     "frontend-design": {
       "source": "anthropics/skills",
@@ -270,6 +282,12 @@
       "sourceType": "github",
       "skillPath": "skills/scope/SKILL.md",
       "computedHash": "cc3683a45b96c1b0ecb23f9aba64263be096cb3ef2487662c0fe7e7c3200fb70"
+    },
+    "shadcn-ui": {
+      "source": "jezweb/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/frontend/skills/shadcn-ui/SKILL.md",
+      "computedHash": "3c80c7348aaab81e251ae73df8413d41348c3f5fbd0fc1cb398dd423ea7df020"
     },
     "sync": {
       "source": "jsmastery-pro/skills",
