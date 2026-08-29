@@ -1,4 +1,4 @@
-//nolint:err113,gocritic,gosec,noinlineerr,revive // Validation errors name the exact rendered component and mismatched value.
+//nolint:err113,gocritic,gosec,noinlineerr // Validation errors name the exact rendered component and mismatched value.
 package main
 
 import (
@@ -60,7 +60,7 @@ func readManifests(path string) ([]manifest, error) {
 	documents := []manifest{}
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	for {
-		document := manifest{}
+		document := make(manifest)
 		err := decoder.Decode(&document)
 		if errors.Is(err, io.EOF) {
 			break
@@ -75,10 +75,11 @@ func readManifests(path string) ([]manifest, error) {
 	return documents, nil
 }
 
+//nolint:revive // googleEnabled selects the explicit configuration matrix variant being validated.
 func validateRenderedPolicies(matrix trafficMatrix, documents []manifest, googleEnabled bool) error {
 	expectedIDs := []string{}
 	expectedPolicies := []string{}
-	expectedPolicyIDs := map[string][]string{}
+	expectedPolicyIDs := make(map[string][]string)
 	for _, row := range matrix.Rows {
 		if row.Environment != "all" && (!googleEnabled || row.Environment != environmentGoogleEnabled) {
 			continue
@@ -122,7 +123,7 @@ func validateRenderedPolicies(matrix trafficMatrix, documents []manifest, google
 }
 
 func validateRenderedWorkloads(matrix workloadMatrix, documents []manifest) error {
-	counts := map[string]int{}
+	counts := make(map[string]int)
 	for _, document := range documents {
 		category, component := renderedWorkloadCategory(document)
 		if category == "" {
@@ -155,12 +156,12 @@ func validateRenderedWorkloads(matrix workloadMatrix, documents []manifest) erro
 	return nil
 }
 
-func renderedWorkloadCategory(document manifest) (string, string) {
+func renderedWorkloadCategory(document manifest) (category, component string) {
 	kind := stringValue(document, "kind")
 	if kind != "Deployment" && kind != "StatefulSet" && kind != kindJob {
 		return "", ""
 	}
-	component := nestedString(document, "metadata", "labels", "app.kubernetes.io/component")
+	component = nestedString(document, "metadata", "labels", "app.kubernetes.io/component")
 	switch {
 	case component == workloadWeb:
 		return workloadWeb, component
@@ -354,7 +355,7 @@ func findNamed(values []any, name string) map[string]any {
 			return object
 		}
 	}
-	return map[string]any{}
+	return make(map[string]any)
 }
 
 func nestedValue(value map[string]any, path ...string) any {
@@ -372,7 +373,7 @@ func nestedValue(value map[string]any, path ...string) any {
 func nestedMap(value map[string]any, path ...string) map[string]any {
 	object, _ := nestedValue(value, path...).(map[string]any)
 	if object == nil {
-		return map[string]any{}
+		return make(map[string]any)
 	}
 	return object
 }
@@ -388,7 +389,7 @@ func nestedInt(value map[string]any, path ...string) int {
 func mapValue(value map[string]any, key string) map[string]any {
 	object, _ := value[key].(map[string]any)
 	if object == nil {
-		return map[string]any{}
+		return make(map[string]any)
 	}
 	return object
 }
