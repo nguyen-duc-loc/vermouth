@@ -8,7 +8,7 @@ import { ClassColorCard } from '../components/ClassColorCard'
 import { PageEntrance } from '../components/PageEntrance'
 import { Alert, AlertDescription } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader } from '../components/ui/card'
 
 // The sign in screen. One button, because there is one way in: Google. There is
 // no password field here and no column behind one (spec 0004).
@@ -46,13 +46,13 @@ const unavailable = {
   vi: 'Đăng nhập Google chưa được cấu hình cho môi trường cục bộ này. Hãy dùng task dev:token để chạy luồng phát triển.',
 }
 
-function refusalSentence(code: string | undefined): string | null {
-  if (!code || !(code in refusals)) return null
+function refusalSentence(code: unknown): string | null {
+  if (typeof code !== 'string' || !(code in refusals)) return null
   return refusals[code as SignInErrorCode][browserLanguage()]
 }
 
 export function SignInPage() {
-  const { error } = useSearch({ from: '/signin' })
+  const { error, redirect } = useSearch({ from: '/signin' })
   const sentence = refusalSentence(error)
   const googleEnabled = runtimeConfig().googleAuthEnabled
   const unavailableMessage = unavailable[browserLanguage()]
@@ -149,7 +149,7 @@ export function SignInPage() {
                 <div className="mb-2 grid size-12 place-items-center rounded-xl bg-primary/10 text-primary">
                   <CalendarCheck aria-hidden="true" className="size-icon-lg" />
                 </div>
-                <CardTitle>Sign in to Vermouth</CardTitle>
+                <h2 className="text-lg font-semibold">Sign in to Vermouth</h2>
                 <CardDescription>
                   Use the Google account you teach from. There is no password to invent, and none is
                   stored anywhere.
@@ -164,7 +164,7 @@ export function SignInPage() {
 
                 {googleEnabled ? (
                   <Button asChild variant="secondary" size="large" className="w-full">
-                    <a href={googleSignInUrl('/')}>
+                    <a href={googleSignInUrl(redirect)}>
                       <GoogleMark />
                       Continue with Google
                     </a>

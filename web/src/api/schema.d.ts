@@ -47,10 +47,11 @@ export interface paths {
         };
         /**
          * Begin Google sign in
-         * @description Writes the in flight sign in (its state, PKCE verifier and nonce) and
-         *     redirects the browser to Google. The browser follows this as a plain
-         *     link, so it is a GET; nothing here needs a token, because this is what
-         *     eventually produces one (spec 0004).
+         * @description Writes the in flight sign in (its state, PKCE verifier, nonce, and the
+         *     hash of an independent browser binding cookie) and redirects the browser
+         *     to Google. The browser follows this as a plain link, so it is a GET;
+         *     nothing here needs a token, because this is what eventually produces one
+         *     (spec 0004).
          */
         get: operations["startGoogleSignIn"];
         put?: never;
@@ -70,12 +71,13 @@ export interface paths {
         };
         /**
          * Complete Google sign in and start a session
-         * @description Google sends the browser here. The code is exchanged and the ID token
-         *     validated by identity, which holds the client secret; a first sign in
-         *     creates the tutor and its identity.tutor.registered event in one
-         *     transaction. The answer carries no access token on purpose: it sets the
-         *     refresh cookie and lands the browser in the app, which then calls
-         *     /api/auth/refresh, so a token never appears in a URL or in history.
+         * @description Google sends the browser here. The matching state and browser binding
+         *     are required, then the code is exchanged and the ID token validated by
+         *     identity, which holds the client secret. A first sign in creates the
+         *     tutor and its identity.tutor.registered event in one transaction. The
+         *     answer carries no access token on purpose: it sets the refresh cookie and
+         *     lands the browser in the app, which then calls /api/auth/refresh, so a
+         *     token never appears in a URL or in history.
          */
         get: operations["completeGoogleSignIn"];
         put?: never;
@@ -102,8 +104,8 @@ export interface paths {
          *     trip. The cookie rotates on every call: presenting an already rotated
          *     token later than the grace window revokes the whole session family.
          *
-         *     It is a POST rather than a GET because the method is half of the cross
-         *     site protection, together with SameSite=Lax on the cookie.
+         *     It is a POST and requires Origin to equal IDENTITY_APP_URL exactly.
+         *     SameSite=Lax on the cookie is a supporting cross site protection.
          */
         post: operations["refreshSession"];
         delete?: never;
@@ -123,9 +125,9 @@ export interface paths {
         put?: never;
         /**
          * End the session
-         * @description Revokes every refresh token in this session family and clears the
-         *     cookie. It answers 204 whether or not the cookie named a live session,
-         *     because signing out twice is not an error.
+         * @description Revokes the locked session family and clears the cookie. It answers 204
+         *     whether or not the cookie named a live session, because signing out
+         *     twice is not an error. Origin must equal IDENTITY_APP_URL exactly.
          */
         post: operations["signOut"];
         delete?: never;
@@ -267,6 +269,15 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The browser origin may not change this session */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
     parameters: never;
     requestBodies: never;
@@ -337,8 +348,8 @@ export interface operations {
                 lang?: "vi" | "en";
                 /**
                  * @description Where in the app to land after signing in. Kept only when it is a
-                 *     path starting with a single slash, so it cannot become an open
-                 *     redirect.
+                 *     clean relative path and query with one leading slash, no fragment,
+                 *     controls, backslash, scheme, or host.
                  */
                 redirect_to?: string;
             };
@@ -355,6 +366,8 @@ export interface operations {
             302: {
                 headers: {
                     Location: string;
+                    /** @description The short lived HttpOnly browser binding cookie. */
+                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -393,7 +406,10 @@ export interface operations {
             302: {
                 headers: {
                     Location: string;
-                    /** @description The rotating refresh token, HttpOnly and scoped to /api/auth. */
+                    /**
+                     * @description The browser binding clear, plus the rotating refresh token on
+                     *     success. Both are HttpOnly and repeat their original paths.
+                     */
                     "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
@@ -413,7 +429,13 @@ export interface operations {
     refreshSession: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Supplied automatically by the browser and required by identity. It
+                 *     must equal the configured app origin exactly.
+                 */
+                Origin?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -428,25 +450,48 @@ export interface operations {
                     "application/json": components["schemas"]["Session"];
                 };
             };
-            401: components["responses"]["Unauthenticated"];
+            /**
+             * @description The refresh cookie is missing, unknown, expired, revoked, or reused
+             *     outside the grace window. The response clears that cookie.
+             */
+            401: {
+                headers: {
+                    /** @description Clears the refresh cookie with the same path and flags. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
         };
     };
     signOut: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Supplied automatically by the browser and required by identity. It
+                 *     must equal the configured app origin exactly.
+                 */
+                Origin?: string;
+            };
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description The session is over */
+            /** @description The session is over and the refresh cookie is cleared */
             204: {
                 headers: {
+                    /** @description Clears the refresh cookie with the same path and flags. */
+                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content?: never;
             };
+            403: components["responses"]["Forbidden"];
         };
     };
     getMe: {

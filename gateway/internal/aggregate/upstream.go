@@ -106,7 +106,8 @@ func (c *Client) Call(ctx context.Context, method, baseURL, path, bearer string,
 }
 
 // Forward passes one of identity's four auth requests through unchanged: the
-// inbound Cookie header on the way in, and whatever came back on the way out.
+// inbound Cookie and Origin headers on the way in, and whatever came back on
+// the way out.
 // These four are the only place the gateway carries a cookie, and it sets none
 // of its own: the whole session rule belongs to identity (spec 0001, the gateway
 // holds no business rule).
@@ -127,6 +128,9 @@ func (c *Client) Forward(ctx context.Context, r *http.Request, baseURL, path str
 	}
 	if cookie := r.Header.Get("Cookie"); cookie != "" {
 		request.Header.Set("Cookie", cookie)
+	}
+	if origin := r.Header.Get("Origin"); origin != "" {
+		request.Header.Set("Origin", origin)
 	}
 	if requestID := vermouth.RequestID(ctx); requestID != "" {
 		request.Header.Set(vermouth.RequestIDHeader, requestID)

@@ -20,20 +20,22 @@ type Querier interface {
 	// The sweep. A revoked row is kept for a while on purpose: presenting it again
 	// is how a stolen copy shows up, and a deleted row is indistinguishable from
 	// one that never existed.
-	DeleteFinishedRefreshTokens(ctx context.Context, revokedAt pgtype.Timestamptz) (int64, error)
+	DeleteFinishedAuthSessions(ctx context.Context, revokedAt pgtype.Timestamptz) (int64, error)
+	ExtendAuthSession(ctx context.Context, arg ExtendAuthSessionParams) error
 	// The callback reads the attempt before it talks to Google, because the PKCE
 	// verifier it holds is what the exchange needs. Claiming it is a separate
 	// statement, run inside the transaction that writes the tutor.
 	GetLoginAttempt(ctx context.Context, state string) (GetLoginAttemptRow, error)
-	GetRefreshToken(ctx context.Context, tokenHash []byte) (RefreshToken, error)
+	// This lookup takes no lock. session_id is immutable, and it only tells the
+	// caller which auth_sessions row must be locked before it may inspect the token.
+	GetRefreshTokenSessionID(ctx context.Context, tokenHash []byte) (uuid.UUID, error)
 	GetTutor(ctx context.Context, tutorID uuid.UUID) (GetTutorRow, error)
 	GetTutorByEmail(ctx context.Context, email string) (GetTutorByEmailRow, error)
 	GetTutorByProviderSubject(ctx context.Context, arg GetTutorByProviderSubjectParams) (GetTutorByProviderSubjectRow, error)
-	// The sign in attempt and the refresh token family behind a session (spec
-	// 0004). These are the two tables that cannot filter by tutor_id: an attempt
-	// exists before the tutor does, and a refresh token is presented before any
-	// token names a tutor. Both are identified instead by an unguessable value from
-	// crypto/rand, which is what test/model's tenancy guard insists each one names.
+	InsertAuthSession(ctx context.Context, arg InsertAuthSessionParams) (AuthSession, error)
+	// The sign in attempt and the locked refresh token family behind a session
+	// (spec 0004). Every value is parameterized, and every family transition locks
+	// auth_sessions before it locks the presented token.
 	InsertLoginAttempt(ctx context.Context, arg InsertLoginAttemptParams) error
 	InsertRefreshToken(ctx context.Context, arg InsertRefreshTokenParams) (RefreshToken, error)
 	// Hand written SQL, compiled to typed Go by sqlc (STK-3). No ORM, and no SQL
@@ -42,11 +44,10 @@ type Querier interface {
 	// The link to an external account. provider_subject is the identity; the email
 	// beside it is only a copy of what Google last said.
 	InsertTutorIdentity(ctx context.Context, arg InsertTutorIdentityParams) (TutorIdentity, error)
-	// The first use of a token is a single statement, so two tabs racing cannot
-	// both win it: the loser reads used_at back and falls into the grace window
-	// branch instead of being treated as theft.
-	MarkRefreshTokenUsed(ctx context.Context, tokenHash []byte) (RefreshToken, error)
-	RevokeSessionFamily(ctx context.Context, arg RevokeSessionFamilyParams) (int64, error)
+	LockAuthSession(ctx context.Context, sessionID uuid.UUID) (AuthSession, error)
+	LockRefreshToken(ctx context.Context, arg LockRefreshTokenParams) (RefreshToken, error)
+	MarkRefreshTokenUsed(ctx context.Context, arg MarkRefreshTokenUsedParams) error
+	RevokeAuthSession(ctx context.Context, arg RevokeAuthSessionParams) (int64, error)
 	// The email copy is kept in step with Google's, which owns it. updated_at is
 	// what identity.tutor.profile.changed stamps; the event itself carries only
 	// spec 0001's five fields.

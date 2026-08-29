@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 	_ "time/tzdata"
 
@@ -87,6 +88,7 @@ func run() error {
 	if *email == "" {
 		*email = fmt.Sprintf("tutor-%d@example.com", time.Now().UnixNano())
 	}
+	*email = strings.ToLower(strings.TrimSpace(*email))
 	databaseURL := os.Getenv("IDENTITY_DATABASE_URL")
 	if databaseURL == "" {
 		return &vermouth.MissingEnvError{Name: "IDENTITY_DATABASE_URL", Reason: ""}

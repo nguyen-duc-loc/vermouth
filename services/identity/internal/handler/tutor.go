@@ -22,10 +22,23 @@ import (
 type Handler struct {
 	pool         *pgxpool.Pool
 	logger       *slog.Logger
-	signer       *token.Signer
+	signer       accessTokenSigner
 	google       *googleProvider
 	auth         AuthConfig
 	publishTopic string
+	observer     sessionTransitionObserver
+}
+
+type accessTokenSigner interface {
+	Mint(tutorID uuid.UUID, timezone, language string) (string, time.Time, error)
+}
+
+// sessionTransitionObserver exposes the two locked transition points whose
+// ordering spec 0004 requires concurrency tests to prove. Production leaves it
+// nil, while tests use it to hold a real Postgres transaction at that point.
+type sessionTransitionObserver interface {
+	afterSessionLock(ctx context.Context, sessionID uuid.UUID)
+	beforeRefreshTokenInsert(ctx context.Context, sessionID uuid.UUID)
 }
 
 // New wires the handler to this service's own pool, to the topic it publishes to,

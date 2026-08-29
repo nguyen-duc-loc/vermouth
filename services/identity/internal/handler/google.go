@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -17,44 +16,87 @@ import (
 // schema change.
 const googleProviderName = "google"
 
-// idTokenSkew is how much difference between this machine's clock and Google's
-// is tolerated while reading the ID token's expiry (AC-14).
-const idTokenSkew = 60 * time.Second
-
 // The ways Google's answer is refused. Static so the callback can log the reason
 // while the browser only ever sees provider_error.
 var (
 	errNoIDToken        = errors.New("google returned no id_token")
+	errNoIDTokenPayload = errors.New("google returned no id token payload")
 	errIssuerNotGoogle  = errors.New("id token was not issued by google")
 	errAudienceMismatch = errors.New("id token was minted for another client")
-	errIDTokenExpired   = errors.New("id token has expired")
 	errNonceMismatch    = errors.New("id token nonce does not match the sign in attempt")
 	errEmailUnverified  = errors.New("google has not verified this email address")
+	errNoSubject        = errors.New("id token carries no subject")
 	errNoEmail          = errors.New("id token carries no email")
 )
+
+// codeExchanger is the one outbound OAuth operation the callback needs. Keeping
+// it behind a small interface lets callback tests supply a raw ID token without
+// contacting Google.
+type codeExchanger interface {
+	exchange(ctx context.Context, code, verifier string) (string, error)
+}
+
+// idTokenValidator is the signature, key set, audience and expiry boundary.
+// Tests can inject a payload while production delegates to Google's validator.
+type idTokenValidator interface {
+	validate(ctx context.Context, raw, audience string) (*idtoken.Payload, error)
+}
 
 // googleProvider is identity's side of the OAuth exchange. It holds the client
 // secret, which is the whole reason this half runs on the server and the browser
 // never sees it (spec 0004).
 type googleProvider struct {
-	oauth    *oauth2.Config
-	clientID string
+	oauth     *oauth2.Config
+	clientID  string
+	exchanger codeExchanger
+	validator idTokenValidator
 }
 
 // newGoogleProvider builds the client from configuration read at startup.
 func newGoogleProvider(cfg AuthConfig) *googleProvider {
-	return &googleProvider{
-		clientID: cfg.GoogleClientID,
-		oauth: &oauth2.Config{
-			ClientID:     cfg.GoogleClientID,
-			ClientSecret: cfg.GoogleClientSecret,
-			RedirectURL:  cfg.GoogleRedirectURL,
-			Endpoint:     google.Endpoint,
-			// openid gets the ID token, email and profile the two claims a tutor
-			// row is built from. Nothing more is asked for.
-			Scopes: []string{"openid", "email", "profile"},
-		},
+	oauthConfig := &oauth2.Config{
+		ClientID:     cfg.GoogleClientID,
+		ClientSecret: cfg.GoogleClientSecret,
+		RedirectURL:  cfg.GoogleRedirectURL,
+		Endpoint:     google.Endpoint,
+		// openid gets the ID token, email and profile the two claims a tutor
+		// row is built from. Nothing more is asked for.
+		Scopes: []string{"openid", "email", "profile"},
 	}
+	return &googleProvider{
+		oauth:     oauthConfig,
+		clientID:  cfg.GoogleClientID,
+		exchanger: &oauthCodeExchanger{oauth: oauthConfig},
+		validator: googleIDTokenValidator{},
+	}
+}
+
+// oauthCodeExchanger owns the confidential code exchange and returns only the
+// raw ID token. Claim decisions stay in googleProvider.
+type oauthCodeExchanger struct {
+	oauth *oauth2.Config
+}
+
+func (e *oauthCodeExchanger) exchange(ctx context.Context, code, verifier string) (string, error) {
+	token, err := e.oauth.Exchange(ctx, code, oauth2.VerifierOption(verifier))
+	if err != nil {
+		return "", fmt.Errorf("exchange code with google: %w", err)
+	}
+	raw, ok := token.Extra("id_token").(string)
+	if !ok || strings.TrimSpace(raw) == "" {
+		return "", errNoIDToken
+	}
+	return raw, nil
+}
+
+// googleIDTokenValidator delegates signature, key set, exact audience and
+// expiry checks to the supported Google library.
+type googleIDTokenValidator struct{}
+
+func (googleIDTokenValidator) validate(
+	ctx context.Context, raw, audience string,
+) (*idtoken.Payload, error) {
+	return idtoken.Validate(ctx, raw, audience)
 }
 
 // authorizeURL is where the browser is sent. The verifier stays here and only
@@ -81,20 +123,16 @@ type googleAccount struct {
 // then refuses everything about the ID token that does not check out. It writes
 // nothing: the caller only reaches the database once this has returned (AC-14).
 func (p *googleProvider) exchange(ctx context.Context, code, verifier, nonce string) (googleAccount, error) {
-	token, err := p.oauth.Exchange(ctx, code, oauth2.VerifierOption(verifier))
+	raw, err := p.exchanger.exchange(ctx, code, verifier)
 	if err != nil {
-		return googleAccount{}, fmt.Errorf("exchange code with google: %w", err)
+		return googleAccount{}, err
 	}
-	raw, ok := token.Extra("id_token").(string)
-	if !ok || raw == "" {
-		return googleAccount{}, errNoIDToken
-	}
-	// Validate covers the signature against Google's key set and the audience.
-	// It refuses an expired token with no skew at all, so the expiry check below
-	// only ever widens what is accepted, never narrows it.
-	payload, err := idtoken.Validate(ctx, raw, p.clientID)
+	payload, err := p.validator.validate(ctx, raw, p.clientID)
 	if err != nil {
 		return googleAccount{}, fmt.Errorf("validate google id token: %w", err)
+	}
+	if payload == nil {
+		return googleAccount{}, errNoIDTokenPayload
 	}
 	err = p.checkClaims(payload, nonce)
 	if err != nil {
@@ -103,25 +141,31 @@ func (p *googleProvider) exchange(ctx context.Context, code, verifier, nonce str
 	return accountFromPayload(payload)
 }
 
-// checkClaims reads the claims the transport cannot vouch for: who the token was
-// minted for, by whom, until when, for which sign in attempt, and whether Google
-// stands behind the email.
+// checkClaims reads the typed claims the handler owns after the validator has
+// proved the signature, key set, exact audience and expiry.
 func (p *googleProvider) checkClaims(payload *idtoken.Payload, nonce string) error {
-	if !isGoogleIssuer(payload.Issuer) {
-		return fmt.Errorf("%w: %s", errIssuerNotGoogle, payload.Issuer)
+	issuer, ok := stringClaim(payload, "iss")
+	if !ok || !isGoogleIssuer(issuer) || issuer != payload.Issuer {
+		return errIssuerNotGoogle
 	}
-	if payload.Audience != p.clientID {
+	audience, ok := stringClaim(payload, "aud")
+	if !ok || audience != p.clientID || payload.Audience != p.clientID {
 		return errAudienceMismatch
 	}
-	if time.Unix(payload.Expires, 0).Add(idTokenSkew).Before(time.Now()) {
-		return errIDTokenExpired
+	subject, ok := stringClaim(payload, "sub")
+	if !ok || strings.TrimSpace(subject) == "" || subject != payload.Subject {
+		return errNoSubject
 	}
-	if stringClaim(payload, "nonce") != nonce {
+	tokenNonce, ok := stringClaim(payload, "nonce")
+	if !ok || tokenNonce == "" || tokenNonce != nonce {
 		return errNonceMismatch
 	}
-	verified, _ := payload.Claims["email_verified"].(bool)
-	if !verified {
+	verified, ok := payload.Claims["email_verified"].(bool)
+	if !ok || !verified {
 		return errEmailUnverified
+	}
+	if email, emailOK := stringClaim(payload, "email"); !emailOK || strings.TrimSpace(email) == "" {
+		return errNoEmail
 	}
 	return nil
 }
@@ -130,15 +174,21 @@ func (p *googleProvider) checkClaims(payload *idtoken.Payload, nonce string) err
 // name falls back to the part of the email before the @, so a tutor is never
 // created with an empty display name.
 func accountFromPayload(payload *idtoken.Payload) (googleAccount, error) {
-	email := strings.ToLower(strings.TrimSpace(stringClaim(payload, "email")))
-	if email == "" {
+	subject, subjectOK := stringClaim(payload, "sub")
+	emailClaim, emailOK := stringClaim(payload, "email")
+	if !subjectOK || strings.TrimSpace(subject) == "" {
+		return googleAccount{}, errNoSubject
+	}
+	email := strings.ToLower(strings.TrimSpace(emailClaim))
+	if !emailOK || email == "" {
 		return googleAccount{}, errNoEmail
 	}
-	name := strings.TrimSpace(stringClaim(payload, "name"))
+	nameClaim, _ := stringClaim(payload, "name")
+	name := strings.TrimSpace(nameClaim)
 	if name == "" {
 		name, _, _ = strings.Cut(email, "@")
 	}
-	return googleAccount{subject: payload.Subject, email: email, name: name}, nil
+	return googleAccount{subject: subject, email: email, name: name}, nil
 }
 
 // isGoogleIssuer accepts the two spellings Google mints with, both legitimate,
@@ -147,12 +197,11 @@ func isGoogleIssuer(issuer string) bool {
 	return issuer == "https://accounts.google.com" || issuer == "accounts.google.com"
 }
 
-// stringClaim reads one claim as a string, answering empty for anything else, so
-// a claim of the wrong type is refused by the check that wanted it rather than
-// by a panic here.
-func stringClaim(payload *idtoken.Payload, name string) string {
-	value, _ := payload.Claims[name].(string)
-	return value
+// stringClaim reads one claim without coercion, so a wrong type is refused
+// rather than made to look like a valid empty value.
+func stringClaim(payload *idtoken.Payload, name string) (string, bool) {
+	value, ok := payload.Claims[name].(string)
+	return value, ok
 }
 
 // newPKCEVerifier is the secret half of the PKCE pair. It stays on the login

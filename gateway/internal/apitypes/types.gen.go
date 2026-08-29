@@ -111,6 +111,9 @@ type TutorLanguage string
 // BadRequest The one error shape at the gateway boundary (spec 0001).
 type BadRequest = Error
 
+// Forbidden The one error shape at the gateway boundary (spec 0001).
+type Forbidden = Error
+
 // Unauthenticated The one error shape at the gateway boundary (spec 0001).
 type Unauthenticated = Error
 
@@ -137,10 +140,24 @@ type StartGoogleSignInParams struct {
 	Lang *StartGoogleSignInParamsLang `form:"lang,omitempty" json:"lang,omitempty"`
 
 	// RedirectTo Where in the app to land after signing in. Kept only when it is a
-	// path starting with a single slash, so it cannot become an open
-	// redirect.
+	// clean relative path and query with one leading slash, no fragment,
+	// controls, backslash, scheme, or host.
 	RedirectTo *string `form:"redirect_to,omitempty" json:"redirect_to,omitempty"`
 }
 
 // StartGoogleSignInParamsLang defines parameters for StartGoogleSignIn.
 type StartGoogleSignInParamsLang string
+
+// RefreshSessionParams defines parameters for RefreshSession.
+type RefreshSessionParams struct {
+	// Origin Supplied automatically by the browser and required by identity. It
+	// must equal the configured app origin exactly.
+	Origin *string `json:"Origin,omitempty"`
+}
+
+// SignOutParams defines parameters for SignOut.
+type SignOutParams struct {
+	// Origin Supplied automatically by the browser and required by identity. It
+	// must equal the configured app origin exactly.
+	Origin *string `json:"Origin,omitempty"`
+}

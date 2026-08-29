@@ -1,12 +1,27 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
+	urlpkg "net/url"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/nguyen-duc-loc/vermouth/pkg/vermouth"
+)
+
+const (
+	localhost       = "localhost"
+	localhostSuffix = ".localhost"
+)
+
+var (
+	errAppOriginShape       = errors.New("must be one origin with no path, query, fragment, or user info")
+	errSecureOrigin         = errors.New("must use https, except for http on localhost")
+	errCallbackShape        = errors.New("must be an origin plus the exact /api/auth/google/callback path")
+	errCallbackOrigin       = errors.New("must use the app origin scheme and hostname")
+	errCallbackExternalPort = errors.New("must use the app origin port outside localhost")
 )
 
 // The environment identity's sign in reads. These are identity's own variables
@@ -93,7 +108,20 @@ func AuthConfigFromEnv() (AuthConfig, error) {
 		}
 		*target = value
 	}
-	cfg.AppURL = strings.TrimSuffix(cfg.AppURL, "/")
+	appOrigin, err := validateAppOrigin(cfg.AppURL)
+	if err != nil {
+		return AuthConfig{}, &vermouth.MissingEnvError{Name: envAppURL, Reason: err.Error()}
+	}
+	cfg.AppURL = appOrigin.String()
+	if cfg.GoogleEnabled || strings.TrimSpace(cfg.GoogleRedirectURL) != "" {
+		redirectURL, redirectErr := validateGoogleRedirect(cfg.GoogleRedirectURL, appOrigin)
+		if redirectErr != nil {
+			return AuthConfig{}, &vermouth.MissingEnvError{
+				Name: envGoogleRedirect, Reason: redirectErr.Error(),
+			}
+		}
+		cfg.GoogleRedirectURL = redirectURL.String()
+	}
 
 	allowlist, err := parseAllowlist(os.Getenv(envSignupAllowlist))
 	if err != nil {
@@ -110,6 +138,82 @@ func AuthConfigFromEnv() (AuthConfig, error) {
 		return AuthConfig{}, err
 	}
 	return cfg, nil
+}
+
+// AllowsOrigin accepts only the exact browser origin configured for the app.
+// Missing, opaque, credentialed, and path bearing values all fail closed.
+func (c AuthConfig) AllowsOrigin(raw string) bool {
+	origin, err := urlpkg.Parse(strings.TrimSpace(raw))
+	if err != nil || origin.Scheme == "" || origin.Host == "" || origin.User != nil ||
+		origin.Opaque != "" || origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" {
+		return false
+	}
+	appOrigin, err := urlpkg.Parse(c.AppURL)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(origin.Scheme, appOrigin.Scheme) &&
+		strings.EqualFold(origin.Host, appOrigin.Host)
+}
+
+// ResolveRedirect keeps a previously cleaned app path on the configured app
+// origin even if a caller later changes how the URL is assembled.
+func (c AuthConfig) ResolveRedirect(relative string) string {
+	appOrigin, err := urlpkg.Parse(c.AppURL)
+	if err != nil {
+		return c.AppURL + "/"
+	}
+	target, err := urlpkg.Parse(cleanRelativeRedirect(relative))
+	if err != nil {
+		return appOrigin.ResolveReference(&urlpkg.URL{Path: "/"}).String()
+	}
+	resolved := appOrigin.ResolveReference(target)
+	if resolved.Scheme != appOrigin.Scheme || resolved.Host != appOrigin.Host {
+		return appOrigin.ResolveReference(&urlpkg.URL{Path: "/"}).String()
+	}
+	return resolved.String()
+}
+
+func validateAppOrigin(raw string) (*urlpkg.URL, error) {
+	origin, err := urlpkg.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return nil, fmt.Errorf("must be a valid URL: %w", err)
+	}
+	if origin.Scheme == "" || origin.Host == "" || origin.User != nil || origin.Opaque != "" ||
+		origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" {
+		return nil, errAppOriginShape
+	}
+	if origin.Scheme != "https" && (origin.Scheme != "http" || !isLocalhostName(origin.Hostname())) {
+		return nil, errSecureOrigin
+	}
+	return origin, nil
+}
+
+func validateGoogleRedirect(raw string, appOrigin *urlpkg.URL) (*urlpkg.URL, error) {
+	redirect, err := urlpkg.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return nil, fmt.Errorf("must be a valid URL: %w", err)
+	}
+	if redirect.Scheme == "" || redirect.Host == "" || redirect.User != nil || redirect.Opaque != "" ||
+		redirect.Path != "/api/auth/google/callback" || redirect.RawQuery != "" || redirect.Fragment != "" {
+		return nil, errCallbackShape
+	}
+	if redirect.Scheme != "https" && (redirect.Scheme != "http" || !isLocalhostName(redirect.Hostname())) {
+		return nil, errSecureOrigin
+	}
+	if redirect.Scheme != appOrigin.Scheme || !strings.EqualFold(redirect.Hostname(), appOrigin.Hostname()) {
+		return nil, errCallbackOrigin
+	}
+	if !isLocalhostName(redirect.Hostname()) && redirect.Port() != appOrigin.Port() {
+		return nil, errCallbackExternalPort
+	}
+	return redirect, nil
+}
+
+func isLocalhostName(raw string) bool {
+	hostname := strings.ToLower(strings.TrimSpace(raw))
+	return hostname == localhost ||
+		(strings.HasSuffix(hostname, localhostSuffix) && len(hostname) > len(localhostSuffix))
 }
 
 // parseAllowlist puts both sides of the comparison into one normal form. An

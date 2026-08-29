@@ -1,5 +1,6 @@
 import { api, authHeaders } from './client'
 import type { components } from './schema'
+import { withProtectedRetry } from './session'
 
 export type Tutor = components['schemas']['Tutor']
 export type ThreadStatus = components['schemas']['ThreadStatus']
@@ -12,7 +13,9 @@ function message(error: unknown, fallback: string) {
 }
 
 export async function readThread(): Promise<ThreadStatus> {
-  const { data, error } = await api.GET('/api/thread', { headers: authHeaders() })
+  const { data, error } = await withProtectedRetry(() =>
+    api.GET('/api/thread', { headers: authHeaders() }),
+  )
   if (error || !data) throw new Error(message(error, 'the gateway could not read the thread'))
   return data
 }

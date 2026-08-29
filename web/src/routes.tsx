@@ -1,5 +1,5 @@
 import {
-  createRootRoute,
+  createRootRouteWithContext,
   createRoute,
   createRouter,
   Outlet,
@@ -7,11 +7,20 @@ import {
 } from '@tanstack/react-router'
 import { lazy, Suspense } from 'react'
 
-import { hasAccessToken } from './api/client'
+import {
+  cleanRedirect,
+  cleanSignInError,
+  type SignInErrorCode,
+  sessionCoordinator,
+} from './api/session'
+import { ProtectedThreadPage } from './pages/SessionStatePage'
 import { SignInPage } from './pages/SignInPage'
-import { ThreadPage } from './pages/ThreadPage'
 
-const rootRoute = createRootRoute({
+type RouterContext = {
+  session: typeof sessionCoordinator
+}
+
+const rootRoute = createRootRouteWithContext<RouterContext>()({
   component: () => (
     <div className="min-h-screen bg-background text-foreground">
       <Outlet />
@@ -19,24 +28,38 @@ const rootRoute = createRootRoute({
   ),
 })
 
-// The sign in screen carries one search param, the refusal code the callback
-// redirected with. Anything else in the URL is ignored rather than trusted.
+type SignInSearch = {
+  error?: SignInErrorCode
+  redirect: string
+}
+
+// The sign in screen keeps one known refusal and one clean relative target.
+// Everything else in the URL is ignored rather than trusted.
 const signInRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/signin',
   component: SignInPage,
-  validateSearch: (search: Record<string, unknown>): { error?: string } =>
-    typeof search.error === 'string' ? { error: search.error } : {},
+  validateSearch: (search: Record<string, unknown>): SignInSearch => {
+    const error = cleanSignInError(search.error)
+    const redirectTo = cleanRedirect(search.redirect)
+    return error ? { error, redirect: redirectTo } : { redirect: redirectTo }
+  },
 })
 
-// Whether the app is signed in is whether the boot time refresh in main.tsx got a
-// token, never a stored flag (spec 0004).
+// The route waits for the shared boot refresh, so protected content never
+// renders while the browser is still checking the cookie.
 const threadRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: ThreadPage,
-  beforeLoad: () => {
-    if (!hasAccessToken()) throw redirect({ to: '/signin' })
+  component: ProtectedThreadPage,
+  beforeLoad: async ({ context, location }) => {
+    const session = await context.session.ensure()
+    if (session.status === 'anonymous') {
+      throw redirect({
+        to: '/signin',
+        search: { redirect: cleanRedirect(location.href) },
+      })
+    }
   },
 })
 
@@ -72,6 +95,7 @@ function routeTree() {
 
 export const router = createRouter({
   routeTree: routeTree(),
+  context: { session: sessionCoordinator },
 })
 
 declare module '@tanstack/react-router' {

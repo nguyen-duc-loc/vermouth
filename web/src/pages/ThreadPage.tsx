@@ -70,8 +70,12 @@ export function ThreadPage() {
         loading={signingOut}
         onClick={async () => {
           setSigningOut(true)
-          await signOut()
-          await navigate({ to: '/signin' })
+          const session = await signOut()
+          if (session.status === 'anonymous') {
+            await navigate({ to: '/signin', search: { redirect: '/' } })
+            return
+          }
+          setSigningOut(false)
         }}
       >
         <LogOut aria-hidden="true" className="size-icon-sm" />

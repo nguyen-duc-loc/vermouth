@@ -8,10 +8,18 @@ export type ErrorStateProps = {
   description: string
   action?: ReactNode
   className?: string
+  headingLevel?: 'h2' | 'h3'
 }
 
 /** Gives a blocking failure a direct recovery path and an assertive announcement. */
-export function ErrorState({ title, description, action, className }: ErrorStateProps) {
+export function ErrorState({
+  title,
+  description,
+  action,
+  className,
+  headingLevel = 'h3',
+}: ErrorStateProps) {
+  const Heading = headingLevel
   return (
     <section
       role="alert"
@@ -23,7 +31,7 @@ export function ErrorState({ title, description, action, className }: ErrorState
       <div className="flex items-start gap-3">
         <CircleAlert aria-hidden="true" className="mt-0.5 size-icon-md shrink-0" />
         <div className="grid gap-1">
-          <h3 className="font-semibold">{title}</h3>
+          <Heading className="font-semibold">{title}</Heading>
           <p className="text-sm leading-relaxed">{description}</p>
         </div>
       </div>

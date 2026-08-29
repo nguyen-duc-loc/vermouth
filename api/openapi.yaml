@@ -57,10 +57,11 @@ paths:
       operationId: startGoogleSignIn
       summary: Begin Google sign in
       description: |
-        Writes the in flight sign in (its state, PKCE verifier and nonce) and
-        redirects the browser to Google. The browser follows this as a plain
-        link, so it is a GET; nothing here needs a token, because this is what
-        eventually produces one (spec 0004).
+        Writes the in flight sign in (its state, PKCE verifier, nonce, and the
+        hash of an independent browser binding cookie) and redirects the browser
+        to Google. The browser follows this as a plain link, so it is a GET;
+        nothing here needs a token, because this is what eventually produces one
+        (spec 0004).
       security: []
       parameters:
         - name: tz
@@ -85,8 +86,8 @@ paths:
           required: false
           description: |
             Where in the app to land after signing in. Kept only when it is a
-            path starting with a single slash, so it cannot become an open
-            redirect.
+            clean relative path and query with one leading slash, no fragment,
+            controls, backslash, scheme, or host.
           schema:
             type: string
             examples: ["/"]
@@ -98,6 +99,10 @@ paths:
           headers:
             Location:
               required: true
+              schema:
+                type: string
+            Set-Cookie:
+              description: The short lived HttpOnly browser binding cookie.
               schema:
                 type: string
         "503":
@@ -112,12 +117,13 @@ paths:
       operationId: completeGoogleSignIn
       summary: Complete Google sign in and start a session
       description: |
-        Google sends the browser here. The code is exchanged and the ID token
-        validated by identity, which holds the client secret; a first sign in
-        creates the tutor and its identity.tutor.registered event in one
-        transaction. The answer carries no access token on purpose: it sets the
-        refresh cookie and lands the browser in the app, which then calls
-        /api/auth/refresh, so a token never appears in a URL or in history.
+        Google sends the browser here. The matching state and browser binding
+        are required, then the code is exchanged and the ID token validated by
+        identity, which holds the client secret. A first sign in creates the
+        tutor and its identity.tutor.registered event in one transaction. The
+        answer carries no access token on purpose: it sets the refresh cookie and
+        lands the browser in the app, which then calls /api/auth/refresh, so a
+        token never appears in a URL or in history.
       security: []
       parameters:
         - name: code
@@ -149,7 +155,9 @@ paths:
               schema:
                 type: string
             Set-Cookie:
-              description: The rotating refresh token, HttpOnly and scoped to /api/auth.
+              description: |
+                The browser binding clear, plus the rotating refresh token on
+                success. Both are HttpOnly and repeat their original paths.
               schema:
                 type: string
         "503":
@@ -169,9 +177,19 @@ paths:
         trip. The cookie rotates on every call: presenting an already rotated
         token later than the grace window revokes the whole session family.
 
-        It is a POST rather than a GET because the method is half of the cross
-        site protection, together with SameSite=Lax on the cookie.
+        It is a POST and requires Origin to equal IDENTITY_APP_URL exactly.
+        SameSite=Lax on the cookie is a supporting cross site protection.
       security: []
+      parameters:
+        - name: Origin
+          in: header
+          required: false
+          description: |
+            Supplied automatically by the browser and required by identity. It
+            must equal the configured app origin exactly.
+          schema:
+            type: string
+            format: uri
       responses:
         "200":
           description: A fresh access token, and a rotated cookie
@@ -180,20 +198,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/Session"
         "401":
-          $ref: "#/components/responses/Unauthenticated"
+          description: |
+            The refresh cookie is missing, unknown, expired, revoked, or reused
+            outside the grace window. The response clears that cookie.
+          headers:
+            Set-Cookie:
+              description: Clears the refresh cookie with the same path and flags.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /api/auth/signout:
     post:
       operationId: signOut
       summary: End the session
       description: |
-        Revokes every refresh token in this session family and clears the
-        cookie. It answers 204 whether or not the cookie named a live session,
-        because signing out twice is not an error.
+        Revokes the locked session family and clears the cookie. It answers 204
+        whether or not the cookie named a live session, because signing out
+        twice is not an error. Origin must equal IDENTITY_APP_URL exactly.
       security: []
+      parameters:
+        - name: Origin
+          in: header
+          required: false
+          description: |
+            Supplied automatically by the browser and required by identity. It
+            must equal the configured app origin exactly.
+          schema:
+            type: string
+            format: uri
       responses:
         "204":
-          description: The session is over
+          description: The session is over and the refresh cookie is cleared
+          headers:
+            Set-Cookie:
+              description: Clears the refresh cookie with the same path and flags.
+              schema:
+                type: string
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /api/me:
     get:
@@ -252,6 +300,12 @@ components:
             $ref: "#/components/schemas/Error"
     Unauthenticated:
       description: No valid token was supplied
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: The browser origin may not change this session
       content:
         application/json:
           schema:

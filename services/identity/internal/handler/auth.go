@@ -3,15 +3,21 @@ package handler
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
+	urlpkg "net/url"
+	"path"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nguyen-duc-loc/vermouth/pkg/vermouth"
 
 	"github.com/nguyen-duc-loc/vermouth/services/identity/internal/store"
@@ -77,34 +83,52 @@ type StartInput struct {
 	RedirectTo string
 }
 
+// StartSignInResult carries the provider redirect and the independent browser
+// binding cookie. Neither value is a session credential.
+type StartSignInResult struct {
+	AuthorizeURL   string
+	BrowserBinding string
+	ExpiresAt      time.Time
+}
+
 // StartSignIn writes the in flight sign in and answers with Google's authorize
 // URL. The state, the PKCE verifier and the nonce are generated here and only
 // their public halves travel, so a forged callback has no row to match.
-func (h *Handler) StartSignIn(ctx context.Context, in StartInput) (string, error) {
+func (h *Handler) StartSignIn(ctx context.Context, in StartInput) (StartSignInResult, error) {
 	state, err := randomToken()
 	if err != nil {
-		return "", err
+		return StartSignInResult{}, err
 	}
 	nonce, err := randomToken()
 	if err != nil {
-		return "", err
+		return StartSignInResult{}, err
+	}
+	browserBinding, err := randomToken()
+	if err != nil {
+		return StartSignInResult{}, err
 	}
 	verifier := newPKCEVerifier()
 	clean := cleanStartInput(in)
+	expiresAt := time.Now().UTC().Add(attemptTTL)
 
 	err = store.Queries(h.pool).InsertLoginAttempt(ctx, sqlcgen.InsertLoginAttemptParams{
-		State:        state,
-		CodeVerifier: verifier,
-		Nonce:        nonce,
-		RedirectTo:   clean.RedirectTo,
-		Timezone:     clean.Timezone,
-		Language:     clean.Language,
-		ExpiresAt:    time.Now().UTC().Add(attemptTTL),
+		State:              state,
+		CodeVerifier:       verifier,
+		Nonce:              nonce,
+		BrowserBindingHash: hashOpaqueToken(browserBinding),
+		RedirectTo:         clean.RedirectTo,
+		Timezone:           clean.Timezone,
+		Language:           clean.Language,
+		ExpiresAt:          expiresAt,
 	})
 	if err != nil {
-		return "", fmt.Errorf("write sign in attempt: %w", err)
+		return StartSignInResult{}, fmt.Errorf("write sign in attempt: %w", err)
 	}
-	return h.google.authorizeURL(state, verifier, nonce), nil
+	return StartSignInResult{
+		AuthorizeURL:   h.google.authorizeURL(state, verifier, nonce),
+		BrowserBinding: browserBinding,
+		ExpiresAt:      expiresAt,
+	}, nil
 }
 
 // cleanStartInput falls back rather than refusing: a browser sending a timezone
@@ -125,13 +149,49 @@ func cleanStartInput(in StartInput) StartInput {
 	if language := strings.TrimSpace(in.Language); language == "vi" || language == "en" {
 		clean.Language = language
 	}
-	// A single leading slash and nothing else: //host is a protocol relative URL
-	// the browser would follow off this origin.
-	target := strings.TrimSpace(in.RedirectTo)
-	if strings.HasPrefix(target, "/") && !strings.HasPrefix(target, "//") {
-		clean.RedirectTo = target
-	}
+	clean.RedirectTo = cleanRelativeRedirect(in.RedirectTo)
 	return clean
+}
+
+func cleanRelativeRedirect(raw string) string {
+	target := strings.TrimSpace(raw)
+	if target == "" || strings.Contains(target, "\\") || strings.Contains(target, "#") {
+		return "/"
+	}
+	for _, char := range target {
+		if unicode.IsControl(char) {
+			return "/"
+		}
+	}
+	parsed, err := urlpkg.Parse(target)
+	if err != nil || parsed.Scheme != "" || parsed.Host != "" || parsed.User != nil ||
+		parsed.Opaque != "" || parsed.Fragment != "" {
+		return "/"
+	}
+	decoded, err := urlpkg.PathUnescape(parsed.EscapedPath())
+	if err != nil || !strings.HasPrefix(decoded, "/") || strings.HasPrefix(decoded, "//") ||
+		strings.Contains(decoded, "\\") {
+		return "/"
+	}
+	for _, char := range decoded {
+		if unicode.IsControl(char) {
+			return "/"
+		}
+	}
+	decodedQuery, err := urlpkg.QueryUnescape(parsed.RawQuery)
+	if err != nil || strings.Contains(decodedQuery, "\\") {
+		return "/"
+	}
+	for _, char := range decodedQuery {
+		if unicode.IsControl(char) {
+			return "/"
+		}
+	}
+	cleaned := path.Clean(decoded)
+	if !strings.HasPrefix(cleaned, "/") || strings.HasPrefix(cleaned, "//") {
+		return "/"
+	}
+	return (&urlpkg.URL{Path: cleaned, RawQuery: parsed.RawQuery}).RequestURI()
 }
 
 // SignInResult is what the callback produces: where to land the browser, and the
@@ -145,16 +205,27 @@ type SignInResult struct {
 // CompleteSignIn is the callback. The attempt is read first because the PKCE
 // verifier it holds is what the exchange needs; nothing is written until Google's
 // ID token has passed every check (AC-14).
-func (h *Handler) CompleteSignIn(ctx context.Context, state, code, providerError string) (SignInResult, error) {
-	if providerError != "" {
-		return SignInResult{}, refuse(SignInCancelled, fmt.Errorf("%w: %s", errCancelled, providerError))
-	}
+func (h *Handler) CompleteSignIn(
+	ctx context.Context, state, code, providerError, browserBinding string,
+) (SignInResult, error) {
 	attempt, err := store.Queries(h.pool).GetLoginAttempt(ctx, state)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return SignInResult{}, refuse(SignInExpiredState, errAttemptNotFound)
 		}
 		return SignInResult{}, fmt.Errorf("read sign in attempt: %w", err)
+	}
+	if subtle.ConstantTimeCompare(
+		hashOpaqueToken(browserBinding), attempt.BrowserBindingHash,
+	) != 1 {
+		return SignInResult{}, refuse(SignInExpiredState, errAttemptNotFound)
+	}
+	if providerError != "" {
+		err = h.consumeCancelledAttempt(ctx, attempt.State)
+		if err != nil {
+			return SignInResult{}, err
+		}
+		return SignInResult{}, refuse(SignInCancelled, errCancelled)
 	}
 	account, err := h.google.exchange(ctx, code, attempt.CodeVerifier, attempt.Nonce)
 	if err != nil {
@@ -163,48 +234,105 @@ func (h *Handler) CompleteSignIn(ctx context.Context, state, code, providerError
 	return h.signIn(ctx, attempt, account)
 }
 
-// signIn is the one transaction the callback commits: the attempt consumed by a
-// delete, the tutor found or created with its link and its event, and the first
-// refresh token of a new session family. Minting happens after the commit, so a
-// signing failure cannot undo a tutor who already exists (INV-3, STK-4).
-func (h *Handler) signIn(
-	ctx context.Context, attempt sqlcgen.GetLoginAttemptRow, account googleAccount,
-) (SignInResult, error) {
+func (h *Handler) consumeCancelledAttempt(ctx context.Context, state string) error {
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
-		return SignInResult{}, err
+		return fmt.Errorf("begin cancelled sign in: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-
-	_, err = store.Queries(tx).ConsumeLoginAttempt(ctx, attempt.State)
+	_, err = store.Queries(tx).ConsumeLoginAttempt(ctx, state)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return SignInResult{}, refuse(SignInExpiredState, errAttemptNotFound)
+			return refuse(SignInExpiredState, errAttemptNotFound)
 		}
-		return SignInResult{}, fmt.Errorf("consume sign in attempt: %w", err)
-	}
-	tutor, err := h.resolveTutor(ctx, tx, attempt, account)
-	if err != nil {
-		return SignInResult{}, err
-	}
-	sessionID, err := uuid.NewV7()
-	if err != nil {
-		return SignInResult{}, fmt.Errorf("new session id: %w", err)
-	}
-	issued, err := h.issueRefreshToken(ctx, tx, tutor.tutorID, sessionID)
-	if err != nil {
-		return SignInResult{}, err
+		return fmt.Errorf("consume cancelled sign in: %w", err)
 	}
 	err = tx.Commit(ctx)
 	if err != nil {
-		return SignInResult{}, fmt.Errorf("commit sign in: %w", err)
+		return fmt.Errorf("commit cancelled sign in: %w", err)
+	}
+	return nil
+}
+
+// signIn is the one transaction the callback commits: the attempt consumed by a
+// delete, the tutor found or created with its link and its event, and the first
+// refresh token of a new session family. The callback never mints an access
+// token, so every browser reaches that operation through refresh.
+func (h *Handler) signIn(
+	ctx context.Context, attempt sqlcgen.GetLoginAttemptRow, account googleAccount,
+) (SignInResult, error) {
+	result, tutor, sessionID, err := h.signInOnce(ctx, attempt, account)
+	if err != nil && isConcurrentFirstSignIn(err) {
+		result, tutor, sessionID, err = h.signInOnce(ctx, attempt, account)
+	}
+	if err != nil {
+		return SignInResult{}, err
 	}
 	h.logger.InfoContext(ctx, "Signed in",
 		slog.String("request_id", vermouth.RequestID(ctx)),
 		slog.String("tutor_id", tutor.tutorID.String()),
 		slog.String("session_id", sessionID.String()),
 	)
-	return SignInResult{RedirectTo: h.auth.AppURL + attempt.RedirectTo, Refresh: issued}, nil
+	return result, nil
+}
+
+func (h *Handler) signInOnce(
+	ctx context.Context, attempt sqlcgen.GetLoginAttemptRow, account googleAccount,
+) (SignInResult, signedInTutor, uuid.UUID, error) {
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return SignInResult{}, signedInTutor{}, uuid.Nil, fmt.Errorf("begin sign in: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	_, err = store.Queries(tx).ConsumeLoginAttempt(ctx, attempt.State)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return SignInResult{}, signedInTutor{}, uuid.Nil,
+				refuse(SignInExpiredState, errAttemptNotFound)
+		}
+		return SignInResult{}, signedInTutor{}, uuid.Nil,
+			fmt.Errorf("consume sign in attempt: %w", err)
+	}
+	tutor, err := h.resolveTutor(ctx, tx, attempt, account)
+	if err != nil {
+		return SignInResult{}, signedInTutor{}, uuid.Nil, err
+	}
+	sessionID, err := uuid.NewV7()
+	if err != nil {
+		return SignInResult{}, signedInTutor{}, uuid.Nil, fmt.Errorf("new session id: %w", err)
+	}
+	expiresAt := time.Now().UTC().Add(h.auth.RefreshTTL)
+	_, err = store.Queries(tx).InsertAuthSession(ctx, sqlcgen.InsertAuthSessionParams{
+		SessionID: sessionID,
+		TutorID:   tutor.tutorID,
+		ExpiresAt: expiresAt,
+	})
+	if err != nil {
+		return SignInResult{}, signedInTutor{}, uuid.Nil,
+			fmt.Errorf("create session family: %w", err)
+	}
+	issued, err := issueRefreshToken(ctx, tx, sessionID, expiresAt)
+	if err != nil {
+		return SignInResult{}, signedInTutor{}, uuid.Nil, err
+	}
+	err = tx.Commit(ctx)
+	if err != nil {
+		return SignInResult{}, signedInTutor{}, uuid.Nil, fmt.Errorf("commit sign in: %w", err)
+	}
+	return SignInResult{
+		RedirectTo: h.auth.ResolveRedirect(attempt.RedirectTo),
+		Refresh:    issued,
+	}, tutor, sessionID, nil
+}
+
+func isConcurrentFirstSignIn(err error) bool {
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	if !ok || pgErr.Code != "23505" {
+		return false
+	}
+	return pgErr.ConstraintName == "tutors_email_key" ||
+		pgErr.ConstraintName == "tutor_identities_pkey"
 }
 
 // signedInTutor is the tutor a sign in resolved to, in one shape whether it was
@@ -360,4 +488,9 @@ func randomToken() (string, error) {
 		return "", fmt.Errorf("read random bytes: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+func hashOpaqueToken(value string) []byte {
+	sum := sha256.Sum256([]byte(value))
+	return sum[:]
 }
