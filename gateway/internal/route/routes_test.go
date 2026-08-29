@@ -181,6 +181,7 @@ func TestMuxForwardsEveryPublicAuthRouteToItsFixedIdentityPath(t *testing.T) {
 				method    string
 				uri       string
 				cookie    string
+				origin    string
 				requestID string
 			}
 			forwarded := make(chan forwardedRequest, 1)
@@ -189,6 +190,7 @@ func TestMuxForwardsEveryPublicAuthRouteToItsFixedIdentityPath(t *testing.T) {
 					method:    request.Method,
 					uri:       request.URL.RequestURI(),
 					cookie:    request.Header.Get("Cookie"),
+					origin:    request.Header.Get("Origin"),
 					requestID: request.Header.Get(vermouth.RequestIDHeader),
 				}
 				w.WriteHeader(http.StatusNoContent)
@@ -203,6 +205,7 @@ func TestMuxForwardsEveryPublicAuthRouteToItsFixedIdentityPath(t *testing.T) {
 			})
 			request := httptest.NewRequestWithContext(t.Context(), test.method, test.inboundURI, http.NoBody)
 			request.Header.Set("Cookie", "refresh=session-token")
+			request.Header.Set("Origin", "https://app.example")
 			request.Header.Set(vermouth.RequestIDHeader, "req-public-auth")
 			recorder := httptest.NewRecorder()
 
@@ -213,6 +216,7 @@ func TestMuxForwardsEveryPublicAuthRouteToItsFixedIdentityPath(t *testing.T) {
 			require.Equal(t, test.method, received.method)
 			require.Equal(t, test.wantURI, received.uri)
 			require.Equal(t, "refresh=session-token", received.cookie)
+			require.Equal(t, "https://app.example", received.origin)
 			require.Equal(t, "req-public-auth", received.requestID)
 		})
 	}

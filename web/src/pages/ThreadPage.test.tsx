@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
     error: null as Error | null,
     refetch: vi.fn(async () => undefined),
   },
-  signOut: vi.fn(async () => undefined),
+  signOut: vi.fn(async () => ({ status: 'anonymous' as const })),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -109,6 +109,6 @@ describe('ThreadPage foundation states', () => {
     await user.click(screen.getByRole('button', { name: 'Sign out' }))
 
     expect(mocks.signOut).toHaveBeenCalledOnce()
-    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/signin' })
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/signin', search: { redirect: '/' } })
   })
 })

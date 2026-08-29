@@ -18,3 +18,5 @@ web/.vite/
 .task/
 .tmp/
 *.log
+
+.playwright-cli/

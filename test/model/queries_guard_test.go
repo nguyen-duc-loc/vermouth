@@ -161,13 +161,33 @@ var beforeATokenExists = map[string]exemption{
 		reason:       "the callback claims its own attempt by the single use state it was handed",
 		identifiedBy: "state = ",
 	},
-	"identity/GetRefreshToken": {
+	"identity/GetRefreshTokenSessionID": {
 		reason:       "a refresh is presented before any token names a tutor, so the cookie's own hash is the only handle",
 		identifiedBy: "token_hash = ",
 	},
-	"identity/MarkRefreshTokenUsed": {
-		reason:       "the same, and rotation has to be one statement so two tabs racing cannot both win it",
+	"identity/LockAuthSession": {
+		reason:       "the immutable family id is learned from the presented refresh token before access claims exist",
+		identifiedBy: "session_id = ",
+	},
+	"identity/LockRefreshToken": {
+		reason:       "the token is reread only after its session family is locked",
 		identifiedBy: "token_hash = ",
+	},
+	"identity/MarkRefreshTokenUsed": {
+		reason:       "rotation writes the presented hash only after the session family lock",
+		identifiedBy: "token_hash = ",
+	},
+	"identity/InsertRefreshToken": {
+		reason:       "a hashed token inherits its tutor through the locked auth_sessions family foreign key",
+		identifiedBy: "session_id",
+	},
+	"identity/ExtendAuthSession": {
+		reason:       "the already locked family is the authority for sliding expiry",
+		identifiedBy: "session_id = ",
+	},
+	"identity/RevokeAuthSession": {
+		reason:       "the already locked family is the authority for terminal revocation",
+		identifiedBy: "session_id = ",
 	},
 }
 
@@ -176,8 +196,8 @@ var beforeATokenExists = map[string]exemption{
 // is finished: a sweep able to match a live row would be data loss wearing a
 // housekeeping name.
 var sweeps = map[string]string{
-	"identity/DeleteExpiredLoginAttempts":  "expires_at",
-	"identity/DeleteFinishedRefreshTokens": "expires_at",
+	"identity/DeleteExpiredLoginAttempts": "expires_at",
+	"identity/DeleteFinishedAuthSessions": "expires_at",
 }
 
 // TestEveryStatementNamesTutorID is the tenancy guard (AC-4, INV-8). Every table
