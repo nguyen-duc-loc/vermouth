@@ -69,26 +69,28 @@ and later a reset flow.
 `identity` is a confidential OAuth client. The browser navigates to `identity`'s start endpoint, which
 stores `state` and a PKCE verifier and redirects to Google. Google returns to `identity`'s callback,
 which exchanges the code with the client secret, reads `sub` and `email` from the ID token, creates or
-finds the tutor, and mints the existing access token. The browser only ever holds a Vermouth token.
+finds the tutor, and creates a refresh session. The browser then calls `refresh`, which mints the
+existing access token. The browser only ever holds a Vermouth access token in memory and the refresh
+token in a cookie no script can read.
 
 **Pros**:
 
 - No password exists, so the whole class of problems in option 1 disappears, including the reset flow.
 - The Google client secret sits in the one service that already holds the signing key, and nothing
   about Google leaks past `identity`.
-- The exchange happens over a TLS connection `identity` opened itself, so no ID token is ever accepted
-  from the browser, which removes the whole family of forged token attacks at the boundary. The token
-  is validated anyway, on the reasoning below.
-- Ends at the existing `Mint` call, so spec 0001's identity propagation and INV-14 are untouched.
-- PKCE (RFC 7636) plus a single use `state` row makes a replayed or forged callback a row that is not
-  there.
+- The exchange, provider credential, and claim validation stay inside `identity`; the browser only
+  follows redirects and never integrates a provider SDK or handles a Google token.
+- Keeps the existing `Mint` call behind one refresh path, so spec 0001's identity propagation and
+  INV-14 are untouched.
+- PKCE (RFC 7636), a single use `state` row, and the independent browser binding make a replayed,
+  forged, or cross browser callback a row and cookie pair that is not there.
 
 **Cons**:
 
 - Google is a hard dependency of sign in, with no fallback path if it is down or if the client is
   misconfigured.
-- More moving parts than a password check: an in flight attempt row, a callback, a cookie, and a
-  refresh path.
+- More moving parts than a password check: an in flight attempt row, a callback, two cookies, a
+  locked session family, and a refresh path.
 - A fresh clone cannot sign in until someone creates a Google client and matches the redirect URL
   exactly.
 
@@ -104,10 +106,10 @@ verifies it against Google's public keys and mints its own token.
 
 **Cons**:
 
-- `identity` must accept a token the browser handed it, so the signature check is the only thing
-  standing between a forged value and a session, and Google's key set plus its rotation become
-  `identity`'s to keep current. Option 2 checks the same claims, but a forged token never reaches the
-  check, because the token arrives on a connection `identity` opened to Google.
+- `identity` accepts an untrusted credential from the browser and must validate its signature,
+  audience, issuer, expiry, nonce, subject, and verified email before any write. That is a normal and
+  sound auth boundary when implemented correctly, but it gives the browser and Google's JavaScript
+  library a larger role than option 2.
 - Still needs its own refresh path, so the session code below is not saved.
 - The flow is tied to Google's browser library, which makes a second provider later a different flow
   rather than a second configuration.
@@ -140,18 +142,14 @@ the reset flow, the throttling, and the fact that the highest severity secret in
 exist at all, all to give one tutor a credential they did not ask for. The `NOT NULL` blocker settles
 by deleting the column, which is the cleanest of the four exits `0003/verify.md` lists.
 
-Between the two Google options, the deciding force is where the ID token comes from. In option 3
-`identity` accepts a token from the browser, so its signature is the only thing standing between a
-forged value and a signed in session. In option 2 `identity` fetches the token itself over a
-connection it opened to Google, which is why OpenID Connect Core section 3.1.3.7 lets the TLS server
-check stand in for verifying the signature there. This spec validates it regardless, with
-`google.golang.org/api/idtoken`: one library call costs less than the argument does, and the claim
-checks that are owed either way (`aud` so another client's token cannot be replayed here, `iss`,
-expiry, and the `nonce`) then live in one place beside it. What genuinely differs is that option 2
-has no browser held credential to forge at all. Option 3's advantage was fewer moving parts, but it
-keeps the entire session half of the work, so what it actually saves is the `login_attempts` row and
-the code exchange. That is a small saving against the one path where a forged token is the whole
-risk.
+Between the two Google options, option 3 is materially simpler and is not inherently less secure. A
+properly validated signed credential is a normal authentication boundary. It removes the client
+secret, PKCE, callback exchange, and `login_attempts`, while keeping the same refresh session work.
+Option 2 remains chosen because the implemented boundary keeps every provider detail and credential
+inside `identity`, leaves the browser as a plain redirect client, and gives a later provider the same
+server owned shape. That isolation is worth the extra login machinery here, but it is a tradeoff, not
+a unique security requirement. If this decision were unbuilt and shortest delivery time were the
+only force, option 3 would be the runner up and a credible choice.
 
 Option 4 is the right recommendation for most teams and is wrong for this one, for the reason the
 premise note gives: it would sit in the sign in path of a system whose whole point is that its
@@ -163,8 +161,26 @@ and nothing can revoke it before it expires. An opaque session cookie that the g
 token on every request was rejected because it puts a lookup on the request path and makes every
 service depend on `identity` being awake, which is INV-14 inverted. What is left is the standard
 answer: a short lived access token in memory, and a refresh token in a cookie no script can read.
-Rotation with reuse detection then falls out of the table shape rather than needing separate
-bookkeeping, and it is what turns a stolen cookie into a visible event instead of a silent one.
+Rotation with reuse detection turns a stolen cookie into a visible event instead of a silent one.
+The `auth_sessions` row is the authority for the family because per token rows alone cannot make sign
+out win a race against rotation. Locking the family before every token decision makes revoked a real
+terminal state rather than a best effort update.
+
+**The browser binding cookie** exists because `state` stored only on the server proves that a callback
+belongs to a start, but not that both happened in the same browser. Without the second value, an
+attacker can start with their Google account and hand the callback to a victim, signing the victim
+into the attacker's tutor. The independent cookie closes that login CSRF path without making a
+script readable token.
+
+**Access token revocation remains bounded rather than immediate.** Sign out and reuse end refresh at
+once, while a token already copied from memory can verify for the rest of its 15 minute life. Checking
+revocation on every request would restore immediate termination and break INV-14 by putting identity
+back on the request path. The short bound is the deliberate choice, and the browser clears its own
+copy as soon as sign out begins.
+
+**The browser renews before expiry** because a boot only refresh leaves an open attendance screen dead
+after 15 minutes. One shared promise avoids turning many waiting requests into refresh token reuse,
+and the visibility check covers timers throttled while a phone tab is hidden.
 
 **The grace window on rotation** exists because strict reuse detection fires on the app's own normal
 behaviour. Two tabs restored together both boot with the same cookie, the first one rotates it, and
@@ -172,15 +188,20 @@ the second then presents a token that has already been used, which the row shape
 from a stolen copy. Time can tell them apart: a second tab arrives in the same instant, a thief
 arrives minutes or days later. So a rotated token presented within `IDENTITY_REFRESH_GRACE` rotates
 again inside the same family and only a later reuse counts as theft. The alternative, a lock or a
-single flight guard in the browser, puts the fix in the half of the system an attacker controls, and
-would have the tutor signed out of their own tabs to no benefit.
+single flight guard in the browser, is not sufficient by itself. The family lock orders writes but
+cannot tell a second tab from a stolen copy, while one browser promise cannot coordinate another tab.
+The grace window settles that remaining ambiguity.
 
 **A conflicting email never moves a tutor.** `provider_subject` decides who signs in, so the awkward
 case is a known subject whose new Google email already belongs to a different tutor: the `UNIQUE` on
 `tutors.email` refuses the update. Refusing the sign in would lock a real tutor out over a copied
-field, so the sign in proceeds, the copy stays stale, and the conflict is logged. An unknown subject
-on a taken email keeps its refusal, now with its own code, because that is the case where trusting
-the email would hand one Google account another tutor's data.
+field, so the sign in proceeds, both profile copies stay stale, no event is published, and the
+conflict is logged. An unknown subject on a taken email keeps its refusal, now with its own code,
+because that is the case where trusting the email would hand one Google account another tutor's data.
+Email is trimmed and lowercased before every write, with the same form enforced in Postgres. A
+concurrent first sign in relies on the provider subject constraint, rolls back the losing insert, and
+retries once as the linked tutor, which preserves one tutor and one registration event without an
+application lock.
 
 **The allowlist** exists because feature 16 makes this public and any Google account would otherwise
 create a tenant. An environment variable was chosen over a table because configuration only is already
@@ -195,7 +216,8 @@ validating them with the check `cleanRegisterInput` already performs gets a corr
 form at all.
 
 **The event catalogue is untouched on purpose.** A first sign in publishes the same
-`identity.tutor.registered` with the same five fields, and sign in, refresh, and sign out publish
+`identity.tutor.registered` with the same five fields, a changed provider profile publishes the
+existing `identity.tutor.profile.changed`, and an unchanged sign in, refresh, and sign out publish
 nothing. An `identity.tutor.signed_in` event was considered for an audit trail and rejected: it would
 add a row to spec 0001's catalogue that two services would ignore.
 

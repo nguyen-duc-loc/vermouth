@@ -20,7 +20,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 4 | Data model & data ownership per service | Foundation | done |
 | 5 | Local Kubernetes platform & one command startup | Foundation | done |
 | 6 | Design system & UI foundation | Foundation | done |
-| 7 | Tutor sign in & identity | Slice 1 | in-progress |
+| 7 | Tutor sign in & identity | Slice 1 | done |
 | 8 | Core teaching loop | Slice 1 | planned |
 | 9 | Tracing, central logs & error alerts | Slice 2 | planned |
 | 10 | Recurring sessions & exceptions | Slice 3 | planned |
@@ -105,19 +105,18 @@ spec [0008](../specs/0008-design-system-ui-foundation/index.md) · code in `web/
 
 This slice is the walking skeleton. It is narrow on purpose and everything in it is real: real sign in, real databases, real service to service traffic, a real screen.
 
-### 7. Tutor sign in & identity · in-progress
+### 7. Tutor sign in & identity · done
 A tutor signs in with their Google account, and every request after that carries an identity the other services can trust. In a split system this is the first real boundary question: who checks the token, the gateway or each service.
 **Done when:** a tutor can sign in with Google, a first sign in creates the tutor only for an allowed email, the session survives a reload and sign out ends it, a signed in request is identified at the gateway and trusted downstream, an unsigned request is refused, no password exists anywhere in the repository, and one tutor can never read another tutor's data.
 spec [0004](../specs/0004-tutor-sign-in-google-oauth/index.md) · code in `services/identity/{db,internal/handler,internal/http,cmd/devtoken}`, `gateway/internal/{route,aggregate}`, `api/openapi.yaml`, `web/src/{api/session.ts,pages/SignInPage.tsx,routes.tsx}`
 - [x] Design it (spec): `$architect tutor sign in & identity`
 - [x] Build it: `$develop tutor sign in & identity`
-  - [x] Clear the password out and land the schema: `00003` rewritten as timestamps only, `00004` adding `tutor_identities`, `login_attempts` and `refresh_tokens`, the hand written queries generated (AC-1, AC-6, AC-7, AC-8, AC-9, AC-12)
-  - [x] The contract and the Google exchange in `identity`: the four auth endpoints in `api/openapi.yaml`, `start` writing the attempt, `callback` validating the ID token and creating the tutor in one transaction, `refresh` rotating (AC-1, AC-2, AC-3, AC-5, AC-8, AC-10, AC-14). The Google round trip itself is unrun: it needs a real OAuth client in `IDENTITY_GOOGLE_*`
-  - [x] Close the thread through the gateway and the browser: the four paths forwarded unauthenticated, `POST /api/tutors` deleted, a `/signin` screen with the Google button and the boot time refresh (AC-1, AC-3, AC-4, AC-5, AC-10, AC-11)
-  - [x] Thicken the session: reuse detection with its grace window, sign out, and `task dev:token` so `task thread` still runs with no browser (AC-6, AC-7, AC-13)
-  - [x] The edges: the changed and the conflicting email cases, the expiry sweep, and the nine new environment variables (AC-1, AC-8, AC-9, AC-12)
-- [ ] Verify it: `$check verify tutor sign in & identity`
-- [ ] Test it: `$test tutor sign in & identity`
+  - [x] Rework identity persistence and the Google callback with canonical emails, browser binding, locked session families, validated URLs, injectable provider adapters, and concurrent first sign in handling · AC-1, AC-2, AC-5, AC-8, AC-9, AC-10, AC-12, AC-14, AC-15
+  - [x] Make refresh and sign out one serialized contract through identity and the gateway, including origin checks, cookie clearing, bounded access after revocation, and the one boundary error shape · AC-3, AC-4, AC-6, AC-7, AC-11, AC-15, AC-16
+  - [x] Complete the browser session coordinator and sign in route with protected checking, single flight renewal, expiry retry, preserved redirects, exact bilingual refusal copy, and accessible states · AC-1, AC-3, AC-5, AC-6, AC-10, AC-15, AC-16
+  - [x] Close the hardened tracer bullet with generated contracts, configuration, session sweeps, `task dev:token`, empty migrations, and `task thread` · AC-1, AC-7, AC-8, AC-12, AC-13
+- [x] Verify it: `$check verify tutor sign in & identity`
+- [x] Test it: `$test tutor sign in & identity`
 
 ### 8. Core teaching loop
 The thinnest real thread through the product: create one class, it has one session, add one student, mark that student Present or Absent, and see today's sessions on the home screen. One narrow path that crosses the gateway, more than one service, their separate databases, and back to the screen.

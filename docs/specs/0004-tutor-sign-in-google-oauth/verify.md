@@ -1,167 +1,196 @@
 # 0004 verify: tutor sign in with Google only, no password
 
-How to prove spec 0004 landed. Every line names the acceptance criterion it covers, so you can run the
-list top to bottom or pick the one criterion you care about. `$check verify` can drive this directly.
-
-Read the last section first. Five criteria (**AC-1**, **AC-2**, **AC-5**, **AC-9**, **AC-14**) need a
-real Google OAuth client, which this repository cannot carry, so they sit in their own section and stay
-unticked until you create one. Everything above that runs from an empty database with no internet.
+How to prove spec 0004 landed. Every check names the acceptance criterion it covers. The dangerous
+session races and malformed Google claims need automated tests with the real Postgres database and
+injectable Google adapters. A real Google client is still needed once for the browser round trip.
 
 ## Setup
 
 ```sh
-task infra:up && task migrate:up && task dev     # infra, migrations, then every service
+task infra:clean && task infra:up && task migrate:up
 ```
 
-Two settings make the by hand checks over plain `http` workable, both in `.env`:
-
-- `IDENTITY_COOKIE_SECURE=false`, so a browser or a `curl` cookie jar keeps the refresh cookie on
-  `http://localhost`. Put it back to `true` when you are done.
-- `IDENTITY_SIGNUP_ALLOWLIST=you@example.com`, your own Google address, before the Google section.
-
-Shorthand used below:
+Use these values for the by hand checks:
 
 ```sh
 PSQL='docker exec -i vermouth-postgres-identity psql -U vermouth_identity -d vermouth_identity'
 G=http://localhost:8080
+APP=http://localhost:5173
 ```
 
-## Commands
+Set `IDENTITY_COOKIE_SECURE=false` only while checking plain local HTTP. Set
+`IDENTITY_SIGNUP_ALLOWLIST` to your Google address for the real provider section.
 
-- [ ] `task check` format, lint, and type check clean across all seven modules and the web app  → all
-- [ ] `task test` every module green                                                            → all
-- [ ] `task build` every binary builds, `CGO_ENABLED=0`                                         → all
-- [ ] `task infra:clean && task infra:up && task migrate:up` all four services apply from empty  → AC-12
-- [ ] `task migrate:down -- identity` then `task migrate:up` reverses and reapplies              → AC-12
-- [ ] `cd test && go test ./model/` the ownership, tenancy, schema and key guards, now carrying
-      `login_attempts` as the one table with no `tutor_id`, seven named statement exemptions, two
-      named sweeps, and `identity`'s four tables                                                 → AC-11, AC-12
-- [ ] `task dev:token && task thread` the thread completes with no browser and no Google         → AC-13
-- [ ] `grep -rn 'argon2' --include='*.go' .` no hit anywhere                                     → AC-12
-- [ ] `grep -rn 'golang.org/x/crypto' --include=go.mod .` indirect in all six modules, direct in
-      none                                                                                      → AC-12
-- [ ] `$PSQL -c "select count(*) from information_schema.columns where column_name like '%password%'"`
-      answers `0`                                                                               → AC-12
-- [ ] `grep -rn '\.Mint(' --include='*.go' .` only the refresh handler and `cmd/devtoken`, and no
-      service binary imports `devtoken`                                                         → AC-13
+## Repository gates
 
-## By hand, with no Google
+- [x] `task check`, `task test`, and `task build` succeed across every module and the web app
+      → all
+- [x] `task infra:clean && task infra:up && task migrate:up` applies all four service models from
+      empty, and identity has `tutors`, `tutor_identities`, `login_attempts`, `auth_sessions`, and
+      `refresh_tokens`
+      → AC-12
+- [x] `task migrate:down -- identity` then `task migrate:up` reverses and reapplies identity
+      → AC-12
+- [x] `cd test && go test ./model/` proves the table ownership, canonical email checks, the session
+      foreign key, the browser binding column, and the allowed statements without `tutor_id`
+      → AC-8, AC-9, AC-11, AC-12
+- [x] `task dev:token && task thread` completes with no browser and no Google
+      → AC-13
+- [x] `rg 'argon2' -g '*.go'` and `rg 'golang.org/x/crypto' -g go.mod` find no import and no direct
+      requirement; `rg '\.Mint\(' -g '*.go'` finds only refresh and `cmd/devtoken`
+      → AC-12, AC-13
+- [x] the generated Go and browser API types match `api/openapi.yaml`, including both auth errors and
+      `access_expires_at`
+      → AC-4, AC-15, AC-16
 
-### The refusal at the boundary (AC-4, AC-11)
+## Start and callback boundary
 
-- [ ] `curl -si $G/api/me | head -1` and `curl -si $G/api/thread | head -1` both `401`
-- [ ] the body is the `APIError` shape with `code`, `message` and a non empty `request_id`, never a
-      bare string or an `http.Error` line
+- [x] `GET /api/auth/google/start?tz=Europe/Paris&lang=en&redirect_to=/somewhere?day=1` answers `302`
+      to Google with `state`, `nonce`, `code_challenge`, `code_challenge_method=S256`, and the
+      `openid email profile` scopes
+      → AC-1, AC-10
+- [x] the response sets `vermouth_login` with `HttpOnly`, `SameSite=Lax`, the configured `Secure`
+      value, host only scope, `Path=/api/auth/google`, and a ten minute expiry
+      → AC-8
+- [x] the attempt stores `sha256` of that cookie and never its raw value; state, nonce, verifier, and
+      binding all differ on the next start
+      → AC-8
+- [x] missing or bad timezone and language store `Asia/Ho_Chi_Minh` and `vi`. A later sign in from a
+      different device does not change a tutor preference
+      → AC-10
+- [x] each of `//evil.example`, `/\\evil.example`, `/%2f%2fevil.example`, a full URL, a control byte,
+      and a fragment stores `/`; a clean relative path and query survive
+      → AC-15
+- [x] malformed `IDENTITY_APP_URL` values stop startup. Production accepts only `https`; local HTTP
+      accepts `localhost` or a hostname ending in `.localhost`. A callback hostname different from
+      the app hostname stops startup, while different ports on the same local loopback name work.
+      The callback also refuses a wrong path, query, fragment, user info, or plain production HTTP
+      → AC-15
+- [x] a valid state with no binding cookie or another attempt's binding cookie lands on
+      `/signin?error=expired_state`, clears the binding cookie, and writes no tutor or session
+      → AC-8
+- [x] an unknown, expired, or consumed state behaves the same. The expired case uses a real stored
+      row whose `expires_at` is in the past
+      → AC-8
+- [x] a Google error response still needs valid state and binding. With both, it consumes the attempt,
+      clears the binding, and lands on `/signin?error=cancelled`; without either, it is
+      `expired_state`
+      → AC-8
+- [x] two callbacks for one valid state may both complete the fake exchange, but exactly one
+      transaction consumes the attempt and writes a session
+      → AC-8
 
-### The start call (AC-10)
+## Google adapter and profile tests
 
-- [ ] `curl -si "$G/api/auth/google/start?tz=Europe/Paris&lang=en&redirect_to=/somewhere"` answers
-      `302` to `accounts.google.com` carrying `state`, `nonce`, `code_challenge`,
-      `code_challenge_method=S256` and the `openid email profile` scopes
-- [ ] the stored attempt matches what was sent, and lives ten minutes:
+Use injectable code exchanger and ID token validator fakes. These tests need no network.
 
-      ```sh
-      $PSQL -c "select timezone, language, redirect_to, expires_at - created_at as life
-                from login_attempts order by created_at desc limit 1"
-      ```
+- [x] one table test refuses each of: exchange failure, forged signature, bad issuer, wrong audience,
+      multiple audiences, stale expiry, wrong nonce, empty or wrong type subject, empty or wrong type
+      email, and false or wrong type `email_verified`. Every case writes no tutor, link, event, or
+      session
+      → AC-14
+- [x] a missing, empty, or wrong type `name` uses the email local part; valid name is trimmed
+      → AC-14
+- [x] two first sign ins for the same subject run concurrently against real Postgres. Both receive a
+      session, while one tutor, one link, and one registered outbox event exist
+      → AC-1, AC-2
+- [x] a later unchanged sign in publishes nothing. Changed canonical email or display name updates
+      the owned rows and publishes one profile event
+      → AC-2, AC-9
+- [x] a known subject whose new email belongs to another tutor signs in with both profile copies and
+      display name unchanged, no event, and a request id in the conflict log
+      → AC-9
+- [x] an unknown subject on an existing email returns `email_conflict` and links nothing, including
+      when the competing insert commits concurrently
+      → AC-9
 
-- [ ] `curl -si "$G/api/auth/google/start"` with no query at all stores `Asia/Ho_Chi_Minh`, `vi` and
-      `/`, the fallbacks, not an empty string
-- [ ] `redirect_to=//evil.example` and `redirect_to=https://evil.example/x` both store `/`, so an off
-      origin target can never come back out of the callback
-- [ ] every `state` and every `nonce` differs from the last call's
+## Session and concurrency tests
 
-### The refused callback (AC-8)
+These tests run against real Postgres with barriers that hold transactions at the named points. A
+sequence of curl calls is not evidence for a race.
 
-- [ ] `curl -si "$G/api/auth/google/callback?state=nope&code=x"` lands on
-      `/signin?error=expired_state`, and writes no tutor and no session
-- [ ] `curl -si "$G/api/auth/google/callback?error=access_denied&state=nope"` lands on
-      `/signin?error=cancelled`, checked before the state is even read
-- [ ] a `state` that a callback already consumed behaves the same as an unknown one, because the
-      attempt is deleted inside the transaction
+- [x] refresh with the exact app `Origin` rotates the cookie and returns an access token. Missing or
+      foreign `Origin` returns `403 forbidden` with the gateway request id and changes no row
+      → AC-3, AC-15
+- [x] two refreshes using the same token inside grace both answer `200`, create tokens in one active
+      family, and share one tutor
+      → AC-7
+- [x] a forced signing failure rolls the rotation back, leaves the presented token active, and sends
+      neither a replacement cookie nor an access token
+      → AC-3, AC-7
+- [x] hold refresh after it locks the session, start sign out, then release refresh. Sign out runs
+      next and no live token can refresh afterward
+      → AC-6, AC-7
+- [x] hold refresh before it inserts the new token, start a late reuse revocation, then release both.
+      The session ends revoked and no inserted token remains usable
+      → AC-7
+- [x] sign out twice with the correct origin answers `204`; it clears the cookie and leaves the
+      session terminal. A copied access token remains valid only until its original 15 minute expiry
+      and no refresh extends it
+      → AC-6
+- [x] missing, unknown, expired, revoked, and late reused cookies all answer `401`, code
+      `unauthenticated`, message `this session is over, sign in again`, one request id, and a clearing
+      cookie with the original attributes
+      → AC-16
+- [x] the sweep deletes expired attempts and expired or seven day revoked session rows, with token
+      rows removed by the foreign key cascade. It never deletes an active family
+      → AC-7, AC-8
 
-### The session, from a seeded row (AC-3, AC-6, AC-7, AC-11)
+## Browser behavior
 
-Google is what mints the first refresh token, so seed one instead. `task dev:token` writes the tutor,
-and `token_hash` is `sha256` of the raw cookie value, so a known value is one line of SQL:
+- [x] initial checking renders no protected route and starts no protected request. Refresh `200`
+      becomes authenticated; `401` becomes anonymous; a network or `5xx` failure with no valid token
+      shows unavailable with a retry control
+      → AC-3, AC-16
+- [x] one timer refreshes 60 seconds before `access_expires_at`. Returning to a visible tab performs
+      the same check, and transient failures retry after one second then double to at most five
+      seconds only while the old token is valid
+      → AC-3
+- [x] many protected calls waiting on expiry share one refresh promise. The first protected `401`
+      refreshes and retries once; a second `401` clears memory and navigates to sign in
+      → AC-3, AC-16
+- [x] sign out clears the in memory token before the request finishes. `204` moves to anonymous; a
+      server failure shows unavailable and offers retry without claiming the server session ended
+      → AC-6
+- [x] an anonymous protected route preserves its clean relative path and query in `redirect`; an
+      invalid redirect becomes `/`; the callback target remains hidden until boot refresh succeeds
+      → AC-3, AC-15
+- [x] `navigator.languages` selects the first `vi` or `en` entry, with `vi` fallback. The five known
+      codes render the exact ten sentences in `index.md`; an unknown error is ignored
+      → AC-16
+- [x] keyboard reach, visible focus, alert announcement, and the phone target meet WCAG AA
+      → AC-1, AC-5
 
-```sh
-TUTOR=$(task dev:token | sed -n 's/.*"tutor_id": "\([^"]*\)".*/\1/p')
-RAW=devrefresh
-HASH=$(printf '%s' "$RAW" | sha256sum | cut -d' ' -f1)
-$PSQL -c "insert into refresh_tokens (token_hash, session_id, tutor_id, expires_at)
-          values ('\x$HASH', gen_random_uuid(), '$TUTOR', now() + interval '30 days')"
-```
+## Tenant boundary
 
-- [ ] `curl -si -X POST $G/api/auth/refresh -H "Cookie: vermouth_refresh=$RAW"` answers `200` with
-      `access_token` and `access_expires_at`, and a rotated cookie whose value is not `$RAW`  → AC-3
-- [ ] that access token reads its own tutor and only its own: `curl -s $G/api/me -H "Authorization:
-      Bearer <token>"` answers about `$TUTOR`                                                 → AC-11
-- [ ] presenting `$RAW` again straight away answers `200` and rotates again inside the same
-      `session_id`, which is two tabs restored together                                       → AC-7
-- [ ] presenting `$RAW` again after `IDENTITY_REFRESH_GRACE` has passed answers `401`, and every row
-      in that `session_id` now carries `revoked_at`, including the newest one, so the token the
-      tutor holds is refused too                                                              → AC-7
-- [ ] on a fresh seeded row: `curl -si -X POST $G/api/auth/signout -H "Cookie: vermouth_refresh=$RAW"`
-      answers `204` with the cookie cleared, and the next `refresh` with the same cookie `401` → AC-6
-- [ ] signing out twice answers `204` both times, because it is idempotent                    → AC-6
+- [x] no token on `/api/me` or `/api/thread` answers `401` in `vermouth.APIError` with the gateway
+      request id
+      → AC-4
+- [x] for every protected route that accepts a tutor owned identifier, tutor A presents tutor B's
+      identifier and receives no row. `/api/me` ignores all caller identifiers and reads only the
+      verified `sub`
+      → AC-11
 
-### The sweep
+## Real Google client
 
-- [ ] set `IDENTITY_SWEEP_INTERVAL=2s`, insert an attempt with `expires_at` in the past, and the log
-      reports `"msg":"Swept"` with a non zero `login_attempts` count. Put `10m` back afterwards.
-- [ ] a `revoked_at` row is kept seven days before the sweep takes it, so a reuse stays detectable
-      for a week rather than being deleted the moment it is refused
+Create an OAuth client whose authorized callback exactly matches `IDENTITY_GOOGLE_REDIRECT_URL`.
+Set the client id, client secret, app URL, and allowlist. This section proves integration only; the
+fake adapter tests above prove the hostile claims.
 
-### Configuration (STK-8)
+- [x] sign in from `/signin`, return to the preserved app path, and receive one browser bound session
+      with no token in a URL or history
+      → AC-1, AC-8, AC-15
+- [x] first sign in creates one tutor and link and publishes one registered event; second unchanged
+      sign in creates and publishes nothing
+      → AC-1, AC-2
+- [x] reload and leave the tab open past one access expiry. Both remain signed in without another
+      Google round trip
+      → AC-3
+- [x] an account outside the allowlist lands on the exact `not_allowed` sentence and writes nothing
+      → AC-5
 
-- [ ] an entry with no `@` in `IDENTITY_SIGNUP_ALLOWLIST` stops startup naming that entry
-- [ ] a missing `IDENTITY_GOOGLE_CLIENT_ID` stops startup with `vermouth.MissingEnvError`
-- [ ] a bad duration in `IDENTITY_REFRESH_TTL` stops startup naming the variable
-- [ ] an empty `IDENTITY_SIGNUP_ALLOWLIST` starts, and means nobody new can sign up
+## Public deployment gate
 
-## With a real Google client
-
-Create an OAuth client at the Google console with `http://localhost:8080/api/auth/google/callback` as
-an authorized redirect, then set `IDENTITY_GOOGLE_CLIENT_ID`, `IDENTITY_GOOGLE_CLIENT_SECRET` and your
-own address in `IDENTITY_SIGNUP_ALLOWLIST`. None of these has been run.
-
-- [ ] Happy path: sign in from `/signin`, land back in the app signed in, exactly one `tutors` row and
-      one `tutor_identities` row appear                                                → AC-1
-- [ ] Exactly one `identity.tutor.registered` with spec 0001's five fields reaches `notifications`,
-      written to the outbox in the same transaction as the tutor row                    → AC-2
-- [ ] Second sign in with the same Google account writes no new row and publishes nothing → AC-1, AC-2
-- [ ] Reload the tab, the app stays signed in with no Google round trip                 → AC-3
-- [ ] Timezone and language from the browser appear in the token claims and in the event → AC-10
-- [ ] An account off the allowlist with no tutor yet lands on `/signin?error=not_allowed` with a
-      sentence naming why, and writes nothing                                          → AC-5
-- [ ] A known subject whose Google email changed updates `tutors.email` and
-      `tutor_identities.provider_email` and publishes `identity.tutor.profile.changed`  → AC-9
-- [ ] A known subject whose new Google email already belongs to another tutor still signs in, the
-      email copy is left alone, and the conflict is logged with its `request_id`        → AC-9
-- [ ] An unknown subject whose email already belongs to a tutor is refused with `email_conflict` and
-      links nothing                                                                    → AC-9
-- [ ] A bad ID token writes nothing and lands on `/signin?error=provider_error`, once each for `aud`
-      for another client, a stale expiry, a `nonce` that does not match the attempt, and
-      `email_verified` false                                                           → AC-14
-
-## Value sourcing, by hand
-
-One check per Value sourcing row the automated list does not already cover. These are the answers a
-test cannot fully pin down, because they are about which value a tutor ends up carrying.
-
-- [ ] `tz=Not/AZone` falls back to `Asia/Ho_Chi_Minh` rather than storing the bad name  → AC-10
-- [ ] `lang=fr` falls back to `vi`, since only `vi` and `en` exist                       → AC-10
-- [ ] A Google account with no `name` claim gets the part of its email before `@` as its display name
-- [ ] The new tutor's timezone and language come from the `login_attempts` row, not from the callback
-      request, which carries none                                                       → AC-10
-- [ ] The sign in screen shows the right sentence for each of the five `?error=` codes, in both `vi`
-      and `en`
-
-## Known open item
-
-**The spec's AC-13 names three `Mint` callers, the code has two.** The API surface section says the
-callback carries no token and the app calls `refresh`, while Key invariants says minting happens after
-that commit. Both cannot hold, so the build followed the endpoint contract: only the refresh handler
-and `cmd/devtoken` mint. The invariant AC-13 is protecting gets stronger, not weaker, but the list to
-check is one shorter than the spec's. Worth `$architect` correcting in the spec.
+- [ ] spec 0007 and scope feature 21 are verified before feature 16 exposes these endpoints. Start,
+      callback, and refresh then have both caller and global limits, and attempt growth is bounded
+      → prerequisite outside AC-1 through AC-16
