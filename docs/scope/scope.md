@@ -130,7 +130,7 @@ code in `api/openapi.yaml`, `services/teaching/`, `services/billing/`, `gateway/
   - [x] Build the accessible home, guided setup sheet, session attendance cards, projection panel, draft recovery, paging, polling, and local date refresh · AC-1, AC-3 to AC-5, AC-7, AC-9, AC-13 to AC-15
   - [x] Regenerate the contracts, replace the development thread, update `task thread`, and pass repository checks · AC-11 to AC-13, AC-16
 - [x] Verify it: `$check verify core teaching loop`
-- [ ] Test it: `$test core teaching loop`
+- [x] Test it: `$test core teaching loop`
 
 ## Slice 2: Seeing across services
 
