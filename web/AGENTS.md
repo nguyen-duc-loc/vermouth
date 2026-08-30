@@ -53,7 +53,9 @@ path. Running `pnpm` directly works in your own shell.
 
 ## Conventions
 
-- Named exports only. No default exports anywhere, including pages and components.
+- Application modules use named exports only. Vite and Vitest configuration files are the tool
+  required default export exceptions, covered by the Biome override or a specific inline
+  suppression.
 - No `any`, and no hand written type for a gateway endpoint: take it from `components['schemas'][...]`
   in the generated schema (STK-10).
 - Every screen meets WCAG AA: visible focus, reachable by keyboard, and readable on a phone first,
@@ -113,7 +115,6 @@ path. Running `pnpm` directly works in your own shell.
 - [performance-lint-rules](../.agents/skills/performance-lint-rules/): `oxc-project/oxc`, only relevant if you ever write an oxlint rule yourself, not part of this app's Biome setup
 
 Declined: `tailwindcss-responsive-darkmode` (no `dark:` class in the app yet, so it is premature),
-`react19-test-patterns` (no test library installed yet, revisit when `$test` adds one),
 `gsap-frameworks` (Vue and Svelte only), and the four `microsoft/playwright` skills (they are for
 developing Playwright itself).
 

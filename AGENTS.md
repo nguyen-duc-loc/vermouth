@@ -91,8 +91,9 @@ front so no feature reopens them. `$scope` owns that file.
 - SQL is hand written in `db/queries/` and compiled to typed Go by `sqlc` (STK-3). `api/openapi.yaml`
   is the only source of gateway types, Go through `oapi-codegen` and browser through
   `openapi-typescript` (STK-10). Never hand write either.
-- In `web/`: TypeScript is strict (no `any`, exhaustive types), exports are named only, and every
-  screen meets WCAG AA with visible focus, keyboard reach, and phone first sizing.
+- In `web/`: TypeScript is strict (no `any`, exhaustive types), application modules use named
+  exports, and every screen meets WCAG AA with visible focus, keyboard reach, and phone first
+  sizing. Tool configuration may use a required default export with a specific Biome exception.
 - Commit messages are conventional: `feat:`, `fix:`, `docs:`, `chore:`, `test:`, `refactor:`.
 
 ## Tooling
@@ -100,8 +101,8 @@ front so no feature reopens them. `$scope` owns that file.
 Installed by `$develop tooling` and enforced through the same task targets locally and in CI.
 
 - **Go**: `.golangci.yml` starts from the pinned upstream strict config and carries the compatibility
-  adjustments for `golangci-lint` 2.13.1. `task fmt:check` runs `gofumpt`, `gci`, and `golines`
-  through `golangci-lint`; `task lint` checks every Go module.
+  adjustments for `golangci-lint` 2.13.1. `task fmt:check` runs `gci`, `gofmt`, `gofumpt`,
+  `goimports`, and `golines` through `golangci-lint`; `task lint` checks every Go module.
 - **Web**: Biome 2.5.8 owns formatting, lint, and import order for TypeScript and CSS. TypeScript is
   strict and `task web:typecheck` runs `tsc -b`. Use `task web:check` for the full Biome pass.
 - **Before each commit**: `task check` runs Go format and lint plus the Biome and TypeScript checks.
@@ -110,6 +111,8 @@ Installed by `$develop tooling` and enforced through the same task targets local
 - **Tests**: Go `testing` with `testify/require`; anything touching a relay, a consumer, a
   projection, or a month end run runs against the real Postgres and Redpanda in
   `test/compose.test.yaml` (STK-15). Store and model integration tests are already present.
+  Web unit and component tests use Vitest with jsdom and Testing Library. Run
+  `pnpm exec vitest run` from `web/`; neither `task test` nor CI includes that suite today.
   Playwright remains planned for the browser money path and is not installed yet.
 - **CI**: `.github/workflows/ci.yml` runs on every push and pull request. Its Go, web, and hook jobs
   build, check formatting, lint, type check, verify generated browser types, and test.
