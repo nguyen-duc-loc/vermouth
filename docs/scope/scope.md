@@ -21,7 +21,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 5 | Local Kubernetes platform & one command startup | Foundation | done |
 | 6 | Design system & UI foundation | Foundation | done |
 | 7 | Tutor sign in & identity | Slice 1 | done |
-| 8 | Core teaching loop | Slice 1 | in-progress |
+| 8 | Core teaching loop | Slice 1 | done |
 | 9 | Tracing, central logs & error alerts | Slice 2 | planned |
 | 10 | Recurring sessions & exceptions | Slice 3 | planned |
 | 11 | Student records & class rosters | Slice 3 | planned |
@@ -118,7 +118,7 @@ spec [0004](../specs/0004-tutor-sign-in-google-oauth/index.md) · code in `servi
 - [x] Verify it: `$check verify tutor sign in & identity`
 - [x] Test it: `$test tutor sign in & identity`
 
-### 8. Core teaching loop · in-progress
+### 8. Core teaching loop · done
 The thinnest real thread through the product: create one class, it has one session, add one student, mark that student Present or Absent, and see today's sessions on the home screen. One narrow path that crosses the gateway, more than one service, their separate databases, and back to the screen.
 **Done when:** a signed in tutor can create a class with a single session, add a student, mark attendance, and see today's sessions on the home screen, with the attendance state surviving a reload and at least one cross service read proving the boundary works.
 spec [0009](../specs/0009-core-teaching-loop/index.md)
