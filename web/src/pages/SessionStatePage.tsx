@@ -1,15 +1,16 @@
 import { useNavigate } from '@tanstack/react-router'
 import { LoaderCircle } from 'lucide-react'
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 
 import { sessionCoordinator, useSession } from '../api/session'
 import { ErrorState } from '../components/ErrorState'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardHeader } from '../components/ui/card'
-import { ThreadPage } from './ThreadPage'
+
+const HomePage = lazy(() => import('./HomePage').then((module) => ({ default: module.HomePage })))
 
 /** Keeps protected content behind the current session state. */
-export function ProtectedThreadPage() {
+export function ProtectedHomePage() {
   const session = useSession()
   const navigate = useNavigate()
 
@@ -25,8 +26,41 @@ export function ProtectedThreadPage() {
   if (session.status === 'unavailable') {
     return <UnavailableSession message={session.message} />
   }
-  if (session.status === 'authenticated') return <ThreadPage />
+  if (session.status === 'authenticated') {
+    return (
+      <Suspense fallback={<OpeningHomePage />}>
+        <HomePage />
+      </Suspense>
+    )
+  }
   return null
+}
+
+/** Announces the short code split handoff after the session is accepted. */
+export function OpeningHomePage() {
+  return (
+    <main className="grid min-h-screen place-items-center bg-background px-4 py-8 text-foreground">
+      <Card
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        className="w-full max-w-md shadow-raised"
+      >
+        <CardHeader>
+          <div className="mb-2 grid size-12 place-items-center rounded-xl bg-primary/10 text-primary">
+            <LoaderCircle
+              aria-hidden="true"
+              className="size-icon-lg animate-spin motion-reduce:animate-none"
+            />
+          </div>
+          <h1 className="text-lg font-semibold">Opening your teaching day</h1>
+        </CardHeader>
+        <CardContent className="text-sm leading-relaxed text-muted-foreground">
+          Vermouth is preparing today’s sessions and attendance controls.
+        </CardContent>
+      </Card>
+    </main>
+  )
 }
 
 /** Shows an announced loading surface while refresh is unresolved. */

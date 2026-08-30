@@ -104,7 +104,7 @@ func seedClassStudentAndSession(t *testing.T, q *sqlcgen.Queries, tutorID uuid.U
 	classID, studentID, sessionID = newID(t), newID(t), newID(t)
 
 	_, err := q.InsertClass(ctx, sqlcgen.InsertClassParams{
-		ClassID: classID, TutorID: tutorID, Name: "Maths 9A",
+		ClassID: classID, TutorID: tutorID, Name: "Maths 9A", Color: "blue",
 		RateAmount: 250_000, Currency: "VND", RateEffectiveFrom: day(time.September, 1),
 	})
 	require.NoError(t, err)

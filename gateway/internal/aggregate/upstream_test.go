@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/nguyen-duc-loc/vermouth/pkg/vermouth"
 	"github.com/stretchr/testify/require"
@@ -43,7 +42,7 @@ func TestForwardPreservesTheBrowserAuthBoundaryAndReturnsRedirects(t *testing.T)
 	}))
 	t.Cleanup(upstream.Close)
 
-	client := aggregate.NewClient(aggregate.Upstreams{}, time.Second)
+	client := aggregate.NewClient(aggregate.Upstreams{})
 	request := httptest.NewRequestWithContext(
 		t.Context(),
 		http.MethodGet,
@@ -81,7 +80,7 @@ func TestForwardPreservesTheBrowserAuthBoundaryAndReturnsRedirects(t *testing.T)
 func TestForwardRejectsAnInvalidUpstreamAddress(t *testing.T) {
 	t.Parallel()
 
-	client := aggregate.NewClient(aggregate.Upstreams{}, time.Second)
+	client := aggregate.NewClient(aggregate.Upstreams{})
 	request := httptest.NewRequestWithContext(
 		t.Context(), http.MethodPost, "https://gateway.example/api/auth/refresh", http.NoBody,
 	)

@@ -21,7 +21,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 5 | Local Kubernetes platform & one command startup | Foundation | done |
 | 6 | Design system & UI foundation | Foundation | done |
 | 7 | Tutor sign in & identity | Slice 1 | done |
-| 8 | Core teaching loop | Slice 1 | planned |
+| 8 | Core teaching loop | Slice 1 | in-progress |
 | 9 | Tracing, central logs & error alerts | Slice 2 | planned |
 | 10 | Recurring sessions & exceptions | Slice 3 | planned |
 | 11 | Student records & class rosters | Slice 3 | planned |
@@ -118,10 +118,19 @@ spec [0004](../specs/0004-tutor-sign-in-google-oauth/index.md) · code in `servi
 - [x] Verify it: `$check verify tutor sign in & identity`
 - [x] Test it: `$test tutor sign in & identity`
 
-### 8. Core teaching loop
+### 8. Core teaching loop · in-progress
 The thinnest real thread through the product: create one class, it has one session, add one student, mark that student Present or Absent, and see today's sessions on the home screen. One narrow path that crosses the gateway, more than one service, their separate databases, and back to the screen.
 **Done when:** a signed in tutor can create a class with a single session, add a student, mark attendance, and see today's sessions on the home screen, with the attendance state surviving a reload and at least one cross service read proving the boundary works.
-- [ ] Build it: `$develop core teaching loop`
+spec [0009](../specs/0009-core-teaching-loop/index.md)
+code in `api/openapi.yaml`, `services/teaching/`, `services/billing/`, `gateway/`, `web/src/`, and `test/thread.sh`
+- [x] Design it (spec): `$architect core teaching loop`
+- [x] Build it: `$develop core teaching loop`
+  - [x] Land the class and first session publisher, durable create receipts, billing consumer, and first aggregated home thread · AC-2, AC-3, AC-7 to AC-12, AC-16
+  - [x] Add student, roster, and attendance commands with tenant checks, safe retries, events, projections, and canonical reload state · AC-1, AC-4 to AC-6, AC-8, AC-10 to AC-12
+  - [x] Build the accessible home, guided setup sheet, session attendance cards, projection panel, draft recovery, paging, polling, and local date refresh · AC-1, AC-3 to AC-5, AC-7, AC-9, AC-13 to AC-15
+  - [x] Regenerate the contracts, replace the development thread, update `task thread`, and pass repository checks · AC-11 to AC-13, AC-16
+- [x] Verify it: `$check verify core teaching loop`
+- [ ] Test it: `$test core teaching loop`
 
 ## Slice 2: Seeing across services
 

@@ -22,9 +22,9 @@ func TestThreadAcceptsCompactDevelopmentTokenJSON(t *testing.T) {
 	}, []string{repoFile(t, "test", "thread.sh")})
 
 	require.NoErrorf(t, result.err, "stdout: %s\nstderr: %s", result.stdout, result.stderr)
-	require.Contains(t, result.stdout, "The thread is complete")
+	require.Contains(t, result.stdout, "The teaching thread is complete")
 	require.NotContains(t, result.stdout, "token-1")
-	assertThreadCalls(t, fixture.callLog, "dev:token", "http://vermouth.localhost:8080/api/thread")
+	assertThreadCalls(t, fixture.callLog, "dev:token", "http://vermouth.localhost:8080")
 }
 
 // covers: AC-11, AC-13
@@ -43,7 +43,7 @@ func TestThreadRetriesATemporaryGatewayFailure(t *testing.T) {
 	require.NoErrorf(t, result.err, "stdout: %s\nstderr: %s", result.stdout, result.stderr)
 	count, err := os.ReadFile(fixture.count)
 	require.NoError(t, err)
-	require.Equal(t, "2", strings.TrimSpace(string(count)))
+	require.Equal(t, "9", strings.TrimSpace(string(count)))
 }
 
 // covers: AC-6, AC-13
@@ -61,7 +61,7 @@ func TestThreadUsesTheHostTokenAndGatewayWhenRequested(t *testing.T) {
 	}, []string{repoFile(t, "test", "thread.sh")})
 
 	require.NoError(t, result.err, result.stderr)
-	assertThreadCalls(t, fixture.callLog, "dev:token:host", "http://localhost:9090/api/thread")
+	assertThreadCalls(t, fixture.callLog, "dev:token:host", "http://localhost:9090")
 }
 
 func TestThreadRejectsTokenOutputWithoutRequiredFields(t *testing.T) {
@@ -96,8 +96,7 @@ func TestThreadStopsAfterTheBoundedGatewayWait(t *testing.T) {
 	}, []string{repoFile(t, "test", "thread.sh")})
 
 	require.Error(t, result.err)
-	require.Contains(t, result.stdout, "The event never reached notifications")
-	require.Contains(t, result.stdout, "task platform:logs -- identity")
+	require.Contains(t, result.stdout, "The home read never became available")
 	count, err := os.ReadFile(fixture.count)
 	require.NoError(t, err)
 	require.Equal(t, "40", strings.TrimSpace(string(count)))
@@ -130,7 +129,29 @@ count=$(cat "$CURL_COUNT")
 count=$((count + 1))
 printf '%s\n' "$count" >"$CURL_COUNT"
 if [ "$count" -le "${CURL_FAILURES:-0}" ]; then exit 7; fi
-printf '%s\n' '{"recorded":true}'
+calls=" $* "
+case "$calls" in
+  *"/roster"*)
+    printf '%s\n' '{"class_id":"class-1","student_id":"student-1","effective_from":"2026-08-30","effective_to":null}'
+    ;;
+  *"/attendance/"*)
+    printf '%s\n' '{"session_id":"session-1","student_id":"student-1","state":"Present","marked_at":"2026-08-30T03:00:00Z"}'
+    ;;
+  *"/api/classes"*)
+    printf '%s\n' '{"class":{"class_id":"class-1"},"first_session":{"session_id":"session-1","local_date":"2026-08-30"}}'
+    ;;
+  *"/api/students"*)
+    printf '%s\n' '{"student_id":"student-1","name":"Thread student","phone":null}'
+    ;;
+  *"/api/home"*)
+    initial_max=$(( ${CURL_FAILURES:-0} + 1 ))
+    if [ "$count" -le "$initial_max" ]; then
+      printf '%s\n' '{"local_date":"2026-08-30","setup_defaults":{"local_date":"2026-08-30","start_time":"10:00","end_time":"11:00"},"sessions":[],"billing_projection":{"state":"waiting"}}'
+    else
+      printf '%s\n' '{"local_date":"2026-08-30","setup_defaults":{"local_date":"2026-08-30","start_time":"10:00","end_time":"11:00"},"sessions":[{"session_id":"session-1","students":[{"student_id":"student-1","attendance_state":"Present"}]}],"billing_projection":{"state":"active"}}'
+    fi
+    ;;
+esac
 `)
 	writeExecutable(t, directory, "sleep", ":\n")
 	return threadFixture{
@@ -147,6 +168,10 @@ func assertThreadCalls(t *testing.T, path, tokenTask, gateway string) {
 	require.NoError(t, err)
 	calls := string(content)
 	require.Contains(t, calls, "task <--silent> <"+tokenTask+">\n")
-	require.Contains(t, calls, "curl <-fsS> <"+gateway+">")
+	require.Contains(t, calls, "curl <-fsS> <"+gateway+"/api/home>")
+	require.Contains(t, calls, "<"+gateway+"/api/classes>")
+	require.Contains(t, calls, "<"+gateway+"/api/students>")
+	require.Contains(t, calls, "<"+gateway+"/api/classes/class-1/roster>")
+	require.Contains(t, calls, "<"+gateway+"/api/sessions/session-1/attendance/student-1>")
 	require.Contains(t, calls, "<-H> <Authorization: Bearer ")
 }

@@ -48,7 +48,7 @@ export function RadioGroup({ className, onKeyDownCapture, ...props }: RadioGroup
 }
 
 /** Gives one radio choice a clear selected dot and a full phone target. */
-export function RadioGroupItem({ className, ...props }: RadioGroupItemProps) {
+export function RadioGroupItem({ className, children, ...props }: RadioGroupItemProps) {
   return (
     <RadioGroupPrimitive.Item
       className={cn(
@@ -57,7 +57,8 @@ export function RadioGroupItem({ className, ...props }: RadioGroupItemProps) {
       )}
       {...props}
     >
-      <RadioGroupPrimitive.Indicator className="size-3 rounded-full bg-current" />
+      <RadioGroupPrimitive.Indicator className="size-3 rounded-full bg-primary" />
+      {children}
     </RadioGroupPrimitive.Item>
   )
 }

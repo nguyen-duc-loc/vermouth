@@ -55,7 +55,6 @@ config:
   relayInterval: 750ms
   consumerRetryMax: "5"
   consumerRetryBaseDelay: 200ms
-  gatewayUpstreamTimeout: 5s
   googleAuthEnabled: false
   identityAppURL: http://vermouth.localhost:8080
   identityGoogleRedirectURL: http://vermouth.localhost:8080/api/auth/google/callback

@@ -3,10 +3,13 @@ package route
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/nguyen-duc-loc/vermouth/pkg/vermouth"
 	"golang.org/x/sync/errgroup"
 
@@ -14,6 +17,8 @@ import (
 	"github.com/nguyen-duc-loc/vermouth/gateway/internal/apitypes"
 	"github.com/nguyen-duc-loc/vermouth/gateway/internal/auth"
 )
+
+const maxRequestBody = 1 << 20
 
 // Deps is what the routes need. There is no database in here on purpose.
 type Deps struct {
@@ -64,24 +69,169 @@ func Mux(deps Deps) http.Handler {
 		passThrough(ctx, deps.Logger, w, response)
 	})
 
-	authenticated.HandleFunc("GET /api/thread", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		claims, ok := auth.Claims(ctx)
-		if !ok {
-			vermouth.WriteError(ctx, w, http.StatusUnauthorized, "unauthenticated", "a valid bearer token is required")
-			return
-		}
-		status, err := deps.Client.Thread(ctx, claims.TutorID, vermouth.BearerToken(r))
-		if err != nil {
-			upstreamFailed(ctx, deps.Logger, w, "identity", err)
-			return
-		}
-		vermouth.WriteJSON(ctx, deps.Logger, w, http.StatusOK, status)
-	})
+	authenticated.HandleFunc("POST /api/classes", proxyCreateClass(deps))
+	authenticated.HandleFunc("POST /api/students", proxyCreateStudent(deps))
+	authenticated.HandleFunc("POST /api/classes/{class_id}/roster", proxyJoinRoster(deps))
+	authenticated.HandleFunc(
+		"PUT /api/sessions/{session_id}/attendance/{student_id}",
+		proxyMarkAttendance(deps),
+	)
+	authenticated.HandleFunc("GET /api/home", readHome(deps))
+	authenticated.HandleFunc("GET /api/home/billing-projection", readHomeBillingProjection(deps))
 
 	mux.Handle("/api/", auth.Middleware(deps.Verifier, deps.Logger, authenticated))
 
 	return vermouth.RequestIDMiddleware(deps.Logger, mux)
+}
+
+func proxyCreateClass(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var input apitypes.CreateClassRequest
+		if !decodeJSONBody(w, r, &input) {
+			return
+		}
+		response, err := deps.Client.CallWithHeaders(
+			r.Context(),
+			http.MethodPost,
+			deps.Client.Upstreams().Teaching,
+			"/classes",
+			vermouth.BearerToken(r),
+			http.Header{"Idempotency-Key": []string{r.Header.Get("Idempotency-Key")}},
+			input,
+		)
+		if err != nil {
+			upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)
+			return
+		}
+		passThrough(r.Context(), deps.Logger, w, response)
+	}
+}
+
+func proxyCreateStudent(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var input apitypes.CreateStudentRequest
+		if !decodeJSONBody(w, r, &input) {
+			return
+		}
+		response, err := deps.Client.CallWithHeaders(
+			r.Context(),
+			http.MethodPost,
+			deps.Client.Upstreams().Teaching,
+			"/students",
+			vermouth.BearerToken(r),
+			http.Header{"Idempotency-Key": []string{r.Header.Get("Idempotency-Key")}},
+			input,
+		)
+		if err != nil {
+			upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)
+			return
+		}
+		passThrough(r.Context(), deps.Logger, w, response)
+	}
+}
+
+func proxyJoinRoster(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		classID, err := uuid.Parse(r.PathValue("class_id"))
+		if err != nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "class_id must be a UUID")
+			return
+		}
+		var input apitypes.JoinRosterRequest
+		if !decodeJSONBody(w, r, &input) {
+			return
+		}
+		response, err := deps.Client.Call(
+			r.Context(),
+			http.MethodPost,
+			deps.Client.Upstreams().Teaching,
+			"/classes/"+classID.String()+"/roster",
+			vermouth.BearerToken(r),
+			input,
+		)
+		if err != nil {
+			upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)
+			return
+		}
+		passThrough(r.Context(), deps.Logger, w, response)
+	}
+}
+
+func proxyMarkAttendance(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID, sessionErr := uuid.Parse(r.PathValue("session_id"))
+		studentID, studentErr := uuid.Parse(r.PathValue("student_id"))
+		if sessionErr != nil || studentErr != nil {
+			vermouth.WriteError(
+				r.Context(),
+				w,
+				http.StatusBadRequest,
+				"invalid_input",
+				"session_id and student_id must be UUID values",
+			)
+			return
+		}
+		var input apitypes.MarkAttendanceRequest
+		if !decodeJSONBody(w, r, &input) {
+			return
+		}
+		response, err := deps.Client.Call(
+			r.Context(),
+			http.MethodPut,
+			deps.Client.Upstreams().Teaching,
+			"/sessions/"+sessionID.String()+"/attendance/"+studentID.String(),
+			vermouth.BearerToken(r),
+			input,
+		)
+		if err != nil {
+			upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)
+			return
+		}
+		passThrough(r.Context(), deps.Logger, w, response)
+	}
+}
+
+func readHome(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		status, err := deps.Client.Home(
+			r.Context(),
+			vermouth.BearerToken(r),
+			r.URL.Query().Get("cursor"),
+		)
+		if err != nil {
+			if responseError, ok := errors.AsType[*aggregate.RequiredResponseError](err); ok {
+				passThrough(r.Context(), deps.Logger, w, responseError.Response)
+				return
+			}
+			upstreamFailed(r.Context(), deps.Logger, w, "a required home service", err)
+			return
+		}
+		vermouth.WriteJSON(r.Context(), deps.Logger, w, http.StatusOK, status)
+	}
+}
+
+func readHomeBillingProjection(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		status := deps.Client.HomeBillingProjection(r.Context(), vermouth.BearerToken(r))
+		vermouth.WriteJSON(r.Context(), deps.Logger, w, http.StatusOK, status)
+	}
+}
+
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, target any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBody)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	err := decoder.Decode(target)
+	if err != nil {
+		vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "the JSON body is invalid")
+		return false
+	}
+	err = decoder.Decode(&struct{}{})
+	if !errors.Is(err, io.EOF) {
+		vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "the JSON body must contain one value")
+		return false
+	}
+	return true
 }
 
 // forwardAuth hands one auth request to identity and copies its answer back. The

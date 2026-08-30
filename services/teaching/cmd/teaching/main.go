@@ -18,6 +18,7 @@ import (
 	"github.com/nguyen-duc-loc/vermouth/pkg/vermouth"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/nguyen-duc-loc/vermouth/services/teaching/internal/handler"
 	teachinghttp "github.com/nguyen-duc-loc/vermouth/services/teaching/internal/http"
 )
 
@@ -57,6 +58,10 @@ func run() error {
 		return err
 	}
 	defer producer.Close()
+	verifier, err := vermouth.NewVerifier(cfg.PublicKeys)
+	if err != nil {
+		return err
+	}
 
 	health := vermouth.Health{
 		Service: cfg.Service,
@@ -66,7 +71,13 @@ func run() error {
 			"broker":   func(ctx context.Context) error { return producer.Ping(ctx) },
 		},
 	}
-	mux := teachinghttp.Mux(teachinghttp.Deps{Logger: logger, Health: health})
+	teachingHandler := handler.New(pool, logger, cfg.PublishTopic)
+	mux := teachinghttp.Mux(teachinghttp.Deps{
+		Handler:  teachingHandler,
+		Verifier: verifier,
+		Logger:   logger,
+		Health:   health,
+	})
 
 	// The relay runs from the first day, so the first feature to write an
 	// event has nothing to wire (STK-18).

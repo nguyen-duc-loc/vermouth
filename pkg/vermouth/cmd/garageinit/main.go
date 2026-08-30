@@ -1,6 +1,6 @@
 // Command garageinit reconciles the one node local Garage control plane through its Admin API.
 //
-//nolint:err113,mnd,noinlineerr,revive,tagliatelle // Garage's exact API and local contract need specific boundary errors, JSON names, and HTTP.
+//nolint:err113,mnd,noinlineerr,tagliatelle // Garage's exact API and local contract need specific boundary errors, JSON names, and HTTP.
 package main
 
 import (
@@ -144,7 +144,7 @@ func loadConfig() (config, error) {
 	if err != nil {
 		return config{}, fmt.Errorf("parse GARAGE_ADMIN_ENDPOINT: %w", err)
 	}
-	if endpoint.String() != "http://garage:3903" {
+	if endpoint.String() != "http://garage:3903" { //nolint:revive // The cluster local Garage admin endpoint intentionally has no TLS.
 		return config{}, errors.New("GARAGE_ADMIN_ENDPOINT must be exactly http://garage:3903")
 	}
 	if values["GARAGE_ZONE"] != "local" || values["GARAGE_BUCKET"] != "vermouth-invoices" ||

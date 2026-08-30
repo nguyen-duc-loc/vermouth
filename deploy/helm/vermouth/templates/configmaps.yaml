@@ -82,7 +82,6 @@ data:
   GATEWAY_TEACHING_URL: http://teaching:8082
   GATEWAY_BILLING_URL: http://billing:8083
   GATEWAY_NOTIFICATIONS_URL: http://notifications:8084
-  GATEWAY_UPSTREAM_TIMEOUT: {{ .Values.config.gatewayUpstreamTimeout | quote }}
 ---
 apiVersion: v1
 kind: ConfigMap

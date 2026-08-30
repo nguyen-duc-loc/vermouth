@@ -11,10 +11,9 @@ info:
     Only the gateway is described here. Services are reached by the gateway
     alone (INV-1), so their endpoints are not a public surface.
 
-    This is the skeleton surface of feature 2, with feature 7's sign in on it:
-    the four auth endpoints are unauthenticated because they are what produces a
-    token, and everything else under /api/ needs one. Feature 8 adds the first
-    real teaching endpoints.
+    The four auth endpoints are unauthenticated because they are what produces
+    a token. Everything else under /api/ needs one. The teaching endpoints are
+    the first real product thread through the gateway.
 servers:
   - url: http://localhost:8080
     description: local development
@@ -260,30 +259,206 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthenticated"
 
-  /api/thread:
-    get:
-      operationId: getThread
-      summary: The state of the skeleton's one end to end thread
-      description: |
-        A read the gateway fans out in parallel to two services (spec 0001,
-        gateway read aggregation): the tutor from identity, which owns it, and
-        from notifications whether its recipient projection has caught up yet.
-        No identity fact is read from notifications' copy (INV-10).
-
-        The relay polls, so `projection.recorded` is false for the first moment
-        after registering and true shortly after. That delay is the design
-        working, not a fault.
+  /api/classes:
+    post:
+      operationId: createClass
+      summary: Create a class with its first session
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClassRequest"
       responses:
         "200":
-          description: The thread as it stands
+          description: The original class and first session for a safe retry
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ThreadStatus"
+                $ref: "#/components/schemas/CreateClassResponse"
+        "201":
+          description: The class and first session were created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateClassResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/students:
+    post:
+      operationId: createStudent
+      summary: Register a student
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStudentRequest"
+      responses:
+        "200":
+          description: The original student for a safe retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+        "201":
+          description: The student was registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/classes/{class_id}/roster:
+    post:
+      operationId: joinRoster
+      summary: Join a student to a class
+      parameters:
+        - $ref: "#/components/parameters/ClassId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinRosterRequest"
+      responses:
+        "200":
+          description: The exact open roster period already existed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RosterPeriod"
+        "201":
+          description: The roster period was opened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RosterPeriod"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/sessions/{session_id}/attendance/{student_id}:
+    put:
+      operationId: markAttendance
+      summary: Save or correct one attendance mark
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/StudentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkAttendanceRequest"
+      responses:
+        "200":
+          description: The canonical attendance row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attendance"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/home:
+    get:
+      operationId: getHome
+      summary: The tutor and today's teaching work
+      parameters:
+        - $ref: "#/components/parameters/HomeCursor"
+      responses:
+        "200":
+          description: Required identity and teaching facts plus optional billing progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Home"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /api/home/billing-projection:
+    get:
+      operationId: getHomeBillingProjection
+      summary: Refresh only billing projection progress
+      responses:
+        "200":
+          description: Billing progress or its isolated unavailable state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HomeBillingProjection"
         "401":
           $ref: "#/components/responses/Unauthenticated"
 
 components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: One browser generated UUID, retained until this create step succeeds.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    ClassId:
+      name: class_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    StudentId:
+      name: student_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    HomeCursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor bound to the current tutor local date.
+      schema:
+        type: string
   securitySchemes:
     bearerAuth:
       type: http
@@ -306,6 +481,24 @@ components:
             $ref: "#/components/schemas/Error"
     Forbidden:
       description: The browser origin may not change this session
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: No owned resource matched
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: The requested state conflicts with committed state
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    BadGateway:
+      description: A required service did not answer successfully
       content:
         application/json:
           schema:
@@ -386,36 +579,314 @@ components:
           type: string
           format: date-time
 
-    ProjectionStatus:
+    ClassColor:
+      type: string
+      enum: [red, rose, orange, green, blue, yellow, violet]
+
+    LocalTime:
+      type: string
+      pattern: "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+      examples: ["17:30"]
+
+    FirstSessionInput:
       type: object
-      description: notifications' own fact about how far its projection has caught up.
-      required: [tutor_id, recorded]
+      required: [local_date, start_time, end_time]
       properties:
-        tutor_id:
+        local_date:
+          type: string
+          format: date
+        start_time:
+          $ref: "#/components/schemas/LocalTime"
+        end_time:
+          $ref: "#/components/schemas/LocalTime"
+
+    CreateClassRequest:
+      type: object
+      required: [name, rate_amount, first_session]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        color:
+          oneOf:
+            - $ref: "#/components/schemas/ClassColor"
+            - type: "null"
+        rate_amount:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1000000000
+        first_session:
+          $ref: "#/components/schemas/FirstSessionInput"
+
+    Class:
+      type: object
+      required:
+        [class_id, name, color, rate_amount, currency, rate_effective_from]
+      properties:
+        class_id:
           type: string
           format: uuid
-        recorded:
-          type: boolean
-        recorded_at:
+        name:
+          type: string
+        color:
+          $ref: "#/components/schemas/ClassColor"
+        rate_amount:
+          type: integer
+          format: int64
+        currency:
+          type: string
+          const: VND
+        rate_effective_from:
+          type: string
+          format: date
+
+    TeachingSession:
+      type: object
+      required: [session_id, class_id, starts_at, ends_at, local_date]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        starts_at:
           type: string
           format: date-time
-        updated_at:
+        ends_at:
+          type: string
+          format: date-time
+        local_date:
+          type: string
+          format: date
+
+    CreateClassResponse:
+      type: object
+      required: [class, first_session]
+      properties:
+        class:
+          $ref: "#/components/schemas/Class"
+        first_session:
+          $ref: "#/components/schemas/TeachingSession"
+
+    CreateStudentRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        phone:
+          type: [string, "null"]
+          maxLength: 40
+
+    Student:
+      type: object
+      required: [student_id, name, phone]
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone:
+          type: [string, "null"]
+
+    JoinRosterRequest:
+      type: object
+      required: [student_id, effective_from]
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        effective_from:
+          type: string
+          format: date
+
+    RosterPeriod:
+      type: object
+      required: [class_id, student_id, effective_from, effective_to]
+      properties:
+        class_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type: [string, "null"]
+          format: date
+
+    AttendanceState:
+      type: string
+      enum: [Present, Absent]
+
+    MarkAttendanceRequest:
+      type: object
+      required: [state]
+      properties:
+        state:
+          $ref: "#/components/schemas/AttendanceState"
+
+    Attendance:
+      type: object
+      required: [session_id, student_id, state, marked_at]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        state:
+          $ref: "#/components/schemas/AttendanceState"
+        marked_at:
           type: string
           format: date-time
 
-    ThreadStatus:
+    SetupDefaults:
       type: object
-      required: [tutor, projection]
+      required: [local_date, start_time, end_time]
       properties:
-        tutor:
-          $ref: "#/components/schemas/Tutor"
-        projection:
-          $ref: "#/components/schemas/ProjectionStatus"
-        projection_unavailable:
+        local_date:
           type: string
-          description: |
-            Set when notifications did not answer. The tutor panel still
-            arrives, because one slow service degrades only its own panel.
+          format: date
+        start_time:
+          $ref: "#/components/schemas/LocalTime"
+        end_time:
+          $ref: "#/components/schemas/LocalTime"
+
+    HomeStudent:
+      type: object
+      required: [student_id, name, attendance_state, marked_at]
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        attendance_state:
+          oneOf:
+            - $ref: "#/components/schemas/AttendanceState"
+            - type: "null"
+        marked_at:
+          type: [string, "null"]
+          format: date-time
+
+    HomeSession:
+      type: object
+      required:
+        [session_id, class_id, class_name, class_color, starts_at, ends_at, local_date, students]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        class_name:
+          type: string
+        class_color:
+          $ref: "#/components/schemas/ClassColor"
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        local_date:
+          type: string
+          format: date
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/HomeStudent"
+
+    TeachingHome:
+      type: object
+      required:
+        [request_time_zone, local_date, next_local_midnight_at, setup_defaults, sessions, next_cursor]
+      properties:
+        request_time_zone:
+          type: string
+        local_date:
+          type: string
+          format: date
+        next_local_midnight_at:
+          type: string
+          format: date-time
+        setup_defaults:
+          $ref: "#/components/schemas/SetupDefaults"
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/HomeSession"
+        next_cursor:
+          type: [string, "null"]
+
+    BillingProjection:
+      type: object
+      required:
+        [state, class_count, session_count, student_count, open_roster_count, attendance_count, latest_updated_at]
+      properties:
+        state:
+          type: string
+          enum: [waiting, active]
+        class_count:
+          type: integer
+          format: int64
+          minimum: 0
+        session_count:
+          type: integer
+          format: int64
+          minimum: 0
+        student_count:
+          type: integer
+          format: int64
+          minimum: 0
+        open_roster_count:
+          type: integer
+          format: int64
+          minimum: 0
+        attendance_count:
+          type: integer
+          format: int64
+          minimum: 0
+        latest_updated_at:
+          type: [string, "null"]
+          format: date-time
+
+    HomeBillingProjection:
+      type: object
+      required: [billing_projection, billing_projection_unavailable]
+      properties:
+        billing_projection:
+          oneOf:
+            - $ref: "#/components/schemas/BillingProjection"
+            - type: "null"
+        billing_projection_unavailable:
+          type: [string, "null"]
+
+    Home:
+      allOf:
+        - $ref: "#/components/schemas/TeachingHome"
+        - type: object
+          required: [tutor, billing_projection, billing_projection_unavailable]
+          properties:
+            tutor:
+              $ref: "#/components/schemas/Tutor"
+            billing_projection:
+              oneOf:
+                - $ref: "#/components/schemas/BillingProjection"
+                - type: "null"
+            billing_projection_unavailable:
+              type: [string, "null"]
 
 security:
   - bearerAuth: []

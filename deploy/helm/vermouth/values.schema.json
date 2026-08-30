@@ -106,7 +106,6 @@
         "relayInterval": { "type": "string" },
         "consumerRetryMax": { "type": "string" },
         "consumerRetryBaseDelay": { "type": "string" },
-        "gatewayUpstreamTimeout": { "type": "string" },
         "googleAuthEnabled": { "type": "boolean" },
         "identityAppURL": { "type": "string" },
         "identityGoogleRedirectURL": { "type": "string" },

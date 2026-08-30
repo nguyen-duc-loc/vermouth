@@ -30,6 +30,10 @@ type Querier interface {
 	// The column order is the table's own, so sqlc hands back the one
 	// invoice_profiles row type rather than a second shape of the same row.
 	GetInvoiceProfile(ctx context.Context, tutorID uuid.UUID) (InvoiceProfile, error)
+	// Projection status is diagnostic progress only. Each count is scoped to the
+	// trusted tutor, and latest_updated_at covers every teaching projection table,
+	// including the rate history that is not itself a displayed count.
+	GetTeachingProjectionStatus(ctx context.Context, ownerTutorID uuid.UUID) (GetTeachingProjectionStatusRow, error)
 	InsertBillingRun(ctx context.Context, arg InsertBillingRunParams) (BillingRun, error)
 	// InsertInvoice freezes the render block at issue: the student name and the five
 	// payee fields are copied in, so a re render years later prints the file the

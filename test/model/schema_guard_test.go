@@ -372,7 +372,11 @@ func TestOneOwningTablePerEntity(t *testing.T) {
 		// Google account link, the in flight sign in, the locked session family,
 		// and its hashed refresh tokens. None is a second home for an entity.
 		"identity": {"tutors", "tutor_identities", "login_attempts", "auth_sessions", "refresh_tokens"},
-		"teaching": {"students", "classes", "sessions", "roster_periods", "attendance"},
+		// command_receipts belongs to spec 0009's create retry contract. It owns
+		// command identity, not a second copy of a domain entity.
+		"teaching": {
+			"students", "classes", "sessions", "roster_periods", "attendance", "command_receipts",
+		},
 		"billing": {
 			"students", "classes", "sessions", "attendance", "roster_periods", "class_rates",
 			"invoice_profiles", "invoice_number_counters", "billing_runs", "invoices", "invoice_lines",

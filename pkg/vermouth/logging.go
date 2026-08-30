@@ -12,7 +12,7 @@ import (
 
 // RequestIDHeader travels with every request and onto every event published
 // while handling it (INV-15).
-const RequestIDHeader = "X-Request-Id"
+const RequestIDHeader = "X-Request-ID"
 
 type requestIDKey struct{}
 

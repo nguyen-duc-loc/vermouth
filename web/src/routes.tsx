@@ -13,7 +13,7 @@ import {
   type SignInErrorCode,
   sessionCoordinator,
 } from './api/session'
-import { ProtectedThreadPage } from './pages/SessionStatePage'
+import { ProtectedHomePage } from './pages/SessionStatePage'
 import { SignInPage } from './pages/SignInPage'
 
 type RouterContext = {
@@ -51,7 +51,7 @@ const signInRoute = createRoute({
 const threadRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: ProtectedThreadPage,
+  component: ProtectedHomePage,
   beforeLoad: async ({ context, location }) => {
     const session = await context.session.ensure()
     if (session.status === 'anonymous') {

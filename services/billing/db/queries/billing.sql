@@ -176,6 +176,56 @@ WHERE tutor_id = $1
 ORDER BY effective_from DESC
 LIMIT 1;
 
+-- Projection status is diagnostic progress only. Each count is scoped to the
+-- trusted tutor, and latest_updated_at covers every teaching projection table,
+-- including the rate history that is not itself a displayed count.
+-- name: GetTeachingProjectionStatus :one
+SELECT
+    (SELECT count(*) FROM classes c WHERE c.tutor_id = sqlc.arg(owner_tutor_id))::bigint
+        AS class_count,
+    (SELECT count(*) FROM sessions s WHERE s.tutor_id = sqlc.arg(owner_tutor_id))::bigint
+        AS session_count,
+    (SELECT count(*) FROM students st
+        WHERE st.tutor_id = sqlc.arg(owner_tutor_id) AND st.removed_at IS NULL)::bigint
+        AS student_count,
+    (SELECT count(*) FROM roster_periods rp
+        WHERE rp.tutor_id = sqlc.arg(owner_tutor_id) AND rp.effective_to IS NULL)::bigint
+        AS open_roster_count,
+    (SELECT count(*) FROM attendance a WHERE a.tutor_id = sqlc.arg(owner_tutor_id))::bigint
+        AS attendance_count,
+    (
+        SELECT count(*) > 0
+        FROM (
+            SELECT c.updated_at FROM classes c WHERE c.tutor_id = sqlc.arg(owner_tutor_id)
+            UNION ALL
+            SELECT s.updated_at FROM sessions s WHERE s.tutor_id = sqlc.arg(owner_tutor_id)
+            UNION ALL
+            SELECT st.updated_at FROM students st WHERE st.tutor_id = sqlc.arg(owner_tutor_id)
+            UNION ALL
+            SELECT rp.updated_at FROM roster_periods rp WHERE rp.tutor_id = sqlc.arg(owner_tutor_id)
+            UNION ALL
+            SELECT a.updated_at FROM attendance a WHERE a.tutor_id = sqlc.arg(owner_tutor_id)
+            UNION ALL
+            SELECT cr.updated_at FROM class_rates cr WHERE cr.tutor_id = sqlc.arg(owner_tutor_id)
+        ) updates
+    )::boolean AS has_updated_at,
+    (
+        SELECT coalesce(max(updated_at), 'epoch'::timestamptz)
+        FROM (
+            SELECT c.updated_at FROM classes c WHERE c.tutor_id = sqlc.arg(owner_tutor_id)
+            UNION ALL
+            SELECT s.updated_at FROM sessions s WHERE s.tutor_id = sqlc.arg(owner_tutor_id)
+            UNION ALL
+            SELECT st.updated_at FROM students st WHERE st.tutor_id = sqlc.arg(owner_tutor_id)
+            UNION ALL
+            SELECT rp.updated_at FROM roster_periods rp WHERE rp.tutor_id = sqlc.arg(owner_tutor_id)
+            UNION ALL
+            SELECT a.updated_at FROM attendance a WHERE a.tutor_id = sqlc.arg(owner_tutor_id)
+            UNION ALL
+            SELECT cr.updated_at FROM class_rates cr WHERE cr.tutor_id = sqlc.arg(owner_tutor_id)
+        ) updates
+    )::timestamptz AS latest_updated_at;
+
 -- ------------------------------------------------------- authoritative records
 -- No replay may rewrite anything below this line (AC-8).
 

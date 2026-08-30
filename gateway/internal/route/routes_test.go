@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/nguyen-duc-loc/vermouth/pkg/vermouth"
 	"github.com/stretchr/testify/require"
@@ -63,7 +62,7 @@ func TestMuxPassesThroughDeclaredAuthUnavailable(t *testing.T) {
 			}))
 			t.Cleanup(upstream.Close)
 
-			client := aggregate.NewClient(aggregate.Upstreams{Identity: upstream.URL}, time.Second)
+			client := aggregate.NewClient(aggregate.Upstreams{Identity: upstream.URL})
 			handler := route.Mux(route.Deps{
 				Client:  client,
 				Logger:  slog.New(slog.DiscardHandler),
@@ -108,7 +107,7 @@ func TestMuxPassesThroughAuthSessionHeaders(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 
-	client := aggregate.NewClient(aggregate.Upstreams{Identity: upstream.URL}, time.Second)
+	client := aggregate.NewClient(aggregate.Upstreams{Identity: upstream.URL})
 	handler := route.Mux(route.Deps{
 		Client:  client,
 		Logger:  slog.New(slog.DiscardHandler),
@@ -197,7 +196,7 @@ func TestMuxForwardsEveryPublicAuthRouteToItsFixedIdentityPath(t *testing.T) {
 			}))
 			t.Cleanup(upstream.Close)
 
-			client := aggregate.NewClient(aggregate.Upstreams{Identity: upstream.URL}, time.Second)
+			client := aggregate.NewClient(aggregate.Upstreams{Identity: upstream.URL})
 			handler := route.Mux(route.Deps{
 				Client:  client,
 				Logger:  slog.New(slog.DiscardHandler),

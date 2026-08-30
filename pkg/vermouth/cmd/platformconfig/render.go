@@ -75,8 +75,7 @@ func readManifests(path string) ([]manifest, error) {
 	return documents, nil
 }
 
-//nolint:revive // googleEnabled selects the explicit configuration matrix variant being validated.
-func validateRenderedPolicies(matrix trafficMatrix, documents []manifest, googleEnabled bool) error {
+func validateRenderedPolicies(matrix trafficMatrix, documents []manifest, googleEnabled bool) error { //nolint:revive // The explicit auth variant selects one policy matrix.
 	expectedIDs := []string{}
 	expectedPolicies := []string{}
 	expectedPolicyIDs := make(map[string][]string)

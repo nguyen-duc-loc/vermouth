@@ -109,10 +109,192 @@ func (q *Queries) GetAttendance(ctx context.Context, arg GetAttendanceParams) (A
 	return i, err
 }
 
+const getAttendanceWriteContext = `-- name: GetAttendanceWriteContext :one
+SELECT s.session_id, s.class_id, s.local_date,
+       EXISTS (
+           SELECT 1
+           FROM roster_periods rp
+           WHERE rp.tutor_id = s.tutor_id
+             AND rp.class_id = s.class_id
+             AND rp.student_id = st.student_id
+             AND rp.effective_from <= s.local_date
+             AND (rp.effective_to IS NULL OR s.local_date <= rp.effective_to)
+       )::boolean AS rostered
+FROM sessions s
+JOIN students st
+  ON st.tutor_id = s.tutor_id
+ AND st.student_id = $1
+ AND st.removed_at IS NULL
+WHERE s.tutor_id = $2
+  AND s.session_id = $3
+  AND s.cancelled_at IS NULL
+FOR UPDATE
+`
+
+type GetAttendanceWriteContextParams struct {
+	StudentID uuid.UUID
+	TutorID   uuid.UUID
+	SessionID uuid.UUID
+}
+
+type GetAttendanceWriteContextRow struct {
+	SessionID uuid.UUID
+	ClassID   uuid.UUID
+	LocalDate pgtype.Date
+	Rostered  bool
+}
+
+// Locking the owned session serialises corrections, including the first mark
+// where no attendance row exists yet. The roster flag uses the same inclusive
+// coverage predicate as every home and billing read.
+func (q *Queries) GetAttendanceWriteContext(ctx context.Context, arg GetAttendanceWriteContextParams) (GetAttendanceWriteContextRow, error) {
+	row := q.db.QueryRow(ctx, getAttendanceWriteContext, arg.StudentID, arg.TutorID, arg.SessionID)
+	var i GetAttendanceWriteContextRow
+	err := row.Scan(
+		&i.SessionID,
+		&i.ClassID,
+		&i.LocalDate,
+		&i.Rostered,
+	)
+	return i, err
+}
+
+const getCommandReceipt = `-- name: GetCommandReceipt :one
+SELECT tutor_id, operation, idempotency_key, request_hash,
+       primary_resource_id, related_resource_id, created_at
+FROM command_receipts
+WHERE tutor_id = $1
+  AND operation = $2
+  AND idempotency_key = $3
+`
+
+type GetCommandReceiptParams struct {
+	TutorID        uuid.UUID
+	Operation      string
+	IdempotencyKey string
+}
+
+func (q *Queries) GetCommandReceipt(ctx context.Context, arg GetCommandReceiptParams) (CommandReceipt, error) {
+	row := q.db.QueryRow(ctx, getCommandReceipt, arg.TutorID, arg.Operation, arg.IdempotencyKey)
+	var i CommandReceipt
+	err := row.Scan(
+		&i.TutorID,
+		&i.Operation,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.PrimaryResourceID,
+		&i.RelatedResourceID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getOwnedClass = `-- name: GetOwnedClass :one
+SELECT class_id, tutor_id, name, color, rate_amount, currency,
+       rate_effective_from, created_at, updated_at, archived_at
+FROM classes
+WHERE tutor_id = $1
+  AND class_id = $2
+`
+
+type GetOwnedClassParams struct {
+	TutorID uuid.UUID
+	ClassID uuid.UUID
+}
+
+type GetOwnedClassRow struct {
+	ClassID           uuid.UUID
+	TutorID           uuid.UUID
+	Name              string
+	Color             string
+	RateAmount        int64
+	Currency          string
+	RateEffectiveFrom pgtype.Date
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	ArchivedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) GetOwnedClass(ctx context.Context, arg GetOwnedClassParams) (GetOwnedClassRow, error) {
+	row := q.db.QueryRow(ctx, getOwnedClass, arg.TutorID, arg.ClassID)
+	var i GetOwnedClassRow
+	err := row.Scan(
+		&i.ClassID,
+		&i.TutorID,
+		&i.Name,
+		&i.Color,
+		&i.RateAmount,
+		&i.Currency,
+		&i.RateEffectiveFrom,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const getOwnedSession = `-- name: GetOwnedSession :one
+SELECT session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+       schedule_rule_id, created_at, updated_at, cancelled_at
+FROM sessions
+WHERE tutor_id = $1
+  AND session_id = $2
+`
+
+type GetOwnedSessionParams struct {
+	TutorID   uuid.UUID
+	SessionID uuid.UUID
+}
+
+func (q *Queries) GetOwnedSession(ctx context.Context, arg GetOwnedSessionParams) (Session, error) {
+	row := q.db.QueryRow(ctx, getOwnedSession, arg.TutorID, arg.SessionID)
+	var i Session
+	err := row.Scan(
+		&i.SessionID,
+		&i.ClassID,
+		&i.TutorID,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.LocalDate,
+		&i.ScheduleRuleID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CancelledAt,
+	)
+	return i, err
+}
+
+const getOwnedStudent = `-- name: GetOwnedStudent :one
+SELECT student_id, tutor_id, name, phone, created_at, updated_at, removed_at
+FROM students
+WHERE tutor_id = $1
+  AND student_id = $2
+`
+
+type GetOwnedStudentParams struct {
+	TutorID   uuid.UUID
+	StudentID uuid.UUID
+}
+
+func (q *Queries) GetOwnedStudent(ctx context.Context, arg GetOwnedStudentParams) (Student, error) {
+	row := q.db.QueryRow(ctx, getOwnedStudent, arg.TutorID, arg.StudentID)
+	var i Student
+	err := row.Scan(
+		&i.StudentID,
+		&i.TutorID,
+		&i.Name,
+		&i.Phone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RemovedAt,
+	)
+	return i, err
+}
+
 const insertClass = `-- name: InsertClass :one
-INSERT INTO classes (class_id, tutor_id, name, rate_amount, currency, rate_effective_from)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING class_id, tutor_id, name, rate_amount, currency, rate_effective_from,
+INSERT INTO classes (class_id, tutor_id, name, color, rate_amount, currency, rate_effective_from)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING class_id, tutor_id, name, color, rate_amount, currency, rate_effective_from,
           created_at, updated_at, archived_at
 `
 
@@ -120,31 +302,126 @@ type InsertClassParams struct {
 	ClassID           uuid.UUID
 	TutorID           uuid.UUID
 	Name              string
+	Color             string
 	RateAmount        int64
 	Currency          string
 	RateEffectiveFrom pgtype.Date
 }
 
-func (q *Queries) InsertClass(ctx context.Context, arg InsertClassParams) (Class, error) {
+type InsertClassRow struct {
+	ClassID           uuid.UUID
+	TutorID           uuid.UUID
+	Name              string
+	Color             string
+	RateAmount        int64
+	Currency          string
+	RateEffectiveFrom pgtype.Date
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	ArchivedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) InsertClass(ctx context.Context, arg InsertClassParams) (InsertClassRow, error) {
 	row := q.db.QueryRow(ctx, insertClass,
 		arg.ClassID,
 		arg.TutorID,
 		arg.Name,
+		arg.Color,
 		arg.RateAmount,
 		arg.Currency,
 		arg.RateEffectiveFrom,
 	)
-	var i Class
+	var i InsertClassRow
 	err := row.Scan(
 		&i.ClassID,
 		&i.TutorID,
 		&i.Name,
+		&i.Color,
 		&i.RateAmount,
 		&i.Currency,
 		&i.RateEffectiveFrom,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const insertCommandReceipt = `-- name: InsertCommandReceipt :one
+INSERT INTO command_receipts (
+    tutor_id, operation, idempotency_key, request_hash,
+    primary_resource_id, related_resource_id
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (tutor_id, operation, idempotency_key) DO NOTHING
+RETURNING tutor_id, operation, idempotency_key, request_hash,
+          primary_resource_id, related_resource_id, created_at
+`
+
+type InsertCommandReceiptParams struct {
+	TutorID           uuid.UUID
+	Operation         string
+	IdempotencyKey    string
+	RequestHash       []byte
+	PrimaryResourceID uuid.UUID
+	RelatedResourceID pgtype.UUID
+}
+
+// The receipt is claimed before its business rows are inserted. A concurrent
+// loser receives no row, rolls back, then reads the committed winner.
+func (q *Queries) InsertCommandReceipt(ctx context.Context, arg InsertCommandReceiptParams) (CommandReceipt, error) {
+	row := q.db.QueryRow(ctx, insertCommandReceipt,
+		arg.TutorID,
+		arg.Operation,
+		arg.IdempotencyKey,
+		arg.RequestHash,
+		arg.PrimaryResourceID,
+		arg.RelatedResourceID,
+	)
+	var i CommandReceipt
+	err := row.Scan(
+		&i.TutorID,
+		&i.Operation,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.PrimaryResourceID,
+		&i.RelatedResourceID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertRosterPeriod = `-- name: InsertRosterPeriod :one
+INSERT INTO roster_periods (class_id, student_id, effective_from, tutor_id)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (class_id, student_id, effective_from) DO NOTHING
+RETURNING class_id, student_id, effective_from, tutor_id, effective_to,
+          created_at, updated_at
+`
+
+type InsertRosterPeriodParams struct {
+	ClassID       uuid.UUID
+	StudentID     uuid.UUID
+	EffectiveFrom pgtype.Date
+	TutorID       uuid.UUID
+}
+
+func (q *Queries) InsertRosterPeriod(ctx context.Context, arg InsertRosterPeriodParams) (RosterPeriod, error) {
+	row := q.db.QueryRow(ctx, insertRosterPeriod,
+		arg.ClassID,
+		arg.StudentID,
+		arg.EffectiveFrom,
+		arg.TutorID,
+	)
+	var i RosterPeriod
+	err := row.Scan(
+		&i.ClassID,
+		&i.StudentID,
+		&i.EffectiveFrom,
+		&i.TutorID,
+		&i.EffectiveTo,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -232,6 +509,145 @@ func (q *Queries) InsertStudent(ctx context.Context, arg InsertStudentParams) (S
 		&i.RemovedAt,
 	)
 	return i, err
+}
+
+const listHomeSessions = `-- name: ListHomeSessions :many
+SELECT s.session_id, s.class_id, c.name AS class_name, c.color AS class_color,
+       s.starts_at, s.ends_at, s.local_date
+FROM sessions s
+JOIN classes c
+  ON c.tutor_id = s.tutor_id
+ AND c.class_id = s.class_id
+WHERE s.tutor_id = $1
+  AND s.local_date = $2
+  AND s.cancelled_at IS NULL
+  AND c.archived_at IS NULL
+  AND (
+      NOT $3::boolean
+      OR (s.starts_at, s.session_id) >
+         ($4::timestamptz, $5::uuid)
+  )
+ORDER BY s.starts_at, s.session_id
+LIMIT $6
+`
+
+type ListHomeSessionsParams struct {
+	TutorID         uuid.UUID
+	LocalDate       pgtype.Date
+	HasCursor       bool
+	CursorStartsAt  time.Time
+	CursorSessionID uuid.UUID
+	PageSize        int32
+}
+
+type ListHomeSessionsRow struct {
+	SessionID  uuid.UUID
+	ClassID    uuid.UUID
+	ClassName  string
+	ClassColor string
+	StartsAt   time.Time
+	EndsAt     time.Time
+	LocalDate  pgtype.Date
+}
+
+// ListHomeSessions pages session rows before roster students are joined, so a
+// large roster cannot consume the 51 row page proof.
+func (q *Queries) ListHomeSessions(ctx context.Context, arg ListHomeSessionsParams) ([]ListHomeSessionsRow, error) {
+	rows, err := q.db.Query(ctx, listHomeSessions,
+		arg.TutorID,
+		arg.LocalDate,
+		arg.HasCursor,
+		arg.CursorStartsAt,
+		arg.CursorSessionID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListHomeSessionsRow{}
+	for rows.Next() {
+		var i ListHomeSessionsRow
+		if err := rows.Scan(
+			&i.SessionID,
+			&i.ClassID,
+			&i.ClassName,
+			&i.ClassColor,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.LocalDate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listHomeStudents = `-- name: ListHomeStudents :many
+SELECT rp.class_id, sess.session_id, st.student_id, st.name,
+       a.state AS attendance_state, a.marked_at
+FROM sessions sess
+JOIN roster_periods rp
+  ON rp.tutor_id = sess.tutor_id
+ AND rp.class_id = sess.class_id
+ AND rp.effective_from <= sess.local_date
+ AND (rp.effective_to IS NULL OR sess.local_date <= rp.effective_to)
+JOIN students st
+  ON st.tutor_id = rp.tutor_id
+ AND st.student_id = rp.student_id
+ AND st.removed_at IS NULL
+LEFT JOIN attendance a
+  ON a.tutor_id = sess.tutor_id
+ AND a.session_id = sess.session_id
+ AND a.student_id = st.student_id
+WHERE sess.tutor_id = $1
+  AND sess.session_id = ANY($2::uuid[])
+ORDER BY sess.starts_at, sess.session_id, st.name, st.student_id
+`
+
+type ListHomeStudentsParams struct {
+	TutorID    uuid.UUID
+	SessionIds []uuid.UUID
+}
+
+type ListHomeStudentsRow struct {
+	ClassID         uuid.UUID
+	SessionID       uuid.UUID
+	StudentID       uuid.UUID
+	Name            string
+	AttendanceState pgtype.Text
+	MarkedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) ListHomeStudents(ctx context.Context, arg ListHomeStudentsParams) ([]ListHomeStudentsRow, error) {
+	rows, err := q.db.Query(ctx, listHomeStudents, arg.TutorID, arg.SessionIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListHomeStudentsRow{}
+	for rows.Next() {
+		var i ListHomeStudentsRow
+		if err := rows.Scan(
+			&i.ClassID,
+			&i.SessionID,
+			&i.StudentID,
+			&i.Name,
+			&i.AttendanceState,
+			&i.MarkedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listRosterPeriods = `-- name: ListRosterPeriods :many

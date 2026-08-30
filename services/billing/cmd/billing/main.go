@@ -18,6 +18,8 @@ import (
 	"github.com/nguyen-duc-loc/vermouth/pkg/vermouth"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/nguyen-duc-loc/vermouth/services/billing/internal/consumer"
+	"github.com/nguyen-duc-loc/vermouth/services/billing/internal/handler"
 	billinghttp "github.com/nguyen-duc-loc/vermouth/services/billing/internal/http"
 )
 
@@ -31,6 +33,7 @@ func main() {
 	}
 }
 
+//nolint:funlen // Startup keeps every owned goroutine and its shared cancellation in one visible root.
 func run() error {
 	cfg, err := vermouth.LoadConfig(service, vermouth.TopicBilling)
 	if err != nil {
@@ -47,7 +50,13 @@ func run() error {
 	}
 	defer pool.Close()
 
-	err = vermouth.EnsureTopics(ctx, cfg.BrokerSeeds, cfg.TopicPartitions, cfg.PublishTopic)
+	err = vermouth.EnsureTopics(
+		ctx,
+		cfg.BrokerSeeds,
+		cfg.TopicPartitions,
+		cfg.PublishTopic,
+		vermouth.TopicTeaching,
+	)
 	if err != nil {
 		return err
 	}
@@ -57,6 +66,10 @@ func run() error {
 		return err
 	}
 	defer producer.Close()
+	verifier, err := vermouth.NewVerifier(cfg.PublicKeys)
+	if err != nil {
+		return err
+	}
 
 	health := vermouth.Health{
 		Service: cfg.Service,
@@ -66,13 +79,21 @@ func run() error {
 			"broker":   func(ctx context.Context) error { return producer.Ping(ctx) },
 		},
 	}
-	mux := billinghttp.Mux(billinghttp.Deps{Logger: logger, Health: health})
+	mux := billinghttp.Mux(billinghttp.Deps{
+		Projection: handler.NewProjectionReader(pool),
+		Verifier:   verifier,
+		Logger:     logger,
+		Health:     health,
+	})
 
 	relay := vermouth.NewRelay(pool, producer, logger, cfg.RelayInterval)
 
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.Go(func() error { return vermouth.Serve(groupCtx, logger, cfg.HTTPAddr, mux) })
 	group.Go(func() error { return relay.Run(groupCtx) })
+	group.Go(func() error {
+		return vermouth.RunConsumer(groupCtx, cfg, pool, logger, consumer.Teaching())
+	})
 	err = group.Wait()
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return err
