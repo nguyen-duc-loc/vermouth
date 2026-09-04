@@ -29,7 +29,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 13 | Tuition rate & monthly calculation | Slice 4 | planned |
 | 14 | Invoice PDF with payment QR | Slice 4 | planned |
 | 15 | Invoice list, share & mark paid | Slice 4 | planned |
-| 21 | Rate limit the auth endpoints | Slice 5 | in-progress |
+| 21 | Rate limit the auth endpoints | Slice 5 | done |
 | 16 | Cloud deployment for friend testing | Slice 5 | in-progress |
 | 17 | Daily schedule digest email | Slice 6 | planned |
 | 18 | Session documents | Slice 7 | planned |
@@ -175,7 +175,7 @@ See invoices by month and by student, open or download the PDF to send it yourse
 
 ## Slice 5: Friends can use it
 
-### 21. Rate limit the auth endpoints · in-progress · from spec 0004
+### 21. Rate limit the auth endpoints · done · from spec 0004
 Bound `start`, `callback` and `refresh` so nobody can spam the sign in path or grow `login_attempts` without limit. Spec 0004 leaves them unbounded on purpose, which is fine behind localhost and not fine once feature 16 gives them a public address, so this lands before that one ships.
 **Done when:** each protected auth endpoint refuses a caller past configured caller and global rates through its existing browser or API boundary, a flood cannot grow the pending login table without bound, and one evidence target exercises the limit.
 spec [0007](../specs/0007-auth-endpoint-rate-limits/index.md) · code in `gateway/{internal/ratelimit,internal/route,cmd/ratelimitevidence}`, `api/openapi.yaml`, `web/src/{api/session.ts,pages/SignInPage.tsx,routes.tsx}`, `deploy/helm/vermouth/`, and `test/authratelimit/`
