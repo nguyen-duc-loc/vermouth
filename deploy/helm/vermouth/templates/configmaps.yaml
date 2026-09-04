@@ -82,6 +82,14 @@ data:
   GATEWAY_TEACHING_URL: http://teaching:8082
   GATEWAY_BILLING_URL: http://billing:8083
   GATEWAY_NOTIFICATIONS_URL: http://notifications:8084
+  GATEWAY_TRUSTED_PROXY_CIDRS: {{ .Values.config.gatewayTrustedProxyCIDRs | quote }}
+  GATEWAY_AUTH_RATE_START_IP: {{ .Values.config.gatewayAuthRateStartIP | quote }}
+  GATEWAY_AUTH_RATE_START_GLOBAL: {{ .Values.config.gatewayAuthRateStartGlobal | quote }}
+  GATEWAY_AUTH_RATE_CALLBACK_IP: {{ .Values.config.gatewayAuthRateCallbackIP | quote }}
+  GATEWAY_AUTH_RATE_CALLBACK_GLOBAL: {{ .Values.config.gatewayAuthRateCallbackGlobal | quote }}
+  GATEWAY_AUTH_RATE_REFRESH_IP: {{ .Values.config.gatewayAuthRateRefreshIP | quote }}
+  GATEWAY_AUTH_RATE_REFRESH_TOKEN: {{ .Values.config.gatewayAuthRateRefreshToken | quote }}
+  GATEWAY_AUTH_RATE_REFRESH_GLOBAL: {{ .Values.config.gatewayAuthRateRefreshGlobal | quote }}
 ---
 apiVersion: v1
 kind: ConfigMap

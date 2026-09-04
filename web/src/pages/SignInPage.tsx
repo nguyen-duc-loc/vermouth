@@ -1,9 +1,15 @@
 import { useSearch } from '@tanstack/react-router'
 import { CalendarCheck, Check, ShieldCheck } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 import { runtimeConfig } from '../api/runtime'
-import { browserLanguage, googleSignInUrl, type SignInErrorCode } from '../api/session'
+import {
+  browserLanguage,
+  googleSignInUrl,
+  type SignInErrorCode,
+  sessionCoordinator,
+  useSession,
+} from '../api/session'
 import { ClassColorCard } from '../components/ClassColorCard'
 import { PageEntrance } from '../components/PageEntrance'
 import { Alert, AlertDescription } from '../components/ui/alert'
@@ -39,11 +45,26 @@ const refusals: Record<SignInErrorCode, { vi: string; en: string }> = {
     vi: 'Google không trả lời được lúc này. Hãy thử lại sau một phút.',
     en: 'Google could not answer just now. Try again in a minute.',
   },
+  rate_limited: {
+    vi: 'Có quá nhiều yêu cầu đăng nhập. Hãy chờ một lát rồi thử lại.',
+    en: 'Too many sign in requests. Wait a moment, then try again.',
+  },
 }
 
 const unavailable = {
   en: 'Google sign in is not configured for this local environment. Use task dev:token for the development thread.',
   vi: 'Đăng nhập Google chưa được cấu hình cho môi trường cục bộ này. Hãy dùng task dev:token để chạy luồng phát triển.',
+}
+
+const retryCopy = {
+  en: {
+    ready: 'Try again',
+    waiting: (seconds: number) => `Try again in ${seconds}s`,
+  },
+  vi: {
+    ready: 'Thử lại',
+    waiting: (seconds: number) => `Thử lại sau ${seconds} giây`,
+  },
 }
 
 function refusalSentence(code: unknown): string | null {
@@ -53,13 +74,48 @@ function refusalSentence(code: unknown): string | null {
 
 export function SignInPage() {
   const { error, redirect } = useSearch({ from: '/signin' })
-  const sentence = refusalSentence(error)
+  const session = useSession()
+  const language = browserLanguage()
+  const [retryAt, setRetryAt] = useState(session.rateLimitedUntil ?? 0)
+  const [now, setNow] = useState(Date.now())
+  const [retrying, setRetrying] = useState(false)
+  const bootRefreshLimited = session.rateLimitedUntil !== undefined
+  const sentence = refusalSentence(bootRefreshLimited ? 'rate_limited' : error)
   const googleEnabled = runtimeConfig().googleAuthEnabled
-  const unavailableMessage = unavailable[browserLanguage()]
+  const unavailableMessage = unavailable[language]
+  const secondsRemaining = Math.max(0, Math.ceil((retryAt - now) / 1_000))
+  const retryLabel =
+    secondsRemaining > 0 ? retryCopy[language].waiting(secondsRemaining) : retryCopy[language].ready
 
   useEffect(() => {
     document.title = 'Sign in · Vermouth'
   }, [])
+
+  useEffect(() => {
+    if (session.rateLimitedUntil === undefined) return
+    setRetryAt(session.rateLimitedUntil)
+    setNow(Date.now())
+  }, [session.rateLimitedUntil])
+
+  useEffect(() => {
+    if (retryAt <= Date.now()) return
+    const timer = window.setInterval(() => {
+      const current = Date.now()
+      setNow(current)
+      if (current >= retryAt) window.clearInterval(timer)
+    }, 250)
+    return () => window.clearInterval(timer)
+  }, [retryAt])
+
+  async function retryRefresh() {
+    if (Date.now() < retryAt) return
+    setRetrying(true)
+    try {
+      await sessionCoordinator.retry()
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -160,6 +216,31 @@ export function SignInPage() {
                   <Alert role="alert" variant="destructive">
                     <AlertDescription>{sentence}</AlertDescription>
                   </Alert>
+                )}
+
+                {bootRefreshLimited && (
+                  <div className="grid gap-2">
+                    <Button
+                      type="button"
+                      size="large"
+                      className="w-full"
+                      disabled={secondsRemaining > 0}
+                      loading={retrying}
+                      aria-describedby="refresh-retry-status"
+                      onClick={retryRefresh}
+                    >
+                      {retryLabel}
+                    </Button>
+                    <p
+                      id="refresh-retry-status"
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true"
+                      className="sr-only"
+                    >
+                      {retryLabel}
+                    </p>
+                  </div>
                 )}
 
                 {googleEnabled ? (

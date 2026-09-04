@@ -510,6 +510,19 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description Too many authentication requests reached an applicable budget */
+        RateLimited: {
+            headers: {
+                /** @description Whole seconds until every applicable rate budget can admit one request. */
+                "Retry-After": number;
+                /** @description Prevents a refusal from being stored by browsers or intermediaries. */
+                "Cache-Control": "no-store";
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
     parameters: {
         /** @description One browser generated UUID, retained until this create step succeeds. */
@@ -601,11 +614,16 @@ export interface operations {
         responses: {
             /**
              * @description Google's authorize URL, or /signin?error=provider_error when the
-             *     attempt could not be written.
+             *     attempt could not be written. A rate limited request instead uses
+             *     /signin?error=rate_limited and carries Retry-After plus no-store.
              */
             302: {
                 headers: {
                     Location: string;
+                    /** @description Whole seconds until every applicable rate budget can admit one request. */
+                    "Retry-After"?: number;
+                    /** @description Present as no-store on a rate limited redirect. */
+                    "Cache-Control"?: "no-store";
                     /** @description The short lived HttpOnly browser binding cookie. */
                     "Set-Cookie"?: string;
                     [name: string]: unknown;
@@ -641,11 +659,17 @@ export interface operations {
         responses: {
             /**
              * @description The app, or /signin?error=<code> with one of not_allowed,
-             *     email_conflict, cancelled, expired_state or provider_error.
+             *     email_conflict, cancelled, expired_state, provider_error or
+             *     rate_limited. A rate limited redirect carries Retry-After plus
+             *     no-store.
              */
             302: {
                 headers: {
                     Location: string;
+                    /** @description Whole seconds until every applicable rate budget can admit one request. */
+                    "Retry-After"?: number;
+                    /** @description Present as no-store on a rate limited redirect. */
+                    "Cache-Control"?: "no-store";
                     /**
                      * @description The browser binding clear, plus the rotating refresh token on
                      *     success. Both are HttpOnly and repeat their original paths.
@@ -705,6 +729,7 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
         };
     };
     signOut: {

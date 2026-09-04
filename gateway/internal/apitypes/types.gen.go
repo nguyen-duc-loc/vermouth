@@ -371,6 +371,9 @@ type Forbidden = Error
 // NotFound The one error shape at the gateway boundary (spec 0001).
 type NotFound = Error
 
+// RateLimited The one error shape at the gateway boundary (spec 0001).
+type RateLimited = Error
+
 // Unauthenticated The one error shape at the gateway boundary (spec 0001).
 type Unauthenticated = Error
 

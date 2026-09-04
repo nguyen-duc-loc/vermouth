@@ -1,6 +1,7 @@
 # 0007. Auth endpoint rate limits
 
 **Date**: 2026-08-25
+**Updated**: 2026-09-04
 **Status**: In Progress
 
 ## Summary
@@ -104,19 +105,28 @@ new database table or a new infrastructure service.
     `Try again` and `Try again in {n}s`. The Vietnamese labels are `Thử lại` and
     `Thử lại sau {n} giây`. The control is disabled before that instant. A polite live region reports
     whole seconds remaining. Reaching zero enables the control without moving focus.
-13. **AC-13**: `task test:auth-rate-limit` proves the exact policy parser, caller identity rules,
+13. **AC-13**: `task test:auth-rate-limit` runs the exact command sequence in **Launch evidence target** and proves the exact policy parser, caller identity rules,
     minute and hour refill, atomic multi bucket refusal, bounded registry, sampled logs, all three
     endpoint contracts, unchanged auth state on refusal, and the global bound on pending login
     attempts. The target runs without a real Google exchange and is suitable for the schema version
-    1 evidence required by spec 0006. It also uses Node's built in test runner against the pure
+    1 evidence required by spec 0006. It also uses the existing Vitest suite against the pure
     browser refresh outcome and retry state, so no new web test library is required.
-14. **AC-14**: After all tests pass, `task test:auth-rate-limit` writes
-    `.tmp/rate-limit-evidence.json` with exactly `schema_version`, `git_sha`, `test_target`,
-    `threshold_configuration_sha256`, `pass_state`, and `timestamp`. Values are `1`, the exact 40
-    character lowercase Git SHA, `task test:auth-rate-limit`, the canonical threshold hash,
-    `passed`, and a UTC RFC 3339 instant. The hash input is the seven rate environment names sorted
-    bytewise, each followed by `=`, its normalized minute first and hour second value with no spaces,
-    and `\n`. Trusted proxy CIDRs are not part of this threshold hash. A failed test writes no passing
+14. **AC-14**: Before its first check, `task test:auth-rate-limit` removes
+    `.tmp/production/rate-limit-evidence.json`. After all tests pass, it invokes
+    `gateway/cmd/ratelimitevidence write <repository-root> <evidence-path>`, which reuses the gateway policy parser and atomically writes the
+    file with exactly `schema_version`, `git_sha`, `test_target`,
+    `threshold_configuration_sha256`, `pass`, and `timestamp`. Values are `1`, the exact 40
+    character lowercase Git SHA from `git rev-parse --verify HEAD^{commit}`,
+    `task test:auth-rate-limit`, the canonical threshold hash, boolean `true`, and a UTC RFC 3339
+    instant with whole seconds and `Z`. The hash input is the seven rate environment names sorted
+    bytewise, each followed by `=`, its parser normalized minute first and hour second value with no
+    spaces, and `\n`. Trusted proxy CIDRs are not part of this threshold hash. The file uses
+    canonical UTF8 JSON with lexical object keys, no insignificant whitespace, and one trailing line
+    feed. It rejects any tracked change or untracked file in the clean input set named under
+    **Launch evidence target**. The writer uses a unique temporary regular file in the same
+    directory, mode `0644`, file and directory sync where supported, and `os.Rename`. It rejects a
+    symlink or nonregular destination and removes its temporary file on failure. The timestamp is
+    metadata only and never creates a freshness window. A failed test or writer leaves no passing
     evidence.
 
 ## Decision
@@ -126,6 +136,13 @@ new database table or a new infrastructure service.
 The gateway enforces caller and global budgets with paired `golang.org/x/time/rate` token buckets,
 a bounded synchronized registry, and trusted proxy aware client address parsing. Identity, Postgres,
 Google, and the edge proxy products gain no rate state.
+
+The launch evidence has one schema owner, one producer, one verifier, and one working path. Spec
+0007 owns `deploy/production/rate-limit-evidence.schema.json` and
+`gateway/cmd/ratelimitevidence`. `task test:auth-rate-limit` invokes the command's `write` mode only
+after every named check passes. Spec 0006 invokes its `verify` mode against candidate production
+values, then consumes the exact `.tmp/production/rate-limit-evidence.json` bytes without a copy or
+field translation.
 
 **Implementation skills**: `golang-security` (`samber/cc-skills-golang`, `.agents/skills/golang-security/`) · `golang-concurrency` (`samber/cc-skills-golang`, `.agents/skills/golang-concurrency/`) · `golang-observability` (`samber/cc-skills-golang`, `.agents/skills/golang-observability/`) · `golang-testing` (`samber/cc-skills-golang`, `.agents/skills/golang-testing/`) · `golang-error-handling` (`samber/cc-skills-golang`, `.agents/skills/golang-error-handling/`) · `openapi` (`oakoss/agent-skills`, `.agents/skills/openapi/`) · `tailwindcss-accessibility` (`josiahsiegel/claude-plugin-marketplace`, `.agents/skills/tailwindcss-accessibility/`) · `tanstack-router-best-practices` (`deckardger/tanstack-agent-skills`, `.agents/skills/tanstack-router-best-practices/`)
 
@@ -145,6 +162,7 @@ There is no migration and no durable rate state.
 | Caller entry | `endpoint + key_type + key_digest` | minute limiter, hour limiter, `last_seen` | Belongs to the registry. Expires after two idle hours or leaves first at capacity. |
 | Global entry | One fixed key per endpoint | minute limiter, hour limiter | One each for `start`, `callback`, and `refresh`. Never evicted. |
 | Existing login attempt | Existing random `state` primary key | Existing fields from spec 0004 | Created only after every `start` budget admits the request. Existing expiry and sweep remain unchanged. |
+| Rate limit launch evidence | One file at `.tmp/production/rate-limit-evidence.json` | schema version, Git SHA, test target, threshold SHA256, boolean pass state, timestamp | Removed before testing, written atomically after success, then consumed unchanged by spec 0006. |
 
 The registry uses one `sync.Mutex` because one request must inspect and spend from several limiters
 as one decision. The critical section performs only address lookup, token inspection, `AllowN`, and
@@ -162,6 +180,8 @@ most once per minute on the next request.
    values are at least one, `AllowN(now, 1)` commits them together. Otherwise no `AllowN` call runs.
 4. A denial log scope moves from ready to sampled for one minute. Denials during that minute increase
    a suppressed count. The next denial after the interval reports that count and begins a new one.
+5. Launch evidence moves from absent to present only after every check passes. The target removes an
+   old file before testing. Any failure keeps it absent.
 
 ### API surface
 
@@ -201,7 +221,12 @@ into local countdown state. The manual action calls `refresh` again no earlier t
 | Show browser wait | alert language and retry time | The `rate_limited` outcome, `browserLanguage()`, and `retry_at` |
 | Sample a denial log | endpoint, scope, suppressed count, `request_id` | Fixed endpoint and scope enums, sampler state, existing request context |
 | Bound pending attempts | maximum admitted start rate | `GATEWAY_AUTH_RATE_START_GLOBAL` plus spec 0004's ten minute expiry and sweep |
-| Build threshold evidence hash | 64 lowercase hexadecimal characters | SHA256 over the seven canonical sorted `NAME=value\n` lines defined by **AC-14** |
+| Build threshold evidence hash | 64 lowercase hexadecimal characters | `gateway/cmd/ratelimitevidence` asks the gateway policy parser for the seven normalized values, then hashes the canonical sorted `NAME=value\n` lines defined by **AC-14** |
+| Build launch evidence identity | Git SHA and test target | `git rev-parse --verify HEAD^{commit}` plus fixed string `task test:auth-rate-limit` |
+| Build launch evidence result | boolean pass state and timestamp | fixed `true` emitted only after every target check passes, plus the runner UTC clock at whole seconds |
+| Store launch evidence | canonical file path and bytes | `gateway/cmd/ratelimitevidence write` targeting `.tmp/production/rate-limit-evidence.json` |
+| Verify candidate threshold hash | expected 64 character SHA256 | the same command's `verify` mode over the seven candidate values read from `deploy/helm/vermouth/values-production.yaml` |
+| Verify evidence freshness | clean inputs, Git identity, threshold hash, target, schema, canonical bytes, pass state | current checkout and candidate production values; timestamp is metadata only |
 
 Production uses `time.Now`. The limiter receives a clock function so unit tests advance time without
 sleeping. The registry clamps any value before `last_now` to `last_now`, then stores the clamped
@@ -228,6 +253,9 @@ cannot reset either bound. An operator controlled gateway restart begins a new b
    gateway without revisiting this decision multiplies every effective budget.
 9. Global refusal creates no caller entry, changes no caller least recently used position, and cannot
    be used to churn the caller registry.
+10. There is no second rate limit evidence path, copy step, alternate success field, writer, or
+    canonical encoder.
+11. Evidence cannot name a Git commit while testing different tracked or untracked rate limit input.
 
 ### Security model
 
@@ -264,6 +292,64 @@ with the NetworkPolicy that admits gateway ingress from the Envoy or Traefik edg
 Pod. `task prod:doctor` confirms the live cluster pod CIDR is exactly `10.42.0.0/16`; a mismatch
 blocks deployment rather than widening trust.
 
+### Launch evidence target
+
+`task test:auth-rate-limit` reads the seven `config.gatewayAuthRate*` values from
+`deploy/helm/vermouth/values-production.yaml`, maps them to their exact `GATEWAY_AUTH_RATE_*`
+environment names, creates `.tmp/production` when absent, and removes only
+`.tmp/production/rate-limit-evidence.json`. It then runs these commands in order. Any nonzero result
+stops the target and leaves the evidence absent.
+
+| Check | Exact command | Coverage |
+|---|---|---|
+| Development environment | `task env` | local database connection values for the isolated test stack |
+| Local infrastructure | `task infra:up` | ready Postgres and Redpanda dependencies |
+| Candidate migrations | `task migrate:up` | current identity schema and pending attempt storage |
+| Unit and route behavior | `go test ./gateway/internal/ratelimit ./gateway/internal/route` | parser, caller identity, refill, atomic decisions, bounds, logs, and endpoint contracts |
+| Concurrency | `go test -race ./gateway/internal/ratelimit ./gateway/internal/route` | registry and sampler race safety |
+| Gateway to identity | `go test ./test/authratelimit` | refusal before forwarding, unchanged auth state, pending attempt bound, and dummy Google path |
+| Gateway API generation | `task generate:api` | Go contract generation from OpenAPI |
+| Browser API generation | `task web:generate` | browser contract generation from OpenAPI |
+| Generated contract cleanliness | `git diff --exit-code -- gateway/internal/apitypes/types.gen.go web/src/api/schema.d.ts` | committed generated types match the contract |
+| Browser dependencies | `corepack pnpm install --frozen-lockfile` | exact lockfile dependency set for browser checks |
+| Browser behavior | `corepack pnpm --dir web exec vitest run src/api/session.test.ts src/pages/SignInPage.test.tsx src/routes.test.tsx` | refresh outcome, alert, countdown, retry, and route validation |
+| Browser types | `task web:typecheck` | strict generated and application type agreement |
+
+Only after all twelve checks pass, the target runs
+`go run ./gateway/cmd/ratelimitevidence write <repository-root> .tmp/production/rate-limit-evidence.json`.
+The command derives `git_sha`, normalizes and hashes the exported policy values, writes boolean
+`pass: true`, and captures the runner UTC timestamp. The target then runs
+`go run ./pkg/vermouth/cmd/platformconfig validate-document deploy/production/rate-limit-evidence.schema.json .tmp/production/rate-limit-evidence.json`
+and `go run ./gateway/cmd/ratelimitevidence verify <repository-root> .tmp/production/rate-limit-evidence.json`.
+If either validation fails, the target removes the exact evidence file before returning failure.
+
+The production value mapping is fixed:
+
+| Helm value | Gateway environment |
+|---|---|
+| `config.gatewayAuthRateStartIP` | `GATEWAY_AUTH_RATE_START_IP` |
+| `config.gatewayAuthRateStartGlobal` | `GATEWAY_AUTH_RATE_START_GLOBAL` |
+| `config.gatewayAuthRateCallbackIP` | `GATEWAY_AUTH_RATE_CALLBACK_IP` |
+| `config.gatewayAuthRateCallbackGlobal` | `GATEWAY_AUTH_RATE_CALLBACK_GLOBAL` |
+| `config.gatewayAuthRateRefreshIP` | `GATEWAY_AUTH_RATE_REFRESH_IP` |
+| `config.gatewayAuthRateRefreshToken` | `GATEWAY_AUTH_RATE_REFRESH_TOKEN` |
+| `config.gatewayAuthRateRefreshGlobal` | `GATEWAY_AUTH_RATE_REFRESH_GLOBAL` |
+
+The separate trusted proxy mapping is `config.gatewayTrustedProxyCIDRs` to
+`GATEWAY_TRUSTED_PROXY_CIDRS`. It is not hashed into threshold evidence. Spec 0006 validates it as a
+separate production launch input.
+
+Both `write` and `verify` reject a dirty clean input set. That set is `api/openapi.yaml`,
+`api/oapi-codegen.yaml`, `gateway/`, `web/src/api/`, `web/src/pages/SignInPage.tsx`,
+`web/src/pages/SignInPage.test.tsx`, `web/src/routes.tsx`, `web/src/routes.test.tsx`,
+`web/package.json`, root `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `Taskfile.yml`,
+`.env.example`, `deploy/helm/vermouth/`,
+`deploy/production/rate-limit-evidence.schema.json`, and `test/authratelimit/`. The evidence output
+is outside this set. The verifier rejects a symlink or nonregular document, validates its schema and
+field derivations, reserializes it with the writer's canonical encoder, and byte compares the result
+with the original file. Spec 0006 supplies the candidate production values and bundles the original
+bytes only after verification succeeds.
+
 ### Critical test scenarios
 
 1. Happy path: one request below every applicable budget crosses the gateway and receives the
@@ -292,8 +378,12 @@ blocks deployment rather than widening trust.
 10. Global pressure: an empty global bucket plus 10,001 rotating caller values creates no caller
     entries, while controlled time proves the 583 live and 666 physical pending attempt bounds,
     verifies **AC-5**, **AC-8**.
-11. Evidence: passing tests produce the exact canonical threshold hash and schema version 1 file,
-    while one forced failure produces no passing file, verifies **AC-13**, **AC-14**.
+11. Evidence: the exact twelve commands pass before the writer produces the canonical threshold hash and schema version 1 file at
+    `.tmp/production/rate-limit-evidence.json`. The deployment schema accepts boolean `pass: true`
+    and rejects `pass_state`, the old path, stale Git identity, noncanonical bytes, and a changed
+    threshold. Verification recomputes the expected hash from candidate production Helm values and
+    byte compares canonical encoding. One forced failure leaves no passing file. A timestamp change
+    alone does not make otherwise matching evidence stale, verifies **AC-13**, **AC-14**.
 
 ## Build plan
 
@@ -319,13 +409,17 @@ refresh, then add pressure and browser depth.
    `RefreshOutcome`, keep its session view, and expose one announced manual retry after
    `Retry-After`. Document optional `Retry-After` and `Cache-Control` headers on the shared `302`,
    add a reusable `RateLimited` response for refresh, and test the pure refresh outcome plus retry
-   countdown with Node's built in test runner. Run the web type check and build, satisfies **AC-4**,
+   countdown with the existing Vitest suite. Run the web type check and build, satisfies **AC-4**,
    **AC-11**, **AC-12**, **AC-13**.
 5. Add `task test:auth-rate-limit` with controlled clock unit coverage, a race run for gateway, a
    real Postgres and gateway integration path using a local dummy Google configuration, the global
-   pending attempt bounds, sampled multi scope logs, the Node browser state test, and exact schema
-   version 1 evidence generation under `.tmp/`, satisfies **AC-3**, **AC-5**, **AC-6**, **AC-7**,
-   **AC-8**, **AC-10**, **AC-13**, **AC-14**.
+   pending attempt bounds, sampled multi scope logs, and the Vitest browser state checks. Remove stale
+   `.tmp/production/rate-limit-evidence.json` before testing. Add
+   `gateway/cmd/ratelimitevidence` with exact `write` and `verify` modes, reuse the production policy
+   parser, reject dirty named inputs, and atomically write exact schema version 1 evidence only after
+   every named command passes. Own `deploy/production/rate-limit-evidence.schema.json`, validate and
+   canonically byte compare the same file, and treat timestamp as metadata only, satisfies **AC-3**, **AC-5**, **AC-6**,
+   **AC-7**, **AC-8**, **AC-10**, **AC-13**, **AC-14**.
 
 ## Consequences
 
@@ -348,6 +442,9 @@ refresh, then add pressure and browser depth.
    every auth detail opaquely.
 5. Seven policy values plus one trusted proxy value add deployment configuration that must stay in
    step across local and production environments.
+6. The feature writes one production named temporary artifact even when its target runs outside the
+   deployment workflow. That shared path is deliberate because it removes a copy and translation
+   boundary from the public launch decision.
 
 **Neutral**:
 

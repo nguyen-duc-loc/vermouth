@@ -15,7 +15,7 @@ vi.mock('./api/session', () => ({
   cleanRedirect: (value: unknown) =>
     typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') ? value : '/',
   cleanSignInError: (value: unknown) =>
-    value === 'cancelled' ? ('cancelled' as const) : undefined,
+    value === 'cancelled' || value === 'rate_limited' ? value : undefined,
   sessionCoordinator: session,
   useSession: () => ({ status: auth.status }),
 }))
@@ -55,6 +55,10 @@ describe('route tree', () => {
       }),
     ).toEqual({ error: 'cancelled', redirect: '/thread?day=today' })
     expect(routes['/signin']?.options.validateSearch?.({ error: 42 })).toEqual({ redirect: '/' })
+    expect(routes['/signin']?.options.validateSearch?.({ error: 'rate_limited' })).toEqual({
+      error: 'rate_limited',
+      redirect: '/',
+    })
   })
 
   it('waits for session checking and closes the application route when anonymous', async () => {

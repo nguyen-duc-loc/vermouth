@@ -94,12 +94,25 @@ paths:
         "302":
           description: |
             Google's authorize URL, or /signin?error=provider_error when the
-            attempt could not be written.
+            attempt could not be written. A rate limited request instead uses
+            /signin?error=rate_limited and carries Retry-After plus no-store.
           headers:
             Location:
               required: true
               schema:
                 type: string
+            Retry-After:
+              description: Whole seconds until every applicable rate budget can admit one request.
+              required: false
+              schema:
+                type: integer
+                minimum: 1
+            Cache-Control:
+              description: Present as no-store on a rate limited redirect.
+              required: false
+              schema:
+                type: string
+                const: no-store
             Set-Cookie:
               description: The short lived HttpOnly browser binding cookie.
               schema:
@@ -147,12 +160,26 @@ paths:
         "302":
           description: |
             The app, or /signin?error=<code> with one of not_allowed,
-            email_conflict, cancelled, expired_state or provider_error.
+            email_conflict, cancelled, expired_state, provider_error or
+            rate_limited. A rate limited redirect carries Retry-After plus
+            no-store.
           headers:
             Location:
               required: true
               schema:
                 type: string
+            Retry-After:
+              description: Whole seconds until every applicable rate budget can admit one request.
+              required: false
+              schema:
+                type: integer
+                minimum: 1
+            Cache-Control:
+              description: Present as no-store on a rate limited redirect.
+              required: false
+              schema:
+                type: string
+                const: no-store
             Set-Cookie:
               description: |
                 The browser binding clear, plus the rotating refresh token on
@@ -211,6 +238,8 @@ paths:
                 $ref: "#/components/schemas/Error"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /api/auth/signout:
     post:
@@ -499,6 +528,25 @@ components:
             $ref: "#/components/schemas/Error"
     BadGateway:
       description: A required service did not answer successfully
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Too many authentication requests reached an applicable budget
+      headers:
+        Retry-After:
+          required: true
+          description: Whole seconds until every applicable rate budget can admit one request.
+          schema:
+            type: integer
+            minimum: 1
+        Cache-Control:
+          required: true
+          description: Prevents a refusal from being stored by browsers or intermediaries.
+          schema:
+            type: string
+            const: no-store
       content:
         application/json:
           schema:

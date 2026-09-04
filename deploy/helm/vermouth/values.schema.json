@@ -96,7 +96,7 @@
     "config": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["environment", "apiBasePath", "googleAuthEnabled"],
+      "required": ["environment", "apiBasePath", "gatewayTrustedProxyCIDRs", "gatewayAuthRateStartIP", "gatewayAuthRateStartGlobal", "gatewayAuthRateCallbackIP", "gatewayAuthRateCallbackGlobal", "gatewayAuthRateRefreshIP", "gatewayAuthRateRefreshToken", "gatewayAuthRateRefreshGlobal", "googleAuthEnabled"],
       "properties": {
         "environment": { "const": "local" },
         "apiBasePath": { "const": "/api" },
@@ -106,6 +106,14 @@
         "relayInterval": { "type": "string" },
         "consumerRetryMax": { "type": "string" },
         "consumerRetryBaseDelay": { "type": "string" },
+        "gatewayTrustedProxyCIDRs": { "type": "string", "minLength": 1 },
+        "gatewayAuthRateStartIP": { "$ref": "#/definitions/authRate" },
+        "gatewayAuthRateStartGlobal": { "$ref": "#/definitions/authRate" },
+        "gatewayAuthRateCallbackIP": { "$ref": "#/definitions/authRate" },
+        "gatewayAuthRateCallbackGlobal": { "$ref": "#/definitions/authRate" },
+        "gatewayAuthRateRefreshIP": { "$ref": "#/definitions/authRate" },
+        "gatewayAuthRateRefreshToken": { "$ref": "#/definitions/authRate" },
+        "gatewayAuthRateRefreshGlobal": { "$ref": "#/definitions/authRate" },
         "googleAuthEnabled": { "type": "boolean" },
         "identityAppURL": { "type": "string" },
         "identityGoogleRedirectURL": { "type": "string" },
@@ -137,6 +145,10 @@
     }
   },
   "definitions": {
+    "authRate": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*/1m,[1-9][0-9]*/1h$"
+    },
     "gate": {
       "type": "object",
       "additionalProperties": false,

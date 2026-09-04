@@ -10,8 +10,8 @@ vi.mock('./client', () => ({
   setAccessToken: client.setAccessToken,
 }))
 
-function response(status: number): Response {
-  return new Response(null, { status })
+function response(status: number, headers?: HeadersInit): Response {
+  return new Response(null, { status, headers })
 }
 
 function session(expiresInMs = 120_000) {
@@ -37,7 +37,7 @@ afterEach(() => {
 
 describe('session input cleaning', () => {
   // covers: AC-16
-  it('keeps only the five known sign in errors', async () => {
+  it('keeps only the known sign in errors', async () => {
     const { cleanSignInError } = await import('./session')
 
     for (const known of [
@@ -46,6 +46,7 @@ describe('session input cleaning', () => {
       'cancelled',
       'expired_state',
       'provider_error',
+      'rate_limited',
     ]) {
       expect(cleanSignInError(known)).toBe(known)
     }
@@ -117,7 +118,10 @@ describe('session coordinator', () => {
     expect(first).toBe(second)
     expect(client.post).toHaveBeenCalledTimes(1)
     resolveRefresh?.({ data: session(), response: response(200) })
-    await expect(first).resolves.toMatchObject({ access_token: 'access-token' })
+    await expect(first).resolves.toMatchObject({
+      status: 'signed_in',
+      session: { access_token: 'access-token' },
+    })
     expect(client.setAccessToken).toHaveBeenCalledWith('access-token')
     expect(sessionCoordinator.getSnapshot()).toEqual({ status: 'authenticated' })
   })
@@ -194,7 +198,7 @@ describe('session coordinator', () => {
     client.post.mockResolvedValue({ response: response(401) })
     const { sessionCoordinator } = await import('./session')
 
-    await expect(sessionCoordinator.start()).resolves.toBeNull()
+    await expect(sessionCoordinator.start()).resolves.toEqual({ status: 'signed_out' })
 
     expect(client.setAccessToken).toHaveBeenLastCalledWith(null)
     expect(sessionCoordinator.getSnapshot()).toEqual({ status: 'anonymous' })
@@ -205,10 +209,77 @@ describe('session coordinator', () => {
     client.post.mockRejectedValue(new Error('network unavailable'))
     const { sessionCoordinator } = await import('./session')
 
-    await expect(sessionCoordinator.start()).resolves.toBeNull()
+    await expect(sessionCoordinator.start()).resolves.toEqual({ status: 'signed_out' })
 
     expect(client.setAccessToken).toHaveBeenLastCalledWith(null)
     expect(sessionCoordinator.getSnapshot()).toMatchObject({ status: 'unavailable' })
+  })
+
+  // covers: AC-12
+  it('keeps auth memory unchanged and waits for manual retry after a limited boot refresh', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-04T08:00:00Z'))
+    client.post
+      .mockResolvedValueOnce({ response: response(429, { 'Retry-After': '3' }) })
+      .mockResolvedValueOnce({ data: session(), response: response(200) })
+    const { sessionCoordinator } = await import('./session')
+
+    await expect(sessionCoordinator.start()).resolves.toEqual({
+      status: 'rate_limited',
+      retry_at: Date.parse('2026-09-04T08:00:03Z'),
+    })
+    expect(client.setAccessToken).not.toHaveBeenCalled()
+    expect(sessionCoordinator.getSnapshot()).toEqual({
+      status: 'anonymous',
+      rateLimitedUntil: Date.parse('2026-09-04T08:00:03Z'),
+    })
+
+    await sessionCoordinator.retry()
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(client.post).toHaveBeenCalledTimes(1)
+
+    await sessionCoordinator.retry()
+    expect(client.post).toHaveBeenCalledTimes(2)
+    expect(sessionCoordinator.getSnapshot()).toEqual({ status: 'authenticated' })
+  })
+
+  // covers: AC-12
+  it('preserves a current access token when renewal is rate limited', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-04T08:00:00Z'))
+    client.post
+      .mockResolvedValueOnce({ data: session(120_000), response: response(200) })
+      .mockResolvedValueOnce({ response: response(429, { 'Retry-After': '30' }) })
+    const { sessionCoordinator } = await import('./session')
+
+    await sessionCoordinator.refresh()
+    await sessionCoordinator.refresh()
+
+    expect(client.setAccessToken).toHaveBeenCalledTimes(1)
+    expect(client.setAccessToken).toHaveBeenCalledWith('access-token')
+    expect(sessionCoordinator.getSnapshot()).toEqual({
+      status: 'authenticated',
+      rateLimitedUntil: Date.parse('2026-09-04T08:00:30Z'),
+    })
+  })
+
+  // covers: AC-12
+  it('does not automatically retry a limited renewal', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-04T08:00:00Z'))
+    client.post
+      .mockResolvedValueOnce({ data: session(120_000), response: response(200) })
+      .mockResolvedValueOnce({ response: response(429, { 'Retry-After': '30' }) })
+      .mockResolvedValueOnce({ data: session(120_000), response: response(200) })
+    const { sessionCoordinator } = await import('./session')
+
+    await sessionCoordinator.refresh()
+    await sessionCoordinator.refresh()
+
+    expect(vi.getTimerCount()).toBe(0)
+    await vi.advanceTimersByTimeAsync(120_000)
+
+    expect(client.post).toHaveBeenCalledTimes(2)
   })
 
   // covers: AC-3

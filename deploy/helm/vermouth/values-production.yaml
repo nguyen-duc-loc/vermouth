@@ -1,0 +1,9 @@
+config:
+  gatewayTrustedProxyCIDRs: 10.42.0.0/16
+  gatewayAuthRateStartIP: 5/1m,20/1h
+  gatewayAuthRateStartGlobal: 100/1m,500/1h
+  gatewayAuthRateCallbackIP: 10/1m,60/1h
+  gatewayAuthRateCallbackGlobal: 200/1m,1000/1h
+  gatewayAuthRateRefreshIP: 30/1m,120/1h
+  gatewayAuthRateRefreshToken: 10/1m,120/1h
+  gatewayAuthRateRefreshGlobal: 300/1m,3000/1h

@@ -6,13 +6,20 @@ import type { components } from './schema'
 /** What a refresh answers with. The refresh token itself is never in a body. */
 export type Session = components['schemas']['Session']
 
-/** The five reasons the sign in screen has a sentence for (spec 0004). */
+/** The fixed refusal reasons the sign in screen is allowed to display. */
 export type SignInErrorCode =
   | 'not_allowed'
   | 'email_conflict'
   | 'cancelled'
   | 'expired_state'
   | 'provider_error'
+  | 'rate_limited'
+
+/** The three typed outcomes of exchanging the refresh cookie. */
+export type RefreshOutcome =
+  | { status: 'signed_in'; session: Session }
+  | { status: 'signed_out' }
+  | { status: 'rate_limited'; retry_at: number }
 
 /** The browser states that decide whether protected content may render. */
 export type SessionStatus = 'checking' | 'authenticated' | 'anonymous' | 'unavailable'
@@ -21,6 +28,7 @@ export type SessionStatus = 'checking' | 'authenticated' | 'anonymous' | 'unavai
 export type SessionSnapshot = {
   status: SessionStatus
   message?: string
+  rateLimitedUntil?: number
 }
 
 type ProtectedResult<T> = {
@@ -42,6 +50,7 @@ const knownSignInErrors = new Set<SignInErrorCode>([
   'cancelled',
   'expired_state',
   'provider_error',
+  'rate_limited',
 ])
 
 function isSignInErrorCode(value: unknown): value is SignInErrorCode {
@@ -124,7 +133,7 @@ export function browserLanguage(): 'vi' | 'en' {
 class SessionCoordinator {
   private snapshot: SessionSnapshot = { status: 'checking' }
   private readonly listeners = new Set<() => void>()
-  private refreshPromise: Promise<Session | null> | null = null
+  private refreshPromise: Promise<RefreshOutcome> | null = null
   private accessExpiresAt = 0
   private renewalTimer: number | undefined
   private retryTimer: number | undefined
@@ -132,6 +141,7 @@ class SessionCoordinator {
   private visibilityStarted = false
   private retryAction: (() => Promise<void>) | undefined
   private memoryGeneration = 0
+  private rateLimitedUntil: number | undefined
 
   readonly subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener)
@@ -140,7 +150,7 @@ class SessionCoordinator {
 
   readonly getSnapshot = (): SessionSnapshot => this.snapshot
 
-  start(): Promise<Session | null> {
+  start(): Promise<RefreshOutcome> {
     if (!this.visibilityStarted) {
       document.addEventListener('visibilitychange', this.onVisibilityChange)
       this.visibilityStarted = true
@@ -155,8 +165,11 @@ class SessionCoordinator {
     return this.snapshot
   }
 
-  refresh(): Promise<Session | null> {
+  refresh(): Promise<RefreshOutcome> {
     if (this.refreshPromise) return this.refreshPromise
+    if (this.rateLimitedUntil !== undefined && Date.now() < this.rateLimitedUntil) {
+      return Promise.resolve({ status: 'rate_limited', retry_at: this.rateLimitedUntil })
+    }
     const promise = this.performRefresh().finally(() => {
       if (this.refreshPromise === promise) this.refreshPromise = null
     })
@@ -196,27 +209,34 @@ class SessionCoordinator {
     this.update({ status: 'anonymous' })
   }
 
-  private async performRefresh(): Promise<Session | null> {
+  private async performRefresh(): Promise<RefreshOutcome> {
     const memoryGeneration = this.memoryGeneration
     const hadValidAccess = this.hasValidAccess()
-    this.update({ status: 'checking' })
+    this.update({ status: 'checking', rateLimitedUntil: this.rateLimitedUntil })
     try {
       const result = await api.POST('/api/auth/refresh', {})
-      if (memoryGeneration !== this.memoryGeneration) return null
+      if (memoryGeneration !== this.memoryGeneration) return { status: 'signed_out' }
       if (result.data) {
         this.accept(result.data)
-        return result.data
+        return { status: 'signed_in', session: result.data }
       }
       if (result.response.status === 401) {
         this.refuse()
-        return null
+        return { status: 'signed_out' }
+      }
+      if (result.response.status === 429) {
+        const retryAt = retryInstant(result.response)
+        if (retryAt !== undefined) {
+          this.handleRateLimit(hadValidAccess, retryAt)
+          return { status: 'rate_limited', retry_at: retryAt }
+        }
       }
     } catch {
       // The transient failure path below decides whether the old token survives.
     }
-    if (memoryGeneration !== this.memoryGeneration) return null
+    if (memoryGeneration !== this.memoryGeneration) return { status: 'signed_out' }
     this.handleRefreshFailure(hadValidAccess)
-    return null
+    return { status: 'signed_out' }
   }
 
   private accept(session: Session): void {
@@ -231,6 +251,7 @@ class SessionCoordinator {
     this.accessExpiresAt = expiresAt
     this.retryDelay = firstRetryMs
     this.retryAction = undefined
+    this.rateLimitedUntil = undefined
     this.clearRetryTimer()
     this.scheduleRenewal()
     this.update({ status: 'authenticated' })
@@ -247,6 +268,18 @@ class SessionCoordinator {
     this.clearMemory()
     this.retryAction = () => this.refresh().then(() => undefined)
     this.update({ status: 'unavailable', message: unavailableMessage })
+  }
+
+  private handleRateLimit(hadValidAccess: boolean, retryAt: number): void {
+    this.rateLimitedUntil = retryAt
+    this.retryAction = undefined
+    if (this.renewalTimer !== undefined) window.clearTimeout(this.renewalTimer)
+    this.renewalTimer = undefined
+    this.clearRetryTimer()
+    this.update({
+      status: hadValidAccess && this.hasValidAccess() ? 'authenticated' : 'anonymous',
+      rateLimitedUntil: retryAt,
+    })
   }
 
   private scheduleRenewal(): void {
@@ -272,6 +305,7 @@ class SessionCoordinator {
     this.memoryGeneration += 1
     setAccessToken(null)
     this.accessExpiresAt = 0
+    this.rateLimitedUntil = undefined
     if (this.renewalTimer !== undefined) window.clearTimeout(this.renewalTimer)
     this.renewalTimer = undefined
     this.clearRetryTimer()
@@ -291,6 +325,14 @@ class SessionCoordinator {
 /** The one session authority shared by routes, requests, and visible states. */
 export const sessionCoordinator = new SessionCoordinator()
 
+function retryInstant(response: Response): number | undefined {
+  const raw = response.headers.get('Retry-After')
+  if (raw === null || !/^[1-9][0-9]*$/.test(raw)) return undefined
+  const seconds = Number(raw)
+  if (!Number.isSafeInteger(seconds)) return undefined
+  return Date.now() + seconds * 1_000
+}
+
 /** Subscribes a component to the current session state. */
 export function useSession(): SessionSnapshot {
   return useSyncExternalStore(
@@ -301,7 +343,7 @@ export function useSession(): SessionSnapshot {
 }
 
 /** The one path to an access token, retained as the public boot helper. */
-export function refreshSession(): Promise<Session | null> {
+export function refreshSession(): Promise<RefreshOutcome> {
   return sessionCoordinator.start()
 }
 
@@ -317,7 +359,7 @@ export async function withProtectedRetry<T>(
   const first = await request()
   if (first.response.status !== 401) return first
   const refreshed = await sessionCoordinator.refresh()
-  if (!refreshed) return first
+  if (refreshed.status !== 'signed_in') return first
   const second = await request()
   if (second.response.status === 401) sessionCoordinator.refuse()
   return second

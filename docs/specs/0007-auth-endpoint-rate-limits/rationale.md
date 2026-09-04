@@ -120,7 +120,24 @@ error shape because it is fetched by code. A limited refresh does not mean the s
 browser preserves its current view and waits for a manual retry. Automatic retries would add load at
 the exact moment the gateway is asking callers to stop.
 
-Node's built in test runner is enough for the pure browser outcome and countdown state. Adding
-Vitest or Playwright for this one reducer would reopen the web testing decision and add a package
-before the planned browser test feature needs it. The runner up is the later Playwright path, which
-will still verify the complete screen during `$check verify` and the money path work.
+Vitest is now the established web test runner and is enough for the pure browser outcome and
+countdown state. A separate Node test entry point would duplicate the current test surface. The
+runner up is the later Playwright path, which will still verify the complete screen during
+`$check verify` and the money path work.
+
+The rate limit target owns the sole launch artifact at
+`.tmp/production/rate-limit-evidence.json`. A small gateway command reuses the real parser, so the
+threshold hash describes the values the application would accept rather than a second shell
+interpretation. Its verifier recomputes the expected hash from committed candidate production
+values, rejects dirty inputs and a mismatched commit, and byte compares the canonical document. The
+deployment workflow consumes and uploads the exact produced bytes. The runner up was a feature
+local file copied into the production work area, but two paths make stale or changed authorization
+bytes easier to mistake for the tested result. Boolean `pass: true` also matches the migration
+evidence contract and lets the schema admit only success.
+
+The evidence timestamp remains metadata. Freshness comes from the clean named input set, tested Git
+SHA, candidate threshold hash, fixed target, strict schema, canonical bytes, and pass state. A time
+window would add clock rules without proving that the evidence describes the candidate. Trusted
+proxy CIDRs remain a separate launch check because they define caller identity rather than a token
+budget. Production compares the committed value, root configuration, and live pod CIDR before it
+opens traffic.

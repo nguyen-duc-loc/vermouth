@@ -221,6 +221,11 @@ tasks:
           (cd $module && go test ./...)
         done
 
+  test:auth-rate-limit:
+    desc: Prove auth rate policy, gateway refusal, browser retry, and canonical launch evidence
+    cmds:
+      - ./test/authratelimit/run.sh
+
   lint:
     desc: Lint every Go module against the pinned strict config in .golangci.yml
     cmds:

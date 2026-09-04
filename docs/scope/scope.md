@@ -178,14 +178,14 @@ See invoices by month and by student, open or download the PDF to send it yourse
 ### 21. Rate limit the auth endpoints · in-progress · from spec 0004
 Bound `start`, `callback` and `refresh` so nobody can spam the sign in path or grow `login_attempts` without limit. Spec 0004 leaves them unbounded on purpose, which is fine behind localhost and not fine once feature 16 gives them a public address, so this lands before that one ships.
 **Done when:** each protected auth endpoint refuses a caller past configured caller and global rates through its existing browser or API boundary, a flood cannot grow the pending login table without bound, and one evidence target exercises the limit.
-spec [0007](../specs/0007-auth-endpoint-rate-limits/index.md)
+spec [0007](../specs/0007-auth-endpoint-rate-limits/index.md) · code in `gateway/{internal/ratelimit,internal/route,cmd/ratelimitevidence}`, `api/openapi.yaml`, `web/src/{api/session.ts,pages/SignInPage.tsx,routes.tsx}`, `deploy/helm/vermouth/`, and `test/authratelimit/`
 - [x] Design it (spec): `$architect rate limit the auth endpoints`
-- [ ] Build it: `$develop rate limit the auth endpoints`
-  - [ ] Build the bounded gateway registry, paired token buckets, required configuration, trusted proxy parser, and concurrent guard tests · AC-2, AC-3, AC-6, AC-8, AC-9
-  - [ ] Prove the first limited `start` thread through gateway, identity, deployment configuration, unchanged auth state, and sampled logs · AC-1, AC-4, AC-5, AC-9, AC-10
-  - [ ] Extend the policy to callback and refresh, close cookie and `HEAD` edges, update OpenAPI, and add the accessible manual browser retry · AC-1, AC-3, AC-4, AC-5, AC-7, AC-11, AC-12, AC-13
-  - [ ] Add `task test:auth-rate-limit`, the pending attempt bounds, race coverage, and schema version 1 launch evidence · AC-3, AC-5, AC-6, AC-7, AC-8, AC-10, AC-13, AC-14
-- [ ] Verify it: `$check verify rate limit the auth endpoints`
+- [x] Build it: `$develop rate limit the auth endpoints`
+  - [x] Build the bounded gateway registry, paired token buckets, required configuration, trusted proxy parser, and concurrent guard tests · AC-2, AC-3, AC-6, AC-8, AC-9
+  - [x] Prove the first limited `start` thread through gateway, identity, deployment configuration, unchanged auth state, and sampled logs · AC-1, AC-4, AC-5, AC-9, AC-10
+  - [x] Extend the policy to callback and refresh, close cookie and `HEAD` edges, update OpenAPI, and add the accessible manual browser retry · AC-1, AC-3, AC-4, AC-5, AC-7, AC-11, AC-12, AC-13
+  - [x] Add `task test:auth-rate-limit`, the pending attempt bounds, race coverage, and schema version 1 launch evidence · AC-3, AC-5, AC-6, AC-7, AC-8, AC-10, AC-13, AC-14
+- [x] Verify it: `$check verify rate limit the auth endpoints`
 - [ ] Test it: `$test rate limit the auth endpoints`
 
 ### 16. Cloud deployment for friend testing · in-progress
