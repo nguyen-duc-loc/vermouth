@@ -186,7 +186,7 @@ spec [0007](../specs/0007-auth-endpoint-rate-limits/index.md) · code in `gatewa
   - [x] Extend the policy to callback and refresh, close cookie and `HEAD` edges, update OpenAPI, and add the accessible manual browser retry · AC-1, AC-3, AC-4, AC-5, AC-7, AC-11, AC-12, AC-13
   - [x] Add `task test:auth-rate-limit`, the pending attempt bounds, race coverage, and schema version 1 launch evidence · AC-3, AC-5, AC-6, AC-7, AC-8, AC-10, AC-13, AC-14
 - [x] Verify it: `$check verify rate limit the auth endpoints`
-- [ ] Test it: `$test rate limit the auth endpoints`
+- [x] Test it: `$test rate limit the auth endpoints`
 
 ### 16. Cloud deployment for friend testing · in-progress
 Put the running system somewhere your friends can open in a browser, with a real address and a certificate. Separate from the local cluster on purpose, so deployment never leaks into earlier features.
