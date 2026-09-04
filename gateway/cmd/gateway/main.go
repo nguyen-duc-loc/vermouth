@@ -17,6 +17,7 @@ import (
 	"github.com/nguyen-duc-loc/vermouth/pkg/vermouth"
 
 	"github.com/nguyen-duc-loc/vermouth/gateway/internal/aggregate"
+	"github.com/nguyen-duc-loc/vermouth/gateway/internal/ratelimit"
 	"github.com/nguyen-duc-loc/vermouth/gateway/internal/route"
 )
 
@@ -48,12 +49,17 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	rateConfig, err := ratelimit.ConfigFromEnv()
+	if err != nil {
+		return err
+	}
 
 	handler := route.Mux(route.Deps{
-		Client:   aggregate.NewClient(upstreams),
-		Verifier: verifier,
-		Logger:   logger,
-		Service:  cfg.Service,
+		Client:        aggregate.NewClient(upstreams),
+		Verifier:      verifier,
+		Logger:        logger,
+		Service:       cfg.Service,
+		AuthRateGuard: ratelimit.NewGuard(rateConfig, logger, nil),
 	})
 
 	logger.Info("Starting", slog.String("identity", upstreams.Identity))

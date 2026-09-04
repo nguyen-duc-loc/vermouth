@@ -7,7 +7,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nguyen-duc-loc/vermouth/pkg/vermouth"
@@ -16,16 +18,20 @@ import (
 	"github.com/nguyen-duc-loc/vermouth/gateway/internal/aggregate"
 	"github.com/nguyen-duc-loc/vermouth/gateway/internal/apitypes"
 	"github.com/nguyen-duc-loc/vermouth/gateway/internal/auth"
+	"github.com/nguyen-duc-loc/vermouth/gateway/internal/ratelimit"
 )
 
 const maxRequestBody = 1 << 20
 
+const refreshCookieName = "vermouth_refresh"
+
 // Deps is what the routes need. There is no database in here on purpose.
 type Deps struct {
-	Client   *aggregate.Client
-	Verifier *vermouth.Verifier
-	Logger   *slog.Logger
-	Service  string
+	Client        *aggregate.Client
+	Verifier      *vermouth.Verifier
+	Logger        *slog.Logger
+	Service       string
+	AuthRateGuard *ratelimit.Guard
 }
 
 // Mux builds the gateway surface described by api/openapi.yaml (STK-10). The
@@ -47,13 +53,22 @@ func Mux(deps Deps) http.Handler {
 	// authenticated mux with nothing rearranged.
 	// The upstream path is a constant per route rather than the inbound one with
 	// the prefix trimmed, so nothing a caller sends can steer where this calls.
-	for pattern, upstream := range map[string]string{
-		"GET /api/auth/google/start":    "/auth/google/start",
-		"GET /api/auth/google/callback": "/auth/google/callback",
-		"POST /api/auth/refresh":        "/auth/refresh",
-		"POST /api/auth/signout":        "/auth/signout",
+	mux.HandleFunc(
+		"GET /api/auth/google/start",
+		limitedBrowserAuth(deps, ratelimit.EndpointStart, "/auth/google/start"),
+	)
+	mux.HandleFunc(
+		"GET /api/auth/google/callback",
+		limitedBrowserAuth(deps, ratelimit.EndpointCallback, "/auth/google/callback"),
+	)
+	mux.HandleFunc("POST /api/auth/refresh", limitedRefresh(deps))
+	mux.HandleFunc("POST /api/auth/signout", forwardAuth(deps, "/auth/signout"))
+	for _, path := range []string{
+		"/api/auth/google/start",
+		"/api/auth/google/callback",
+		"/api/auth/refresh",
 	} {
-		mux.HandleFunc(pattern, forwardAuth(deps, upstream))
+		mux.HandleFunc("HEAD "+path, rejectHead)
 	}
 
 	// Everything under /api/ below this line needs a verified token.
@@ -246,6 +261,73 @@ func forwardAuth(deps Deps, upstreamPath string) http.HandlerFunc {
 		}
 		passThroughAuth(ctx, deps.Logger, w, response)
 	}
+}
+
+func limitedBrowserAuth(deps Deps, endpoint ratelimit.Endpoint, upstreamPath string) http.HandlerFunc {
+	forward := forwardAuth(deps, upstreamPath)
+	return func(w http.ResponseWriter, r *http.Request) {
+		decision := deps.AuthRateGuard.Check(r, endpoint)
+		if decision.Allowed {
+			forward(w, r)
+			return
+		}
+		writeRetryHeaders(w, decision.RetryAfter)
+		http.Redirect(w, r, "/signin?error=rate_limited", http.StatusFound)
+	}
+}
+
+func limitedRefresh(deps Deps) http.HandlerFunc {
+	forward := forwardAuth(deps, "/auth/refresh")
+	return func(w http.ResponseWriter, r *http.Request) {
+		cookies := r.CookiesNamed(refreshCookieName)
+		additional := make([]ratelimit.Key, 0, 1)
+		malformed := len(cookies) > 1 || len(cookies) == 1 && cookies[0].Value == ""
+		if len(cookies) == 1 && cookies[0].Value != "" {
+			additional = append(additional, ratelimit.RefreshTokenKey(cookies[0].Value))
+		}
+
+		decision := deps.AuthRateGuard.Check(r, ratelimit.EndpointRefresh, additional...)
+		if !decision.Allowed {
+			writeRetryHeaders(w, decision.RetryAfter)
+			vermouth.WriteError(
+				r.Context(),
+				w,
+				http.StatusTooManyRequests,
+				"rate_limited",
+				"too many authentication requests; try again later",
+			)
+			return
+		}
+		if malformed {
+			vermouth.WriteError(
+				r.Context(),
+				w,
+				http.StatusUnauthorized,
+				"unauthenticated",
+				"this session is over, sign in again",
+			)
+			return
+		}
+		forward(w, r)
+	}
+}
+
+func rejectHead(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Allow", allowedMethodForPath(r.URL.Path))
+	vermouth.WriteError(r.Context(), w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+}
+
+func allowedMethodForPath(path string) string {
+	if path == "/api/auth/refresh" {
+		return http.MethodPost
+	}
+	return http.MethodGet
+}
+
+func writeRetryHeaders(w http.ResponseWriter, retryAfter time.Duration) {
+	seconds := max(int64(retryAfter/time.Second), 1)
+	w.Header().Set("Retry-After", strconv.FormatInt(seconds, 10))
+	w.Header().Set("Cache-Control", "no-store")
 }
 
 // ready asks every service at once and reports each one, so a failing
