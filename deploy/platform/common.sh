@@ -6,6 +6,7 @@ VERSIONS=$ROOT/deploy/platform/versions.yaml
 IMAGE_LOCK=$ROOT/deploy/images.lock.yaml
 CHART=$ROOT/deploy/helm/vermouth
 LOCAL_VALUES=$CHART/values-local.yaml
+PRODUCTION_VALUES=$CHART/values-production.yaml
 K3D_CONFIG=$ROOT/deploy/k3d/vermouth.yaml
 TRAEFIK_COMMON=$ROOT/deploy/platform/traefik/values-common.yaml
 TRAEFIK_LOCAL=$ROOT/deploy/platform/traefik/values-local.yaml

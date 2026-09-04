@@ -1,0 +1,76 @@
+#!/bin/sh
+set -eu
+umask 077
+
+deploy_fail() {
+  printf 'vermouth deployment root: %s\n' "$*" >&2
+  exit 4
+}
+
+[ "$(id -u)" -eq 0 ] || deploy_fail "the deployment root program must run as root"
+for tool in awk cmp date flock grep helm install jq kubectl sha256sum vermouth-platformconfig; do
+  command -v "$tool" >/dev/null 2>&1 || deploy_fail "$tool is required"
+done
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+. /usr/local/lib/vermouth/deploy-root-lib.sh
+request=$(mktemp /var/tmp/vermouth-deploy-request.XXXXXX)
+trap 'rm -f "$request"' EXIT HUP INT TERM
+cat >"$request"
+action=$(jq -r '.action // empty' "$request")
+if [ "$action" = inspect-base ]; then
+  jq -e '
+    .schema_version == 1 and .action == "inspect-base" and
+    (.git_sha | test("^[0-9a-f]{40}$")) and
+    (.github_run_id | test("^[1-9][0-9]*$")) and
+    (.github_run_attempt | test("^[1-9][0-9]*$"))
+  ' "$request" >/dev/null || deploy_fail "the base inspection request is invalid"
+  inspect_deployment_base \
+    "$(jq -r '.git_sha' "$request")" \
+    "$(jq -r '.github_run_id' "$request")" \
+    "$(jq -r '.github_run_attempt' "$request")"
+  exit 0
+fi
+jq -e '
+  .schema_version == 1 and
+  (.action == "preflight" or .action == "deploy") and
+  (.git_sha | test("^[0-9a-f]{40}$")) and
+  (.bundle_sha256 | test("^[0-9a-f]{64}$")) and
+  (.github_run_id | test("^[1-9][0-9]*$")) and
+  (.github_run_attempt | test("^[1-9][0-9]*$")) and
+  (.incoming | test("^/var/lib/vermouth/releases/\\.incoming/[1-9][0-9]*-[1-9][0-9]*$"))
+' "$request" >/dev/null || deploy_fail "the deployment request is invalid"
+
+git_sha=$(jq -r '.git_sha' "$request")
+run_id=$(jq -r '.github_run_id' "$request")
+run_attempt=$(jq -r '.github_run_attempt' "$request")
+incoming=$(jq -r '.incoming' "$request")
+[ "$incoming" = "/var/lib/vermouth/releases/.incoming/$run_id-$run_attempt" ] || deploy_fail "the incoming release path does not match its run identity"
+[ -d "$incoming" ] && [ ! -L "$incoming" ] || deploy_fail "the incoming release directory is missing"
+[ -f /etc/vermouth/platform.json ] || deploy_fail "the production platform is not bootstrapped"
+vermouth-platformconfig validate-document /usr/local/share/vermouth/platform.schema.json /etc/vermouth/platform.json
+jq -e '.locked == true' /etc/vermouth/platform.json >/dev/null || deploy_fail "the production platform identity is not locked"
+jq -e --arg sha "$git_sha" --arg run "$run_id" --arg attempt "$run_attempt" \
+  '.schema_version == 1 and .git_sha == $sha and (.github_run_id | tostring) == $run and (.github_run_attempt | tostring) == $attempt' \
+  "$incoming/images.json" >/dev/null ||
+  deploy_fail "images.json does not match the deployment request"
+
+if [ "$action" = preflight ]; then
+  release_work=$(mktemp -d /var/tmp/vermouth-preflight.XXXXXX)
+  export release_work
+  trap 'rm -f "$request"; rm -rf "$incoming" "$release_work"' EXIT HUP INT TERM
+  validate_release_documents "$incoming" "$git_sha" "$run_id" "$run_attempt"
+  rm -rf "$incoming"
+  printf '%s\n' "Deployment preflight accepted Git $git_sha and run $run_id"
+  exit 0
+fi
+
+release_work=$(mktemp -d /var/tmp/vermouth-deploy-validate.XXXXXX)
+export release_work
+trap 'rm -f "$request"; rm -rf "$incoming" "$release_work"' EXIT HUP INT TERM
+validate_release_documents "$incoming" "$git_sha" "$run_id" "$run_attempt"
+rm -rf "$release_work"
+trap 'rm -f "$request"; rm -rf "$incoming"' EXIT HUP INT TERM
+production_lock_exclusive
+bundle_sha=$(jq -r '.bundle_sha256' "$request")
+release=$(install_release_directory "$incoming" "$git_sha" "$run_id" "$run_attempt" "$bundle_sha")
+deploy_release "$release" "$git_sha" "$run_id" "$run_attempt"

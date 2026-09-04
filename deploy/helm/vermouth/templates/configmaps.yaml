@@ -101,5 +101,5 @@ metadata:
     vermouth.dev/decision: spec-0005
 data:
   config.json: |
-    {"schemaVersion":1,"environment":"local","googleAuthEnabled":{{ .Values.config.googleAuthEnabled }},"apiBasePath":"/api"}
+    {{ dict "schemaVersion" 1 "environment" .Values.config.environment "googleAuthEnabled" .Values.config.googleAuthEnabled "apiBasePath" .Values.config.apiBasePath | toJson }}
 {{- end }}

@@ -2,17 +2,41 @@
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "jobs", "images", "secrets", "config"],
+  "required": ["schemaVersion", "release", "jobs", "imagePullSecrets", "images", "secrets", "config", "ingress"],
   "properties": {
     "schemaVersion": { "const": 1 },
-    "foundation": { "$ref": "#/definitions/gate" },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gitSHA", "githubRunID", "githubRunAttempt", "identity", "imagesJSONSHA256", "deploymentBaseSHA256", "migrationCompatEvidenceSHA256", "rateLimitEvidenceSHA256", "bundleManifestSHA256"],
+      "properties": {
+        "gitSHA": { "type": "string", "pattern": "^$|^[0-9a-f]{40}$" },
+        "githubRunID": { "type": "string", "pattern": "^$|^[1-9][0-9]*$" },
+        "githubRunAttempt": { "type": "string", "pattern": "^$|^[1-9][0-9]*$" },
+        "identity": { "type": "string", "pattern": "^$|^[0-9a-f]{40}/[1-9][0-9]*-[1-9][0-9]*$" },
+        "imagesJSONSHA256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
+        "deploymentBaseSHA256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
+        "migrationCompatEvidenceSHA256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
+        "rateLimitEvidenceSHA256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
+        "bundleManifestSHA256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" }
+      }
+    },
+    "foundation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "bootstrapStorage"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "bootstrapStorage": { "type": "boolean" }
+      }
+    },
     "application": { "$ref": "#/definitions/gate" },
     "jobs": {
       "type": "object",
       "additionalProperties": false,
       "required": ["runID"],
       "properties": {
-        "runID": { "type": "string", "pattern": "^$|^[0-9a-f]{12}$" },
+        "runID": { "type": "string", "pattern": "^$|^[0-9a-f]{12}$|^[1-9][0-9]*-[1-9][0-9]*$" },
         "migrations": {
           "type": "object",
           "additionalProperties": false,
@@ -39,11 +63,17 @@
         }
       }
     },
+    "imagePullSecrets": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/definitions/secretName" }
+    },
     "images": {
       "type": "object",
       "additionalProperties": false,
       "required": ["garageInit", "gateway", "identity", "teaching", "billing", "notifications", "web", "devtoken", "migrations"],
       "properties": {
+        "storageGuard": { "$ref": "#/definitions/image" },
         "postgres": { "$ref": "#/definitions/image" },
         "redpanda": { "$ref": "#/definitions/image" },
         "garage": { "$ref": "#/definitions/image" },
@@ -98,7 +128,7 @@
       "additionalProperties": false,
       "required": ["environment", "apiBasePath", "gatewayTrustedProxyCIDRs", "gatewayAuthRateStartIP", "gatewayAuthRateStartGlobal", "gatewayAuthRateCallbackIP", "gatewayAuthRateCallbackGlobal", "gatewayAuthRateRefreshIP", "gatewayAuthRateRefreshToken", "gatewayAuthRateRefreshGlobal", "googleAuthEnabled"],
       "properties": {
-        "environment": { "const": "local" },
+        "environment": { "enum": ["local", "production"] },
         "apiBasePath": { "const": "/api" },
         "logLevel": { "type": "string" },
         "brokerSeeds": { "type": "string" },
@@ -128,14 +158,38 @@
         "billingS3Bucket": { "type": "string" }
       }
     },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "hostname", "entryPoint", "tls"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "hostname": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+        },
+        "entryPoint": { "enum": ["web", "websecure"] },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "certResolver"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "certResolver": { "type": "string", "pattern": "^$|^[a-z][a-z0-9-]*$" }
+          }
+        }
+      }
+    },
     "storage": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["className", "nodeName", "rootPath", "postgres", "redpanda", "garageMetadata", "garageData", "traefikACME"],
+      "required": ["className", "nodeName", "rootPath", "markerSHA256", "guard", "postgres", "redpanda", "garageMetadata", "garageData", "traefikACME"],
       "properties": {
         "className": { "const": "vermouth-local" },
-        "nodeName": { "const": "k3d-vermouth-server-0" },
-        "rootPath": { "const": "/var/lib/vermouth" },
+        "nodeName": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" },
+        "rootPath": { "type": "string", "pattern": "^/[^\\r\\n]+$" },
+        "markerSHA256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
+        "guard": { "$ref": "#/definitions/gate" },
         "postgres": { "$ref": "#/definitions/storageSize" },
         "redpanda": { "$ref": "#/definitions/storageSize" },
         "garageMetadata": { "$ref": "#/definitions/storageSize" },

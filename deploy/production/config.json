@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "target": {
+    "host": "4.194.251.123",
+    "vm_name": "nguyenducloc-vm2",
+    "location": "southeastasia",
+    "vm_size": "Standard_D2ads_v6",
+    "cpus": 2,
+    "memory_gib": 8,
+    "operator_user": "azureuser",
+    "deploy_user": "vermouth-deploy",
+    "node_name": "nguyenducloc-vm2"
+  },
+  "k3s": {
+    "live_version": "v1.36.3+k3s1",
+    "image_tag": "v1.36.3-k3s1",
+    "pod_cidr": "10.42.0.0/16"
+  },
+  "traefik": {
+    "image": "rancher/mirrored-library-traefik:3.7.8",
+    "image_digest": "sha256:4299bbed850421258fc5448c2e0e6ad350981d4d335a68de11b92448aedbefe5",
+    "chart": "40.1.4+up40.1.0"
+  },
+  "storage": {
+    "filesystem": "xfs",
+    "uuid": "37f07a74-8426-45fd-8e55-79515376a136",
+    "dedicated_root": "/var/lib/vermouth",
+    "fallback_root": "/var/lib/rancher/k3s/storage/vermouth",
+    "marker": ".vermouth-storage"
+  },
+  "thresholds": {
+    "available_memory_gib": 3,
+    "free_os_disk_gib": 15,
+    "maximum_total_memory_gib": 7
+  },
+  "namespace": "vermouth",
+  "storage_class": "vermouth-local",
+  "network": {
+    "public_ports": [22, 80, 443],
+    "blocked_ports": [3900, 5000, 5432, 6443, 8080, 8081, 8082, 8083, 8084, 9092, 9644, 10250]
+  },
+  "dns_suffix": "southeastasia.cloudapp.azure.com"
+}

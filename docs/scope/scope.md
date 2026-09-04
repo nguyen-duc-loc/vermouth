@@ -191,13 +191,13 @@ spec [0007](../specs/0007-auth-endpoint-rate-limits/index.md) · code in `gatewa
 ### 16. Cloud deployment for friend testing · in-progress
 Put the running system somewhere your friends can open in a browser, with a real address and a certificate. Separate from the local cluster on purpose, so deployment never leaks into earlier features.
 **Done when:** the whole system runs on a reachable address over a secure connection, the sign in and the invoice flow both work there, secrets are not baked into images, and you can push an update without wiping the data.
-spec [0006](../specs/0006-cloud-deployment-friend-testing/index.md)
+spec [0006](../specs/0006-cloud-deployment-friend-testing/index.md) · code in `.github/workflows/production.yml`, `deploy/production/`, `deploy/helm/vermouth/`, `pkg/vermouth/cmd/platformconfig/`, and `test/migrationcompat/`
 - [x] Design it (spec): `$architect cloud deployment for friend testing`
-- [ ] Build it: `$develop cloud deployment for friend testing`
-  - [ ] Align local Traefik, then bootstrap the exact Azure VM, locked static storage, free DNS, HTTPS, restricted SSH, production Secrets, and private pulls · AC-1, AC-2, AC-3, AC-5, AC-8, AC-11, AC-12
-  - [ ] Promote two architecture Docker Hub digests through manual GitHub Actions, require rate limit and migration evidence, and prove the first secure production thread · AC-4, AC-6, AC-9, AC-10, AC-13
-  - [ ] Complete the full topology, capacity gate, status, logs, retention, and guarded application rollback · AC-7, AC-14, AC-15, AC-16, AC-19, AC-20
-  - [ ] Add encrypted export and full stopped state restore, then prove every stateful marker and external path · AC-17, AC-18
+- [x] Build it: `$develop cloud deployment for friend testing`
+  - [x] Align local Traefik, then bootstrap the exact Azure VM, locked static storage, free DNS, HTTPS, restricted SSH, production Secrets, and private pulls · AC-1, AC-2, AC-3, AC-5, AC-8, AC-11, AC-12
+  - [x] Promote two architecture Docker Hub digests through manual GitHub Actions, require rate limit and migration evidence, and prove the first secure production thread · AC-4, AC-6, AC-9, AC-10, AC-13
+  - [x] Complete the full topology, capacity gate, status, logs, retention, and guarded application rollback · AC-7, AC-14, AC-15, AC-16, AC-19, AC-20
+  - [x] Add encrypted export and full stopped state restore, then prove every stateful marker and external path · AC-17, AC-18
 - [ ] Verify it: `$check verify cloud deployment for friend testing`
 - [ ] Test it: `$test cloud deployment for friend testing`
 

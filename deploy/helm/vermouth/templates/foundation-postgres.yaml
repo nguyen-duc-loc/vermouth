@@ -46,6 +46,7 @@ spec:
         app.kubernetes.io/component: {{ $component }}
     spec:
       serviceAccountName: {{ $component }}
+      {{- include "vermouth.imagePullSecrets" $ | nindent 6 }}
       automountServiceAccountToken: {{ $workload.automountServiceAccountToken }}
       securityContext:
         {{- include "vermouth.podSecurity" $ | nindent 8 }}
@@ -53,6 +54,7 @@ spec:
         runAsGroup: {{ $workload.runAsGroup }}
         fsGroup: {{ $workload.fsGroup }}
         fsGroupChangePolicy: OnRootMismatch
+      {{- include "vermouth.storageGuard" $ | nindent 6 }}
       containers:
         - name: postgres
           image: {{ include "vermouth.requireImage" (dict "name" "postgres" "image" $.Values.images.postgres) }}
@@ -99,6 +101,7 @@ spec:
             - name: tmp
               mountPath: /tmp
       volumes:
+        {{- include "vermouth.storageGuardVolume" $ | nindent 8 }}
         - name: data
           persistentVolumeClaim:
             claimName: {{ $component }}

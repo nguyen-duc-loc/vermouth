@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "vm_name", "node_name", "hostname", "k3s_version", "storage_mode", "storage_root", "storage_uuid", "selected_at", "locked", "chart_sha256", "image_lock_sha256", "current_git_sha", "github_run_id", "github_run_attempt", "release_identity", "images_json_sha256", "deployment_base_sha256", "migration_compat_evidence_sha256", "rate_limit_evidence_sha256", "bundle_manifest_sha256", "goose_versions", "active_image_digest_set", "current_application_revision", "previous_deployable_revision"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "vm_name": { "const": "nguyenducloc-vm2" },
+    "node_name": { "const": "nguyenducloc-vm2" },
+    "hostname": { "type": "string", "minLength": 1 },
+    "k3s_version": { "const": "v1.36.3+k3s1" },
+    "storage_mode": { "enum": ["dedicated", "os-fallback"] },
+    "storage_root": { "enum": ["/var/lib/vermouth", "/var/lib/rancher/k3s/storage/vermouth"] },
+    "storage_uuid": { "type": ["string", "null"] },
+    "selected_at": { "type": "string", "format": "date-time" },
+    "locked": { "const": true },
+    "chart_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "image_lock_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "current_git_sha": { "type": "string", "pattern": "^$|^[0-9a-f]{40}$" },
+    "github_run_id": { "type": "string" },
+    "github_run_attempt": { "type": "string" },
+    "release_identity": { "type": "string", "pattern": "^$|^[0-9a-f]{40}/[1-9][0-9]*-[1-9][0-9]*$" },
+    "images_json_sha256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
+    "deployment_base_sha256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
+    "migration_compat_evidence_sha256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
+    "rate_limit_evidence_sha256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
+    "bundle_manifest_sha256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
+    "goose_versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "teaching", "billing", "notifications"],
+      "properties": {
+        "identity": { "type": "integer", "minimum": 0 },
+        "teaching": { "type": "integer", "minimum": 0 },
+        "billing": { "type": "integer", "minimum": 0 },
+        "notifications": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "active_image_digest_set": { "type": "array", "items": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }, "uniqueItems": true },
+    "current_application_revision": { "type": ["integer", "null"], "minimum": 1 },
+    "previous_deployable_revision": { "type": ["integer", "null"], "minimum": 1 }
+  }
+}

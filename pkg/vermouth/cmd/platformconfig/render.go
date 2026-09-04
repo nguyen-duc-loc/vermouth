@@ -165,10 +165,10 @@ func renderedWorkloadCategory(document manifest) (category, component string) {
 	case component == workloadWeb:
 		return workloadWeb, component
 	case component == "gateway" ||
-		component == "identity" ||
-		component == "teaching" ||
-		component == "billing" ||
-		component == "notifications":
+		component == productionServiceIdentity ||
+		component == productionServiceTeaching ||
+		component == productionServiceBilling ||
+		component == productionServiceNotifications:
 		return workloadGoApplication, component
 	case strings.HasPrefix(component, "postgres-"):
 		return workloadPostgres, component

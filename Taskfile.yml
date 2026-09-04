@@ -226,6 +226,11 @@ tasks:
     cmds:
       - ./test/authratelimit/run.sh
 
+  test:migration-compat:
+    desc: Prove every candidate migration keeps the deployed application revision usable
+    cmds:
+      - ./test/migrationcompat/run.sh {{.CLI_ARGS}}
+
   lint:
     desc: Lint every Go module against the pinned strict config in .golangci.yml
     cmds:
@@ -476,6 +481,48 @@ tasks:
     desc: Measure the ready platform every five seconds for five minutes
     cmds:
       - ./deploy/platform/platform.sh measure
+
+  # ----------------------------------------------------------- production VM
+
+  prod:doctor:
+    desc: Check the exact Azure VM, DNS, storage, registry access, and production inputs without changing them
+    cmds:
+      - ./deploy/production/prod.sh doctor
+
+  prod:bootstrap:
+    desc: Reconcile production storage, packaged Traefik, pull access, and the restricted deployment identity
+    cmds:
+      - ./deploy/production/prod.sh bootstrap {{.CLI_ARGS}}
+
+  prod:deploy:
+    desc: Dispatch one confirmed immutable production release through GitHub Actions
+    cmds:
+      - ./deploy/production/prod.sh deploy {{.CLI_ARGS}}
+
+  prod:status:
+    desc: Show production capacity, releases, workloads, storage, certificate state, and HTTPS readiness
+    cmds:
+      - ./deploy/production/prod.sh status
+
+  prod:logs:
+    desc: "Read one redacted production log target, for example task prod:logs -- identity --since=10m"
+    cmds:
+      - ./deploy/production/prod.sh logs {{.CLI_ARGS}}
+
+  prod:rollback:
+    desc: Roll the application back to the newest earlier verified release after typed confirmation
+    cmds:
+      - ./deploy/production/prod.sh rollback
+
+  prod:export:
+    desc: Stop production briefly and write one locally verified encrypted export
+    cmds:
+      - ./deploy/production/prod.sh export {{.CLI_ARGS}}
+
+  prod:restore:
+    desc: Validate and restore one encrypted production export through protected VM staging
+    cmds:
+      - ./deploy/production/prod.sh restore {{.CLI_ARGS}}
 
   dev:
     desc: Build and start the whole Kubernetes platform, then print its local address

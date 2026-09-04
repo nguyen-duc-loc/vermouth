@@ -1,0 +1,112 @@
+name: Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Git ref to build and deploy
+        required: true
+        default: main
+        type: string
+      confirmation:
+        description: Type production to allow publication and deployment
+        required: true
+        type: choice
+        options:
+          - production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  publish-and-deploy:
+    name: Publish and deploy immutable production images
+    if: ${{ inputs.confirmation == 'production' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.work
+          cache-dependency-path: '**/go.sum'
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PUSH_TOKEN }}
+
+      - name: Install release tools
+        run: |
+          go install github.com/go-task/task/v3/cmd/task@v3.53.1
+          go install github.com/pressly/goose/v3/cmd/goose@v3.27.3
+          sudo apt-get update
+          sudo apt-get install --yes age zstd
+
+      - name: Prove auth limits for this source revision
+        run: task test:auth-rate-limit
+
+      - name: Publish and verify every production image
+        env:
+          DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PUSH_TOKEN: ${{ secrets.DOCKERHUB_PUSH_TOKEN }}
+        run: ./deploy/production/publish-images.sh > images.json
+
+      - name: Inspect the live migration base through restricted SSH
+        env:
+          PROD_HOST: ${{ vars.PROD_HOST }}
+          PROD_SSH_USER: ${{ vars.PROD_SSH_USER }}
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_SSH_HOST_KEY: ${{ secrets.PROD_SSH_HOST_KEY }}
+        run: ./deploy/production/workflow-deploy.sh inspect-base > deployment-base.json
+
+      - name: Prove forward migration compatibility
+        run: task test:migration-compat -- deployment-base.json
+
+      - name: Assemble the immutable release bundle
+        env:
+          PROD_HOSTNAME: ${{ vars.PROD_HOSTNAME }}
+        run: ./deploy/production/release-bundle.sh images.json deployment-base.json release.tar.zst
+
+      - name: Preflight the restricted production transport
+        env:
+          PROD_HOST: ${{ vars.PROD_HOST }}
+          PROD_SSH_USER: ${{ vars.PROD_SSH_USER }}
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_SSH_HOST_KEY: ${{ secrets.PROD_SSH_HOST_KEY }}
+        run: ./deploy/production/workflow-deploy.sh preflight release.tar.zst
+
+      - name: Deploy the verified release
+        env:
+          PROD_HOST: ${{ vars.PROD_HOST }}
+          PROD_SSH_USER: ${{ vars.PROD_SSH_USER }}
+          PROD_SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          PROD_SSH_HOST_KEY: ${{ secrets.PROD_SSH_HOST_KEY }}
+        run: |
+          set -o pipefail
+          ./deploy/production/workflow-deploy.sh deploy release.tar.zst | tee deployment-output.log
+          sed -n 's/^RESOURCE_REPORT_JSON=//p' deployment-output.log > resource-report.json
+          jq -e '.schema_version == 1 and .pass == true' resource-report.json >/dev/null
+
+      - name: Upload exact production evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            images.json
+            deployment-base.json
+            .tmp/production/rate-limit-evidence.json
+            .tmp/production/migration-compat-evidence.json
+            resource-report.json
+          if-no-files-found: error

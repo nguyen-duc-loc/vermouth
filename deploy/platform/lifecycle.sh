@@ -68,6 +68,7 @@ write_platform_identity() {
 
 render_traefik_config() {
   output=$1
+  environment_values=${2:-$TRAEFIK_LOCAL}
   {
     printf '%s\n' 'apiVersion: helm.cattle.io/v1'
     printf '%s\n' 'kind: HelmChartConfig'
@@ -78,8 +79,26 @@ render_traefik_config() {
     printf '%s\n' '  failurePolicy: abort'
     printf '%s\n' '  valuesContent: |-'
     sed 's/^/    /' "$TRAEFIK_COMMON"
-    sed 's/^/    /' "$TRAEFIK_LOCAL"
+    sed 's/^/    /' "$environment_values"
   } >"$output"
+}
+
+render_production_traefik_config() {
+  output=$1
+  email=$2
+  case "$email" in
+    *@*.*) ;;
+    *) fail "PROD_ACME_EMAIL must be a valid email address" ;;
+  esac
+  case "$email" in
+    *[!A-Za-z0-9._%+@-]*) fail "PROD_ACME_EMAIL must be a valid email address" ;;
+  esac
+  values=$PLATFORM_TMP/traefik-production.$$
+  trap 'rm -f "$values"' EXIT HUP INT TERM
+  sed "s/__PROD_ACME_EMAIL__/$email/g" "$TRAEFIK_PRODUCTION" >"$values"
+  render_traefik_config "$output" "$values"
+  rm -f "$values"
+  trap - EXIT HUP INT TERM
 }
 
 reconcile_traefik() {
@@ -639,10 +658,14 @@ validate_platform() {
   need rg
   validate_platform_inputs
   helm lint "$CHART" --values "$LOCAL_VALUES" --set foundation.enabled=true
+  helm lint "$CHART" --values "$PRODUCTION_VALUES"
   render_traefik_config "$PLATFORM_TMP/traefik-config.yaml"
+  render_production_traefik_config "$PLATFORM_TMP/traefik-production-config.yaml" operator@example.com
   duplicate_traefik_keys=$(awk '/^[a-zA-Z][a-zA-Z0-9]*:/ {print $1}' "$TRAEFIK_COMMON" "$TRAEFIK_LOCAL" | sort | uniq -d)
   [ -z "$duplicate_traefik_keys" ] || fail "Traefik common and local values both own: $duplicate_traefik_keys"
   rg -q '^kind: HelmChartConfig$' "$PLATFORM_TMP/traefik-config.yaml" || fail "Traefik HelmChartConfig did not render"
+  rg -q 'entryPoints.web.allowACMEByPass=true' "$PLATFORM_TMP/traefik-production-config.yaml" || fail "production Traefik does not preserve ACME HTTP challenges"
+  rg -q 'storage: /data/acme.json' "$PLATFORM_TMP/traefik-production-config.yaml" || fail "production Traefik does not persist production ACME state"
   validation=$PLATFORM_TMP/validation-values.yaml
   digest=sha256:0000000000000000000000000000000000000000000000000000000000000000
   {
@@ -664,8 +687,22 @@ validate_platform() {
   helm template vermouth-foundation "$CHART" --namespace "$NAMESPACE" \
     --values "$LOCAL_VALUES" --values "$validation" --set foundation.enabled=true \
     --set config.googleAuthEnabled=true >"$PLATFORM_TMP/foundation-google.yaml"
+  helm template vermouth-foundation "$CHART" --namespace "$NAMESPACE" \
+    --values "$PRODUCTION_VALUES" --values "$validation" --set foundation.enabled=true \
+    --set-string storage.markerSHA256=0000000000000000000000000000000000000000000000000000000000000000 \
+    >"$PLATFORM_TMP/foundation-production.yaml"
+  helm template vermouth-foundation "$CHART" --namespace "$NAMESPACE" \
+    --values "$PRODUCTION_VALUES" --values "$validation" --set foundation.bootstrapStorage=true \
+    --set-string storage.markerSHA256=0000000000000000000000000000000000000000000000000000000000000000 \
+    >"$PLATFORM_TMP/foundation-production-bootstrap.yaml"
   helm template vermouth "$CHART" --namespace "$NAMESPACE" \
     --values "$LOCAL_VALUES" --values "$validation" --set application.enabled=true >"$PLATFORM_TMP/application.yaml"
+  helm template vermouth "$CHART" --namespace "$NAMESPACE" \
+    --values "$PRODUCTION_VALUES" --values "$validation" --set application.enabled=true \
+    --set-string ingress.hostname=vermouth-test.southeastasia.cloudapp.azure.com \
+    --set-string config.identityAppURL=https://vermouth-test.southeastasia.cloudapp.azure.com \
+    --set-string config.identityGoogleRedirectURL=https://vermouth-test.southeastasia.cloudapp.azure.com/api/auth/google/callback \
+    >"$PLATFORM_TMP/application-production.yaml"
   helm template vermouth-jobs "$CHART" --namespace "$NAMESPACE" \
     --values "$LOCAL_VALUES" --values "$validation" --set jobs.runID=000000000000 \
     --set jobs.migrations.enabled=true --set jobs.garageInit.enabled=true \
@@ -677,12 +714,21 @@ validate_platform() {
   [ "$(rg -c '^kind: Deployment$' "$PLATFORM_TMP/application.yaml")" -eq 6 ] || fail "application must render six Deployments"
   [ "$(rg -c '^kind: Job$' "$PLATFORM_TMP/jobs.yaml")" -eq 6 ] || fail "Jobs rendering must contain four migrations, Garage initialization, and devtoken"
   [ "$(rg -c '^kind: PersistentVolume$' "$PLATFORM_TMP/foundation.yaml")" -eq 8 ] || fail "foundation must render eight static PersistentVolumes"
-  [ "$(rg -c '^kind: PersistentVolumeClaim$' "$PLATFORM_TMP/foundation.yaml")" -eq 7 ] || fail "foundation must render seven local data claims"
+  [ "$(rg -c '^kind: PersistentVolumeClaim$' "$PLATFORM_TMP/foundation.yaml")" -eq 8 ] || fail "foundation must render eight local data claims"
+  [ "$(rg -c '^kind: NetworkPolicy$' "$PLATFORM_TMP/foundation-production-bootstrap.yaml")" -gt 0 ] ||
+    fail "production bootstrap must establish the deny first network boundary"
+  [ "$(rg -c 'name: verify-storage-root' "$PLATFORM_TMP/foundation-production.yaml")" -eq 6 ] || fail "every production stateful workload must verify the locked storage marker"
+  rg -U -q 'kind: PersistentVolumeClaim\nmetadata:\n  name: traefik-acme\n  namespace: kube-system' \
+    "$PLATFORM_TMP/foundation-production.yaml" || fail "the Traefik ACME claim must live in kube-system"
   [ "$(rg -c '^kind: Ingress$' "$PLATFORM_TMP/application.yaml")" -eq 1 ] || fail "application must render one Ingress"
+  [ "$(rg -c '^kind: Ingress$' "$PLATFORM_TMP/application-production.yaml")" -eq 1 ] || fail "production application must render one Ingress"
+  rg -q 'host: .*vermouth-test.southeastasia.cloudapp.azure.com' "$PLATFORM_TMP/application-production.yaml" || fail "production Ingress hostname did not render"
+  rg -q 'traefik.ingress.kubernetes.io/router.tls.certresolver: .*letsencrypt-production' "$PLATFORM_TMP/application-production.yaml" || fail "production Ingress does not select the production certificate resolver"
+  rg -q '"environment":"production"' "$PLATFORM_TMP/application-production.yaml" || fail "production web runtime configuration did not render"
   if rg -n 'GatewayClass|HTTPRoute|envoyproxy|envoy-gateway' "$PLATFORM_TMP"/*.yaml >/dev/null; then
     fail "rendered platform still contains the superseded Envoy Gateway path"
   fi
   platform_config validate-rendered "$ROOT/deploy/helm/vermouth/files/traffic-matrix.yaml" "$ROOT/deploy/helm/vermouth/files/workload-matrix.yaml" "$PLATFORM_TMP/foundation.yaml" "$PLATFORM_TMP/application.yaml" "$PLATFORM_TMP/jobs.yaml"
   platform_config validate-rendered "$ROOT/deploy/helm/vermouth/files/traffic-matrix.yaml" "$ROOT/deploy/helm/vermouth/files/workload-matrix.yaml" "$PLATFORM_TMP/foundation-google.yaml" "$PLATFORM_TMP/application.yaml" "$PLATFORM_TMP/jobs.yaml" google-enabled
-  printf '%s\n' 'Chart lint, both releases, Jobs, immutable images, and workload inventories are valid.'
+  printf '%s\n' 'Chart lint, local and production releases, Traefik values, Jobs, immutable images, and workload inventories are valid.'
 }

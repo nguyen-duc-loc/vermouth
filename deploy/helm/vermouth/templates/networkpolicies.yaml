@@ -1,4 +1,4 @@
-{{- if .Values.foundation.enabled }}
+{{- if or .Values.foundation.enabled .Values.foundation.bootstrapStorage }}
 {{- $matrix := .Files.Get "files/traffic-matrix.yaml" | fromYaml }}
 {{- if ne (int $matrix.schemaVersion) 1 }}{{ fail "traffic matrix schemaVersion must be 1" }}{{- end }}
 {{- $policies := dict }}

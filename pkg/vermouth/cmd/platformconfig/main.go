@@ -16,9 +16,12 @@ func main() {
 	}
 }
 
+//nolint:funlen,gocognit // The command switch keeps every CLI usage contract visible in one place.
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("expected validate-inputs, get, image-plan, validate-document, or secret-hash")
+		return errors.New(
+			"expected validate-inputs, get, image-plan, production-image-plan, production-images-document, production-migration-set-sha256, production-export-manifest, production-archive-validate, tree-sha256, validate-document, or secret-hash",
+		)
 	}
 
 	switch args[0] {
@@ -37,6 +40,40 @@ func run(args []string) error {
 			return errors.New("usage: platformconfig image-plan <repository-root> <workload> <native|multi>")
 		}
 		return writeImagePlan(args[1], args[2], args[3], os.Stdout)
+	case "production-image-plan":
+		if len(args) != 5 {
+			return errors.New(
+				"usage: platformconfig production-image-plan <repository-root> <workload> <source-revision> <dockerhub-namespace>",
+			)
+		}
+		return writeProductionImagePlan(args[1], args[2], args[3], args[4], os.Stdout)
+	case "production-images-document":
+		if len(args) != 3 {
+			return errors.New(
+				"usage: platformconfig production-images-document <metadata-json> <verified-records-jsonl>",
+			)
+		}
+		return writeProductionImagesDocument(args[1], args[2], os.Stdout)
+	case "production-migration-set-sha256":
+		if len(args) != 2 {
+			return errors.New("usage: platformconfig production-migration-set-sha256 <repository-root>")
+		}
+		return writeProductionMigrationSetSHA256(args[1], os.Stdout)
+	case "production-export-manifest":
+		if len(args) != 3 {
+			return errors.New("usage: platformconfig production-export-manifest <metadata-json> <tree-root>")
+		}
+		return writeProductionExportManifest(args[1], args[2], os.Stdout)
+	case "production-archive-validate":
+		if len(args) != 1 {
+			return errors.New("usage: platformconfig production-archive-validate")
+		}
+		return validateProductionArchive(os.Stdin, os.Stdout)
+	case "tree-sha256":
+		if len(args) != 2 {
+			return errors.New("usage: platformconfig tree-sha256 <directory>")
+		}
+		return writeTreeSHA256(args[1], os.Stdout)
 	case "validate-document":
 		if len(args) != 3 {
 			return errors.New("usage: platformconfig validate-document <schema-file> <document>")

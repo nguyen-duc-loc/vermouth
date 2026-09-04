@@ -62,6 +62,42 @@ func TestRenderTraefikConfigCombinesCommittedValues(t *testing.T) {
 	require.Contains(t, string(content), "    ports:\n      web:\n        port: 80\n")
 }
 
+// covers: AC-8
+func TestRenderProductionTraefikConfigAddsACMEEmail(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	commonPath := filepath.Join(directory, "common.yaml")
+	productionPath := filepath.Join(directory, "production.yaml")
+	outputPath := filepath.Join(directory, "rendered.yaml")
+	temporaryPath := filepath.Join(directory, "tmp")
+	require.NoError(t, os.Mkdir(temporaryPath, 0o700))
+	require.NoError(t, os.WriteFile(commonPath, []byte("deployment:\n  replicas: 1\n"), 0o600))
+	require.NoError(t, os.WriteFile(productionPath, []byte("certificatesResolvers:\n  production:\n    acme:\n      email: __PROD_ACME_EMAIL__\n"), 0o600))
+
+	result := runSourcedShell(
+		t,
+		[]string{
+			repoFile(t, "deploy", "platform", "common.sh"),
+			repoFile(t, "deploy", "platform", "lifecycle.sh"),
+		},
+		"TRAEFIK_COMMON=$COMMON_FILE\nTRAEFIK_PRODUCTION=$PRODUCTION_FILE\nPLATFORM_TMP=$TEMPORARY_PATH\nrender_production_traefik_config \"$OUTPUT_FILE\" operator@example.com\n",
+		"",
+		map[string]string{
+			"COMMON_FILE":     commonPath,
+			"PRODUCTION_FILE": productionPath,
+			"TEMPORARY_PATH":  temporaryPath,
+			"OUTPUT_FILE":     outputPath,
+		},
+	)
+	require.NoError(t, result.err, result.stderr)
+
+	content, err := os.ReadFile(outputPath)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "email: operator@example.com")
+	require.NotContains(t, string(content), "__PROD_ACME_EMAIL__")
+}
+
 // covers: AC-7, AC-11
 func TestRedeployRejectsAMissingTargetBeforeMutation(t *testing.T) {
 	t.Parallel()

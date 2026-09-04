@@ -1,4 +1,4 @@
-{{- if .Values.foundation.enabled }}
+{{- if or .Values.foundation.enabled .Values.foundation.bootstrapStorage }}
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -32,6 +32,9 @@ metadata:
     {{- include "vermouth.componentLabels" (dict "root" $ "component" $name) | nindent 4 }}
   annotations:
     vermouth.dev/decision: spec-0005
+    {{- if eq $name "traefik-acme" }}
+    helm.sh/resource-policy: keep
+    {{- end }}
 spec:
   capacity:
     storage: {{ $size }}
@@ -48,16 +51,21 @@ spec:
             - key: kubernetes.io/hostname
               operator: In
               values: [{{ $.Values.storage.nodeName | quote }}]
-{{- if ne $name "traefik-acme" }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ $name }}
+  {{- if eq $name "traefik-acme" }}
+  namespace: kube-system
+  {{- end }}
   labels:
     {{- include "vermouth.componentLabels" (dict "root" $ "component" $name) | nindent 4 }}
   annotations:
     vermouth.dev/decision: spec-0005
+    {{- if eq $name "traefik-acme" }}
+    helm.sh/resource-policy: keep
+    {{- end }}
 spec:
   accessModes: [ReadWriteOnce]
   storageClassName: {{ $.Values.storage.className }}
@@ -65,6 +73,5 @@ spec:
     requests:
       storage: {{ $size }}
   volumeName: {{ $name }}
-{{- end }}
 {{- end }}
 {{- end }}

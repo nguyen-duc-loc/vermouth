@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "chart_sha256", "generated_at", "git_sha", "github_run_attempt", "github_run_id", "images"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "chart_sha256": { "$ref": "#/definitions/hash" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "git_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "github_run_attempt": { "$ref": "#/definitions/runID" },
+    "github_run_id": { "$ref": "#/definitions/runID" },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["billing", "billing-migration", "garage-init", "gateway", "identity", "identity-migration", "notifications", "notifications-migration", "teaching", "teaching-migration", "web"],
+      "properties": {
+        "billing": { "$ref": "#/definitions/image" },
+        "billing-migration": { "$ref": "#/definitions/image" },
+        "garage-init": { "$ref": "#/definitions/image" },
+        "gateway": { "$ref": "#/definitions/image" },
+        "identity": { "$ref": "#/definitions/image" },
+        "identity-migration": { "$ref": "#/definitions/image" },
+        "notifications": { "$ref": "#/definitions/image" },
+        "notifications-migration": { "$ref": "#/definitions/image" },
+        "teaching": { "$ref": "#/definitions/image" },
+        "teaching-migration": { "$ref": "#/definitions/image" },
+        "web": { "$ref": "#/definitions/image" }
+      }
+    }
+  },
+  "definitions": {
+    "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "runID": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["build_input_sha256", "created_at", "digest", "platforms", "repository", "source_revision", "tag"],
+      "properties": {
+        "build_input_sha256": { "$ref": "#/definitions/hash" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "digest": { "$ref": "#/definitions/digest" },
+        "platforms": { "const": ["linux/amd64", "linux/arm64"] },
+        "repository": { "type": "string", "pattern": "^docker.io/[a-z0-9][a-z0-9_-]*/vermouth-[a-z-]+$" },
+        "source_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "tag": { "type": "string", "pattern": "^git-[0-9a-f]{12}-[0-9a-f]{64}$" }
+      }
+    }
+  }
+}

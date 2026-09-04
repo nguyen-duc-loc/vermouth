@@ -54,6 +54,7 @@ spec:
         app.kubernetes.io/component: {{ $name }}
     spec:
       serviceAccountName: {{ $name }}
+      {{- include "vermouth.imagePullSecrets" $ | nindent 6 }}
       automountServiceAccountToken: {{ $workload.automountServiceAccountToken }}
       securityContext:
         {{- include "vermouth.podSecurity" $ | nindent 8 }}

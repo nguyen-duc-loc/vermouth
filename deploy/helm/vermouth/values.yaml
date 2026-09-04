@@ -1,6 +1,17 @@
 schemaVersion: 1
+release:
+  gitSHA: ""
+  githubRunID: ""
+  githubRunAttempt: ""
+  identity: ""
+  imagesJSONSHA256: ""
+  deploymentBaseSHA256: ""
+  migrationCompatEvidenceSHA256: ""
+  rateLimitEvidenceSHA256: ""
+  bundleManifestSHA256: ""
 foundation:
   enabled: false
+  bootstrapStorage: false
 application:
   enabled: false
 jobs:
@@ -14,7 +25,10 @@ jobs:
     enabled: false
     args: []
 
+imagePullSecrets: []
+
 images:
+  storageGuard: ""
   postgres: ""
   redpanda: ""
   garage: ""
@@ -76,10 +90,21 @@ config:
   billingS3Region: garage
   billingS3Bucket: vermouth-invoices
 
+ingress:
+  enabled: true
+  hostname: vermouth.localhost
+  entryPoint: web
+  tls:
+    enabled: false
+    certResolver: ""
+
 storage:
   className: vermouth-local
   nodeName: k3d-vermouth-server-0
   rootPath: /var/lib/vermouth
+  markerSHA256: ""
+  guard:
+    enabled: false
   postgres: 2Gi
   redpanda: 4Gi
   garageMetadata: 1Gi

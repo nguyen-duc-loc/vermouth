@@ -1,2 +1,40 @@
-# Spec 0006 owns the production entrypoints, certificate resolver, and ACME settings.
-{}
+ports:
+  web:
+    expose:
+      default: true
+    exposedPort: 80
+    redirections:
+      entryPoint:
+        to: websecure
+        scheme: https
+        permanent: true
+  websecure:
+    expose:
+      default: true
+    exposedPort: 443
+service:
+  spec:
+    type: LoadBalancer
+persistence:
+  enabled: true
+  name: data
+  path: /data
+  existingClaim: traefik-acme
+  accessMode: ReadWriteOnce
+  storageClass: vermouth-local
+additionalArguments:
+  - --entryPoints.web.allowACMEByPass=true
+certificatesResolvers:
+  letsencrypt-staging:
+    acme:
+      email: __PROD_ACME_EMAIL__
+      caServer: https://acme-staging-v02.api.letsencrypt.org/directory
+      storage: /data/acme-staging.json
+      httpChallenge:
+        entryPoint: web
+  letsencrypt-production:
+    acme:
+      email: __PROD_ACME_EMAIL__
+      storage: /data/acme.json
+      httpChallenge:
+        entryPoint: web

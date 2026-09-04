@@ -15,6 +15,7 @@ metadata:
     vermouth.dev/run-id: {{ $.Values.jobs.runID }}
   annotations:
     vermouth.dev/decision: spec-0005
+    helm.sh/resource-policy: keep
 spec:
   activeDeadlineSeconds: {{ $workload.activeDeadlineSeconds }}
   backoffLimit: {{ $workload.backoffLimit }}
@@ -27,6 +28,7 @@ spec:
     spec:
       restartPolicy: Never
       serviceAccountName: {{ printf "migrate-%s" $name }}
+      {{- include "vermouth.imagePullSecrets" $ | nindent 6 }}
       automountServiceAccountToken: {{ $workload.automountServiceAccountToken }}
       securityContext:
         {{- include "vermouth.podSecurity" $ | nindent 8 }}
@@ -69,6 +71,7 @@ metadata:
     vermouth.dev/run-id: {{ .Values.jobs.runID }}
   annotations:
     vermouth.dev/decision: spec-0005
+    helm.sh/resource-policy: keep
 spec:
   activeDeadlineSeconds: {{ $workload.activeDeadlineSeconds }}
   backoffLimit: {{ $workload.backoffLimit }}
@@ -81,6 +84,7 @@ spec:
     spec:
       restartPolicy: Never
       serviceAccountName: garage-init
+      {{- include "vermouth.imagePullSecrets" . | nindent 6 }}
       automountServiceAccountToken: {{ $workload.automountServiceAccountToken }}
       securityContext:
         {{- include "vermouth.podSecurity" . | nindent 8 }}
@@ -159,6 +163,7 @@ spec:
     spec:
       restartPolicy: Never
       serviceAccountName: devtoken
+      {{- include "vermouth.imagePullSecrets" . | nindent 6 }}
       automountServiceAccountToken: {{ $workload.automountServiceAccountToken }}
       securityContext:
         {{- include "vermouth.podSecurity" . | nindent 8 }}
