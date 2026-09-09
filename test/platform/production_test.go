@@ -73,6 +73,7 @@ func TestMigrationCompatibilityResolvesTheDeploymentBaseBeforeChangingDirectory(
 
 	tools := t.TempDir()
 	writeExecutable(t, tools, "go", "printf '%s\\n' \"$*\"\nexit 17\n")
+	writeExecutable(t, tools, "goose", "exit 0\n")
 	relativeBase, err := filepath.Rel(repoFile(t), base)
 	require.NoError(t, err)
 	result := runCommand(
