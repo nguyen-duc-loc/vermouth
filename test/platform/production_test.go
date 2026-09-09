@@ -26,6 +26,23 @@ func TestProductionConfigurationPinsTheExactTarget(t *testing.T) {
 	require.NoError(t, result.err, result.stderr)
 }
 
+// covers: AC-4, AC-10
+func TestProductionWorkflowInstallsTheAuthEvidenceToolchain(t *testing.T) {
+	t.Parallel()
+
+	workflow, err := os.ReadFile(repoFile(t, ".github", "workflows", "production.yml"))
+	require.NoError(t, err)
+
+	for _, required := range []string{
+		"uses: pnpm/action-setup@v6",
+		"uses: actions/setup-node@v7",
+		"node-version: '24.19'",
+		"go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0",
+	} {
+		require.Contains(t, string(workflow), required)
+	}
+}
+
 // covers: AC-1, AC-2
 func TestProductionConfigurationRejectsAnotherHost(t *testing.T) {
 	t.Parallel()
