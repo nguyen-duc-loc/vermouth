@@ -144,7 +144,8 @@ func loadConfig() (config, error) {
 	if err != nil {
 		return config{}, fmt.Errorf("parse GARAGE_ADMIN_ENDPOINT: %w", err)
 	}
-	if endpoint.String() != "http://garage:3903" { //nolint:revive // The cluster local Garage admin endpoint intentionally has no TLS.
+	//nolint:revive // The cluster local Garage admin endpoint intentionally has no TLS.
+	if endpoint.String() != "http://garage:3903" {
 		return config{}, errors.New("GARAGE_ADMIN_ENDPOINT must be exactly http://garage:3903")
 	}
 	if values["GARAGE_ZONE"] != "local" || values["GARAGE_BUCKET"] != "vermouth-invoices" ||

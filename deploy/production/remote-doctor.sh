@@ -6,7 +6,7 @@ doctor_fail() {
   exit 2
 }
 
-for tool in curl jq kubectl k3s ss findmnt df awk grep stat sha256sum getent nproc systemctl tr; do
+for tool in curl jq kubectl k3s findmnt df awk grep stat sha256sum getent nproc systemctl tr; do
   command -v "$tool" >/dev/null 2>&1 || doctor_fail "$tool is required on the VM"
 done
 
@@ -17,7 +17,7 @@ vm_name=$(printf '%s' "$metadata" | jq -r '.compute.name')
 vm_size=$(printf '%s' "$metadata" | jq -r '.compute.vmSize')
 location=$(printf '%s' "$metadata" | jq -r '.compute.location')
 operator=$(printf '%s' "$metadata" | jq -r '.compute.osProfile.adminUsername')
-public_ip=$(printf '%s' "$metadata" | jq -r '[.network.interface[].ipv4.ipAddress[].publicIpAddress | select(length > 0)][0] // empty')
+public_ip=$(azure_public_ip "$metadata") || doctor_fail "Azure public IP metadata is unavailable"
 [ "$vm_name" = "$EXPECTED_VM_NAME" ] || doctor_fail "VM name is $vm_name, expected $EXPECTED_VM_NAME"
 [ "$vm_size" = "$EXPECTED_VM_SIZE" ] || doctor_fail "VM size is $vm_size, expected $EXPECTED_VM_SIZE"
 [ "$location" = "$EXPECTED_LOCATION" ] || doctor_fail "VM location is $location, expected $EXPECTED_LOCATION"
@@ -84,9 +84,11 @@ fi
 
 resolved=$(getent ahostsv4 "$EXPECTED_HOSTNAME" | awk '{print $1}' | LC_ALL=C sort -u)
 [ "$resolved" = "$EXPECTED_HOST" ] || doctor_fail "$EXPECTED_HOSTNAME does not resolve to $EXPECTED_HOST from the VM"
+traefik_service=$(kubectl --namespace kube-system get service traefik -o json)
 for port in 80 443; do
-  ss -ltnH | awk -v port=":$port" '$4 ~ port "$" {found=1} END {exit !found}' ||
-    doctor_fail "nothing listens on TCP port $port"
+  printf '%s' "$traefik_service" |
+    jq -e --argjson port "$port" '.spec.ports | any(.protocol == "TCP" and .port == $port)' >/dev/null ||
+    doctor_fail "packaged Traefik does not expose TCP port $port"
 done
 
 env_file=/etc/vermouth/production.env

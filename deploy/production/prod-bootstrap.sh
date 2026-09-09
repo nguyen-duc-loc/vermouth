@@ -172,11 +172,13 @@ prod_bootstrap() {
       -buildvcs=false -trimpath -o "$PROD_WORK_DIR/vermouth-platformconfig" ./cmd/platformconfig
   )
 
+  cat "$PROD_DIR/azure-metadata.sh" "$PROD_DIR/remote-doctor.sh" >"$PROD_WORK_DIR/remote-doctor"
+  cat "$PROD_DIR/azure-metadata.sh" "$PROD_DIR/bootstrap-root.sh" >"$PROD_WORK_DIR/bootstrap-root"
   remote_environment=$(prod_remote_environment)
-  prod_ssh "sudo --non-interactive env BOOTSTRAP_MODE=true $remote_environment /bin/sh -s" <"$PROD_DIR/remote-doctor.sh"
+  prod_ssh "sudo --non-interactive env BOOTSTRAP_MODE=true $remote_environment /bin/sh -s" <"$PROD_WORK_DIR/remote-doctor"
   install_production_program "$PROD_DIR/vermouth-ssh-entrypoint" /usr/local/sbin/vermouth-ssh-entrypoint
   install_production_program "$PROD_DIR/vermouth-deploy-root" /usr/local/sbin/vermouth-deploy-root
-  install_production_program "$PROD_DIR/bootstrap-root.sh" /usr/local/sbin/vermouth-bootstrap-root
+  install_production_program "$PROD_WORK_DIR/bootstrap-root" /usr/local/sbin/vermouth-bootstrap-root
   install_production_program "$PROD_WORK_DIR/vermouth-platformconfig" /usr/local/sbin/vermouth-platformconfig
   prod_ssh 'sudo --non-interactive install -d -o root -g root -m 0755 /usr/local/share/vermouth'
   prod_ssh 'sudo --non-interactive install -d -o root -g root -m 0755 /usr/local/lib/vermouth'
@@ -186,6 +188,7 @@ prod_bootstrap() {
     install_production_file "$PROD_DIR/$schema.schema.json" "/usr/local/share/vermouth/$schema.schema.json"
   done
 
-  tar -C "$bundle" -czf - . | prod_ssh 'sudo --non-interactive /usr/local/sbin/vermouth-bootstrap-root'
+  COPYFILE_DISABLE=1 tar --no-xattrs -C "$bundle" -czf - . |
+    prod_ssh 'sudo --non-interactive /usr/local/sbin/vermouth-bootstrap-root'
   printf '%s\n' "Production bootstrap completed for $PROD_HOSTNAME without deploying the application"
 }

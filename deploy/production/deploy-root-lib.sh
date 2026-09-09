@@ -83,7 +83,7 @@ write_deployment_base_unlocked() (
   inspection=$(mktemp -d /var/tmp/vermouth-inspect.XXXXXX)
   trap 'rm -rf "$inspection"' EXIT HUP INT TERM
 
-  helm --namespace vermouth list --all --filter '^vermouth$' -o json >"$inspection/releases.json" ||
+  helm --namespace vermouth list --filter '^vermouth$' -o json >"$inspection/releases.json" ||
     release_fail "cannot list the application Helm release"
   release_count=$(jq 'length' "$inspection/releases.json")
   if [ "$release_count" -eq 0 ]; then

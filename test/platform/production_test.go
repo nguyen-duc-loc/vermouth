@@ -1,6 +1,7 @@
 package platform_test
 
 import (
+	"bytes"
 	"maps"
 	"os"
 	"path/filepath"
@@ -166,6 +167,84 @@ func TestProductionDoctorRejectsABroadAzureInboundRule(t *testing.T) {
 	require.Contains(t, result.stderr, "must expose Internet traffic only on ports 22, 80, and 443")
 }
 
+// covers: AC-1, AC-2
+func TestAzurePublicIPUsesInstanceMetadataWhenPresent(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	writeExecutable(t, directory, "curl", "exit 1\n")
+	result := runSourcedShell(
+		t,
+		[]string{repoFile(t, "deploy", "production", "azure-metadata.sh")},
+		"azure_public_ip \"$INSTANCE_METADATA\"\n",
+		"",
+		map[string]string{
+			"PATH":              directory + string(os.PathListSeparator) + os.Getenv("PATH"),
+			"INSTANCE_METADATA": `{"network":{"interface":[{"ipv4":{"ipAddress":[{"publicIpAddress":"4.194.251.123"}]}}]}}`,
+		},
+	)
+
+	require.NoError(t, result.err, result.stderr)
+	require.Equal(t, "4.194.251.123\n", result.stdout)
+}
+
+// covers: AC-1, AC-2
+func TestAzurePublicIPFallsBackToStandardSKUMetadata(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	writeExecutable(t, directory, "curl", `
+case "$*" in
+  *metadata/loadbalancer*)
+    printf '%s\n' '{"loadbalancer":{"publicIpAddresses":[{"frontendIpAddress":"4.194.251.123","privateIpAddress":"10.0.0.4"}]}}'
+    ;;
+  *) exit 1 ;;
+esac
+`)
+	result := runSourcedShell(
+		t,
+		[]string{repoFile(t, "deploy", "production", "azure-metadata.sh")},
+		"azure_public_ip \"$INSTANCE_METADATA\"\n",
+		"",
+		map[string]string{
+			"PATH":              directory + string(os.PathListSeparator) + os.Getenv("PATH"),
+			"INSTANCE_METADATA": `{"network":{"interface":[{"ipv4":{"ipAddress":[{"privateIpAddress":"10.0.0.4","publicIpAddress":""}]}}]}}`,
+		},
+	)
+
+	require.NoError(t, result.err, result.stderr)
+	require.Equal(t, "4.194.251.123\n", result.stdout)
+}
+
+// covers: AC-1, AC-2, AC-8
+func TestRemoteDoctorChecksTheTraefikServiceInsteadOfHostSockets(t *testing.T) {
+	t.Parallel()
+
+	script, err := os.ReadFile(repoFile(t, "deploy", "production", "remote-doctor.sh"))
+	require.NoError(t, err)
+	require.Contains(t, string(script), "get service traefik -o json")
+	require.NotContains(t, string(script), "ss -ltnH")
+}
+
+// covers: AC-8
+func TestProductionBootstrapWaitsForOneTraefikBeforeRequestingACertificate(t *testing.T) {
+	t.Parallel()
+
+	script, err := os.ReadFile(repoFile(t, "deploy", "production", "bootstrap-root.sh"))
+	require.NoError(t, err)
+	removeProbe := bytes.Index(script, []byte("delete ingress acme-staging-probe"))
+	installTraefik := bytes.Index(script, []byte("install -o root -g root -m 0644 \"$work/traefik-config.yaml\""))
+	waitForOne := bytes.Index(script, []byte("the prior Traefik Pod did not leave the rollout"))
+	createProbe := bytes.Index(script, []byte("kind: Service\nmetadata:\n  name: acme-staging-probe"))
+	require.NotEqual(t, -1, removeProbe)
+	require.NotEqual(t, -1, installTraefik)
+	require.NotEqual(t, -1, waitForOne)
+	require.NotEqual(t, -1, createProbe)
+	require.Less(t, removeProbe, installTraefik)
+	require.Less(t, installTraefik, waitForOne)
+	require.Less(t, waitForOne, createProbe)
+}
+
 // covers: AC-17, AC-18
 func TestProductionRecoveryAcceptsOneProtectedNativeAgeIdentity(t *testing.T) {
 	t.Parallel()
@@ -247,6 +326,15 @@ prod_restore_bootstrap_tools
 	require.Contains(t, result.stdout, "restore:zstd\n")
 }
 
+// covers: AC-2, AC-5
+func TestProductionBootstrapDisablesAppleArchiveMetadata(t *testing.T) {
+	t.Parallel()
+
+	script, err := os.ReadFile(repoFile(t, "deploy", "production", "prod-bootstrap.sh"))
+	require.NoError(t, err)
+	require.Contains(t, string(script), "COPYFILE_DISABLE=1 tar")
+}
+
 // covers: AC-13, AC-15
 func TestProductionJobRunIdentityIncludesTheWorkflowAttempt(t *testing.T) {
 	t.Parallel()
@@ -261,6 +349,16 @@ func TestProductionJobRunIdentityIncludesTheWorkflowAttempt(t *testing.T) {
 
 	require.NoError(t, result.err, result.stderr)
 	require.Equal(t, "123456-2\n", result.stdout)
+}
+
+// covers: AC-13, AC-20
+func TestProductionInspectionUsesHelmFourListSemantics(t *testing.T) {
+	t.Parallel()
+
+	script, err := os.ReadFile(repoFile(t, "deploy", "production", "deploy-root-lib.sh"))
+	require.NoError(t, err)
+	require.Contains(t, string(script), "list --filter '^vermouth$'")
+	require.NotContains(t, string(script), "list --all")
 }
 
 // covers: AC-19

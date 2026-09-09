@@ -83,7 +83,8 @@ metadata=$(curl -fsS --max-time 5 -H Metadata:true 'http://169.254.169.254/metad
 [ "$(printf '%s' "$metadata" | jq -r '.compute.name')" = "$expected_vm" ] || bootstrap_fail "the target VM name does not match"
 [ "$(printf '%s' "$metadata" | jq -r '.compute.vmSize')" = "$expected_size" ] || bootstrap_fail "the target VM size does not match"
 [ "$(printf '%s' "$metadata" | jq -r '.compute.location')" = "$expected_location" ] || bootstrap_fail "the target VM location does not match"
-[ "$(printf '%s' "$metadata" | jq -r '[.network.interface[].ipv4.ipAddress[].publicIpAddress | select(length > 0)][0] // empty')" = "$expected_host" ] ||
+public_ip=$(azure_public_ip "$metadata") || bootstrap_fail "Azure public IP metadata is unavailable"
+[ "$public_ip" = "$expected_host" ] ||
   bootstrap_fail "the target public IP does not match"
 [ "$(kubectl version -o json | jq -r '.serverVersion.gitVersion')" = "$expected_k3s" ] || bootstrap_fail "the live k3s version does not match"
 [ "$(kubectl get node -o json | jq -r '.items | length')" -eq 1 ] || bootstrap_fail "production must contain one k3s node"
@@ -290,8 +291,21 @@ helm upgrade --install vermouth-foundation "$work/chart" --namespace vermouth --
 [ "$(kubectl --namespace kube-system get pvc traefik-acme -o json | jq -r '.spec.storageClassName')" = vermouth-local ] ||
   bootstrap_fail "bootstrap did not create the Traefik ACME claim in kube-system"
 
+kubectl --namespace vermouth delete ingress acme-staging-probe --ignore-not-found >/dev/null
+kubectl --namespace vermouth delete service acme-staging-probe --ignore-not-found >/dev/null
 install -o root -g root -m 0644 "$work/traefik-config.yaml" /var/lib/rancher/k3s/server/manifests/traefik-config.yaml
 kubectl --namespace kube-system rollout status deployment/traefik --timeout=5m >/dev/null
+traefik_deadline=$(( $(date +%s) + 300 ))
+while ! kubectl --namespace kube-system get pod \
+  --selector=app.kubernetes.io/instance=traefik-kube-system,app.kubernetes.io/name=traefik -o json |
+  jq -e '
+    (.items | length) == 1 and
+    .items[0].metadata.deletionTimestamp == null and
+    any(.items[0].status.conditions[]; .type == "Ready" and .status == "True")
+  ' >/dev/null; do
+  [ "$(date +%s)" -lt "$traefik_deadline" ] || bootstrap_fail "the prior Traefik Pod did not leave the rollout"
+  sleep 2
+done
 
 deploy_user=$(jq -r '.target.deploy_user' "$config")
 if ! id "$deploy_user" >/dev/null 2>&1; then
