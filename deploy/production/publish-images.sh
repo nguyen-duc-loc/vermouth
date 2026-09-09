@@ -63,7 +63,6 @@ verify_immutable_rule() {
 verify_image() {
   plan=$1
   reference=$2
-  record=$3
   workload=$(jq -r '.workload' "$plan")
   repository=$(jq -r '.repository' "$plan")
   source=$(jq -r '.source_revision' "$plan")
@@ -103,8 +102,7 @@ verify_image() {
   jq -c \
     --arg workload "$workload" --arg repository "$repository" --arg tag "$(jq -r '.tag' "$plan")" \
     --arg digest "$root_digest" --arg input "$input_hash" --arg revision "$source" --arg created "$created_at" \
-    '{workload:$workload,repository:$repository,tag:$tag,digest:$digest,platforms:["linux/amd64","linux/arm64"],build_input_sha256:$input,source_revision:$revision,created_at:$created}' \
-    >"$record"
+    '{workload:$workload,repository:$repository,tag:$tag,digest:$digest,platforms:["linux/amd64","linux/arm64"],build_input_sha256:$input,source_revision:$revision,created_at:$created}'
 }
 
 publish_image() {
@@ -119,7 +117,7 @@ publish_image() {
   verify_immutable_rule "$workload"
   reference=$(jq -r '.repository + ":" + .tag' "$plan")
   if docker buildx imagetools inspect --raw "$reference" >/dev/null 2>&1; then
-    verify_image "$plan" "$reference" "$record"
+    verify_image "$plan" "$reference" >"$record"
     return
   fi
 
@@ -150,7 +148,7 @@ publish_image() {
   if [ "$build_status" -ne 0 ]; then
     printf '%s\n' "$workload push did not win. Inspecting the immutable tag for a matching publisher."
   fi
-  verify_image "$plan" "$reference" "$record"
+  verify_image "$plan" "$reference" >"$record"
 }
 
 production_workloads='billing billing-migration garage-init gateway identity identity-migration notifications notifications-migration teaching teaching-migration web'
