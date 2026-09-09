@@ -537,7 +537,7 @@ production_pod_usage() {
     raw=$release_work/pod-usage-$namespace.txt
     kubectl top pod --namespace "$namespace" --no-headers >"$raw" 2>/dev/null ||
       release_fail "kubectl top cannot sample $namespace Pods for the capacity gate"
-    awk -v namespace="$namespace" 'NF == 3 {printf "%s\t%s\t%s\t%s\n", namespace, $1, $2, $3}' \
+    awk -v pod_namespace="$namespace" 'NF == 3 {printf "%s\t%s\t%s\t%s\n", pod_namespace, $1, $2, $3}' \
       "$raw" >>"$metrics"
   done
   [ -s "$metrics" ] || release_fail "kubectl top returned no Vermouth or k3s Pod samples"
