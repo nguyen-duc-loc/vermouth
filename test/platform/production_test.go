@@ -43,6 +43,23 @@ func TestProductionWorkflowInstallsTheAuthEvidenceToolchain(t *testing.T) {
 	}
 }
 
+// covers: AC-4
+func TestProductionPublisherAssemblesEveryVerifiedImageRecord(t *testing.T) {
+	t.Parallel()
+
+	publisher, err := os.ReadFile(repoFile(t, "deploy", "production", "publish-images.sh"))
+	require.NoError(t, err)
+
+	source := string(publisher)
+	publication := strings.Index(source, "for workload in $production_workloads; do\n  publish_image")
+	assembly := strings.Index(source, "records=$work/verified-records.jsonl")
+	require.Positive(t, publication)
+	require.Greater(t, assembly, publication)
+	require.Contains(t, source[assembly:], "[ -s \"$record\" ]")
+	require.Contains(t, source[assembly:], "cat \"$record\" >>\"$records\"")
+	require.NotContains(t, source[:assembly], ">>\"$records\"")
+}
+
 // covers: AC-1, AC-2
 func TestProductionConfigurationRejectsAnotherHost(t *testing.T) {
 	t.Parallel()

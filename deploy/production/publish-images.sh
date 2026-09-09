@@ -120,7 +120,6 @@ publish_image() {
   reference=$(jq -r '.repository + ":" + .tag' "$plan")
   if docker buildx imagetools inspect --raw "$reference" >/dev/null 2>&1; then
     verify_image "$plan" "$reference" "$record"
-    cat "$record" >>"$records"
     return
   fi
 
@@ -152,13 +151,19 @@ publish_image() {
     printf '%s\n' "$workload push did not win. Inspecting the immutable tag for a matching publisher."
   fi
   verify_image "$plan" "$reference" "$record"
-  cat "$record" >>"$records"
 }
+
+production_workloads='billing billing-migration garage-init gateway identity identity-migration notifications notifications-migration teaching teaching-migration web'
+for workload in $production_workloads; do
+  publish_image "$workload"
+done
 
 records=$work/verified-records.jsonl
 : >"$records"
-for workload in billing billing-migration garage-init gateway identity identity-migration notifications notifications-migration teaching teaching-migration web; do
-  publish_image "$workload"
+for workload in $production_workloads; do
+  record=$work/$workload-record.json
+  [ -s "$record" ] || publish_fail "$workload verified image record is missing"
+  cat "$record" >>"$records"
 done
 
 chart_sha256=$(
