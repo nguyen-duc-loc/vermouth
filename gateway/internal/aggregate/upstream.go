@@ -20,6 +20,10 @@ import (
 // so one oversized body cannot take the gateway's memory with it.
 const maxUpstreamBody = 4 << 20
 
+// upstreamTimeout is shared by every identity, teaching, and billing call. It
+// is code rather than deployment state because this feature adds no setting.
+const upstreamTimeout = 5 * time.Second
+
 // Upstreams are the services the gateway may call. It is the only caller
 // allowed (INV-1), and it holds no database of its own.
 type Upstreams struct {
@@ -36,13 +40,11 @@ type Client struct {
 	upstreams Upstreams
 }
 
-// NewClient builds the one client the gateway calls services with. timeout is
-// per call and comes from the environment, because a slow machine needs a
-// longer one than a fast one.
-func NewClient(upstreams Upstreams, timeout time.Duration) *Client {
+// NewClient builds the one bounded client the gateway uses for every service.
+func NewClient(upstreams Upstreams) *Client {
 	return &Client{
 		http: &http.Client{
-			Timeout: timeout,
+			Timeout: upstreamTimeout,
 			// A redirect is an answer here, not something to chase: identity's
 			// sign in endpoints answer 302 and the browser is the one that has
 			// to see it. No other call expects one at all.
@@ -69,6 +71,20 @@ type Response struct {
 
 // Call makes one request to one service.
 func (c *Client) Call(ctx context.Context, method, baseURL, path, bearer string, body any) (Response, error) {
+	return c.CallWithHeaders(ctx, method, baseURL, path, bearer, nil, body)
+}
+
+// CallWithHeaders makes one service request with the narrow extra headers a
+// public command contract requires, such as Idempotency-Key.
+func (c *Client) CallWithHeaders(
+	ctx context.Context,
+	method string,
+	baseURL string,
+	path string,
+	bearer string,
+	headers http.Header,
+	body any,
+) (Response, error) {
 	var reader io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
@@ -91,6 +107,11 @@ func (c *Client) Call(ctx context.Context, method, baseURL, path, bearer string,
 	if bearer != "" {
 		request.Header.Set("Authorization", "Bearer "+bearer)
 	}
+	for name, values := range headers {
+		for _, value := range values {
+			request.Header.Add(name, value)
+		}
+	}
 
 	response, err := c.http.Do(request)
 	if err != nil {
@@ -106,7 +127,8 @@ func (c *Client) Call(ctx context.Context, method, baseURL, path, bearer string,
 }
 
 // Forward passes one of identity's four auth requests through unchanged: the
-// inbound Cookie header on the way in, and whatever came back on the way out.
+// inbound Cookie and Origin headers on the way in, and whatever came back on
+// the way out.
 // These four are the only place the gateway carries a cookie, and it sets none
 // of its own: the whole session rule belongs to identity (spec 0001, the gateway
 // holds no business rule).
@@ -127,6 +149,9 @@ func (c *Client) Forward(ctx context.Context, r *http.Request, baseURL, path str
 	}
 	if cookie := r.Header.Get("Cookie"); cookie != "" {
 		request.Header.Set("Cookie", cookie)
+	}
+	if origin := r.Header.Get("Origin"); origin != "" {
+		request.Header.Set("Origin", origin)
 	}
 	if requestID := vermouth.RequestID(ctx); requestID != "" {
 		request.Header.Set(vermouth.RequestIDHeader, requestID)

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "git_sha",
+    "deployment_base_sha256",
+    "previous_application_revision",
+    "previous_release_identity",
+    "previous_source_revision",
+    "previous_images_json_sha256",
+    "previous_goose_versions",
+    "candidate_goose_versions",
+    "migration_set_sha256",
+    "test_target",
+    "pass",
+    "timestamp"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "git_sha": { "$ref": "#/definitions/gitSHA" },
+    "deployment_base_sha256": { "$ref": "#/definitions/hash" },
+    "previous_application_revision": { "type": ["integer", "null"], "minimum": 1 },
+    "previous_release_identity": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{40}/[1-9][0-9]*-[1-9][0-9]*$"
+    },
+    "previous_source_revision": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40}$" },
+    "previous_images_json_sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "previous_goose_versions": { "$ref": "#/definitions/gooseVersions" },
+    "candidate_goose_versions": { "$ref": "#/definitions/gooseVersions" },
+    "migration_set_sha256": { "$ref": "#/definitions/hash" },
+    "test_target": { "const": "task test:migration-compat" },
+    "pass": { "const": true },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    }
+  },
+  "definitions": {
+    "gitSHA": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gooseVersions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "teaching", "billing", "notifications"],
+      "properties": {
+        "identity": { "type": "integer", "minimum": 0 },
+        "teaching": { "type": "integer", "minimum": 0 },
+        "billing": { "type": "integer", "minimum": 0 },
+        "notifications": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

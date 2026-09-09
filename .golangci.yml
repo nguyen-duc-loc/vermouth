@@ -8,6 +8,7 @@ linters:
     - cyclop # Prefer gocognit.
     - dogsled # Questionable (assignment to how many blank identifiers is not okay?).
     - dupl
+    - exhaustruct # Deprecated since 2.13.0; exhaustruct_v5 is configured below.
     - forcetypeassert # Questionable (often we actually want panic).
     - gocyclo # Prefer gocognit.
     - gomodguard # Deprecated.

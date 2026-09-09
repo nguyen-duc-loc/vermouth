@@ -16,16 +16,18 @@ import (
 const consumeLoginAttempt = `-- name: ConsumeLoginAttempt :one
 DELETE FROM login_attempts
 WHERE state = $1 AND expires_at > now()
-RETURNING state, code_verifier, nonce, redirect_to, timezone, language
+RETURNING state, code_verifier, nonce, browser_binding_hash,
+          redirect_to, timezone, language
 `
 
 type ConsumeLoginAttemptRow struct {
-	State        string
-	CodeVerifier string
-	Nonce        string
-	RedirectTo   string
-	Timezone     string
-	Language     string
+	State              string
+	CodeVerifier       string
+	Nonce              string
+	BrowserBindingHash []byte
+	RedirectTo         string
+	Timezone           string
+	Language           string
 }
 
 // Single use is the delete itself, inside the callback transaction, so a
@@ -38,6 +40,7 @@ func (q *Queries) ConsumeLoginAttempt(ctx context.Context, state string) (Consum
 		&i.State,
 		&i.CodeVerifier,
 		&i.Nonce,
+		&i.BrowserBindingHash,
 		&i.RedirectTo,
 		&i.Timezone,
 		&i.Language,
@@ -58,35 +61,54 @@ func (q *Queries) DeleteExpiredLoginAttempts(ctx context.Context) (int64, error)
 	return result.RowsAffected(), nil
 }
 
-const deleteFinishedRefreshTokens = `-- name: DeleteFinishedRefreshTokens :execrows
-DELETE FROM refresh_tokens
-WHERE expires_at <= now() OR (revoked_at IS NOT NULL AND revoked_at <= $1)
+const deleteFinishedAuthSessions = `-- name: DeleteFinishedAuthSessions :execrows
+DELETE FROM auth_sessions
+WHERE expires_at <= transaction_timestamp()
+   OR (revoked_at IS NOT NULL AND revoked_at <= $1)
 `
 
 // The sweep. A revoked row is kept for a while on purpose: presenting it again
 // is how a stolen copy shows up, and a deleted row is indistinguishable from
 // one that never existed.
-func (q *Queries) DeleteFinishedRefreshTokens(ctx context.Context, revokedAt pgtype.Timestamptz) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteFinishedRefreshTokens, revokedAt)
+func (q *Queries) DeleteFinishedAuthSessions(ctx context.Context, revokedAt pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteFinishedAuthSessions, revokedAt)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
 }
 
+const extendAuthSession = `-- name: ExtendAuthSession :exec
+UPDATE auth_sessions
+SET expires_at = $2
+WHERE session_id = $1 AND revoked_at IS NULL
+`
+
+type ExtendAuthSessionParams struct {
+	SessionID uuid.UUID
+	ExpiresAt time.Time
+}
+
+func (q *Queries) ExtendAuthSession(ctx context.Context, arg ExtendAuthSessionParams) error {
+	_, err := q.db.Exec(ctx, extendAuthSession, arg.SessionID, arg.ExpiresAt)
+	return err
+}
+
 const getLoginAttempt = `-- name: GetLoginAttempt :one
-SELECT state, code_verifier, nonce, redirect_to, timezone, language
+SELECT state, code_verifier, nonce, browser_binding_hash,
+       redirect_to, timezone, language
 FROM login_attempts
 WHERE state = $1 AND expires_at > now()
 `
 
 type GetLoginAttemptRow struct {
-	State        string
-	CodeVerifier string
-	Nonce        string
-	RedirectTo   string
-	Timezone     string
-	Language     string
+	State              string
+	CodeVerifier       string
+	Nonce              string
+	BrowserBindingHash []byte
+	RedirectTo         string
+	Timezone           string
+	Language           string
 }
 
 // The callback reads the attempt before it talks to Google, because the PKCE
@@ -99,6 +121,7 @@ func (q *Queries) GetLoginAttempt(ctx context.Context, state string) (GetLoginAt
 		&i.State,
 		&i.CodeVerifier,
 		&i.Nonce,
+		&i.BrowserBindingHash,
 		&i.RedirectTo,
 		&i.Timezone,
 		&i.Language,
@@ -106,22 +129,41 @@ func (q *Queries) GetLoginAttempt(ctx context.Context, state string) (GetLoginAt
 	return i, err
 }
 
-const getRefreshToken = `-- name: GetRefreshToken :one
-SELECT token_hash, session_id, tutor_id, issued_at, expires_at, used_at, revoked_at
+const getRefreshTokenSessionID = `-- name: GetRefreshTokenSessionID :one
+SELECT session_id
 FROM refresh_tokens
 WHERE token_hash = $1
 `
 
-func (q *Queries) GetRefreshToken(ctx context.Context, tokenHash []byte) (RefreshToken, error) {
-	row := q.db.QueryRow(ctx, getRefreshToken, tokenHash)
-	var i RefreshToken
+// This lookup takes no lock. session_id is immutable, and it only tells the
+// caller which auth_sessions row must be locked before it may inspect the token.
+func (q *Queries) GetRefreshTokenSessionID(ctx context.Context, tokenHash []byte) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getRefreshTokenSessionID, tokenHash)
+	var session_id uuid.UUID
+	err := row.Scan(&session_id)
+	return session_id, err
+}
+
+const insertAuthSession = `-- name: InsertAuthSession :one
+INSERT INTO auth_sessions (session_id, tutor_id, expires_at)
+VALUES ($1, $2, $3)
+RETURNING session_id, tutor_id, created_at, expires_at, revoked_at
+`
+
+type InsertAuthSessionParams struct {
+	SessionID uuid.UUID
+	TutorID   uuid.UUID
+	ExpiresAt time.Time
+}
+
+func (q *Queries) InsertAuthSession(ctx context.Context, arg InsertAuthSessionParams) (AuthSession, error) {
+	row := q.db.QueryRow(ctx, insertAuthSession, arg.SessionID, arg.TutorID, arg.ExpiresAt)
+	var i AuthSession
 	err := row.Scan(
-		&i.TokenHash,
 		&i.SessionID,
 		&i.TutorID,
-		&i.IssuedAt,
+		&i.CreatedAt,
 		&i.ExpiresAt,
-		&i.UsedAt,
 		&i.RevokedAt,
 	)
 	return i, err
@@ -129,30 +171,33 @@ func (q *Queries) GetRefreshToken(ctx context.Context, tokenHash []byte) (Refres
 
 const insertLoginAttempt = `-- name: InsertLoginAttempt :exec
 
-INSERT INTO login_attempts (state, code_verifier, nonce, redirect_to, timezone, language, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO login_attempts (
+    state, code_verifier, nonce, browser_binding_hash,
+    redirect_to, timezone, language, expires_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
 type InsertLoginAttemptParams struct {
-	State        string
-	CodeVerifier string
-	Nonce        string
-	RedirectTo   string
-	Timezone     string
-	Language     string
-	ExpiresAt    time.Time
+	State              string
+	CodeVerifier       string
+	Nonce              string
+	BrowserBindingHash []byte
+	RedirectTo         string
+	Timezone           string
+	Language           string
+	ExpiresAt          time.Time
 }
 
-// The sign in attempt and the refresh token family behind a session (spec
-// 0004). These are the two tables that cannot filter by tutor_id: an attempt
-// exists before the tutor does, and a refresh token is presented before any
-// token names a tutor. Both are identified instead by an unguessable value from
-// crypto/rand, which is what test/model's tenancy guard insists each one names.
+// The sign in attempt and the locked refresh token family behind a session
+// (spec 0004). Every value is parameterized, and every family transition locks
+// auth_sessions before it locks the presented token.
 func (q *Queries) InsertLoginAttempt(ctx context.Context, arg InsertLoginAttemptParams) error {
 	_, err := q.db.Exec(ctx, insertLoginAttempt,
 		arg.State,
 		arg.CodeVerifier,
 		arg.Nonce,
+		arg.BrowserBindingHash,
 		arg.RedirectTo,
 		arg.Timezone,
 		arg.Language,
@@ -162,76 +207,105 @@ func (q *Queries) InsertLoginAttempt(ctx context.Context, arg InsertLoginAttempt
 }
 
 const insertRefreshToken = `-- name: InsertRefreshToken :one
-INSERT INTO refresh_tokens (token_hash, session_id, tutor_id, expires_at)
-VALUES ($1, $2, $3, $4)
-RETURNING token_hash, session_id, tutor_id, issued_at, expires_at, used_at, revoked_at
+INSERT INTO refresh_tokens (token_hash, session_id, expires_at)
+VALUES ($1, $2, $3)
+RETURNING token_hash, session_id, issued_at, expires_at, used_at
 `
 
 type InsertRefreshTokenParams struct {
 	TokenHash []byte
 	SessionID uuid.UUID
-	TutorID   uuid.UUID
 	ExpiresAt time.Time
 }
 
 func (q *Queries) InsertRefreshToken(ctx context.Context, arg InsertRefreshTokenParams) (RefreshToken, error) {
-	row := q.db.QueryRow(ctx, insertRefreshToken,
-		arg.TokenHash,
-		arg.SessionID,
-		arg.TutorID,
-		arg.ExpiresAt,
-	)
+	row := q.db.QueryRow(ctx, insertRefreshToken, arg.TokenHash, arg.SessionID, arg.ExpiresAt)
 	var i RefreshToken
 	err := row.Scan(
 		&i.TokenHash,
 		&i.SessionID,
-		&i.TutorID,
 		&i.IssuedAt,
 		&i.ExpiresAt,
 		&i.UsedAt,
+	)
+	return i, err
+}
+
+const lockAuthSession = `-- name: LockAuthSession :one
+SELECT session_id, tutor_id, created_at, expires_at, revoked_at
+FROM auth_sessions s
+WHERE s.session_id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockAuthSession(ctx context.Context, sessionID uuid.UUID) (AuthSession, error) {
+	row := q.db.QueryRow(ctx, lockAuthSession, sessionID)
+	var i AuthSession
+	err := row.Scan(
+		&i.SessionID,
+		&i.TutorID,
+		&i.CreatedAt,
+		&i.ExpiresAt,
 		&i.RevokedAt,
 	)
 	return i, err
 }
 
-const markRefreshTokenUsed = `-- name: MarkRefreshTokenUsed :one
-UPDATE refresh_tokens
-SET used_at = now()
-WHERE token_hash = $1 AND used_at IS NULL AND revoked_at IS NULL AND expires_at > now()
-RETURNING token_hash, session_id, tutor_id, issued_at, expires_at, used_at, revoked_at
+const lockRefreshToken = `-- name: LockRefreshToken :one
+SELECT token_hash, session_id, issued_at, expires_at, used_at
+FROM refresh_tokens
+WHERE token_hash = $1 AND session_id = $2
+FOR UPDATE
 `
 
-// The first use of a token is a single statement, so two tabs racing cannot
-// both win it: the loser reads used_at back and falls into the grace window
-// branch instead of being treated as theft.
-func (q *Queries) MarkRefreshTokenUsed(ctx context.Context, tokenHash []byte) (RefreshToken, error) {
-	row := q.db.QueryRow(ctx, markRefreshTokenUsed, tokenHash)
-	var i RefreshToken
-	err := row.Scan(
-		&i.TokenHash,
-		&i.SessionID,
-		&i.TutorID,
-		&i.IssuedAt,
-		&i.ExpiresAt,
-		&i.UsedAt,
-		&i.RevokedAt,
-	)
-	return i, err
-}
-
-const revokeSessionFamily = `-- name: RevokeSessionFamily :execrows
-UPDATE refresh_tokens
-SET revoked_at = now()
-WHERE tutor_id = $1 AND session_id = $2 AND revoked_at IS NULL
-`
-
-type RevokeSessionFamilyParams struct {
-	TutorID   uuid.UUID
+type LockRefreshTokenParams struct {
+	TokenHash []byte
 	SessionID uuid.UUID
 }
 
-func (q *Queries) RevokeSessionFamily(ctx context.Context, arg RevokeSessionFamilyParams) (int64, error) {
-	result, err := q.db.Exec(ctx, revokeSessionFamily, arg.TutorID, arg.SessionID)
+func (q *Queries) LockRefreshToken(ctx context.Context, arg LockRefreshTokenParams) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, lockRefreshToken, arg.TokenHash, arg.SessionID)
+	var i RefreshToken
+	err := row.Scan(
+		&i.TokenHash,
+		&i.SessionID,
+		&i.IssuedAt,
+		&i.ExpiresAt,
+		&i.UsedAt,
+	)
+	return i, err
+}
+
+const markRefreshTokenUsed = `-- name: MarkRefreshTokenUsed :exec
+UPDATE refresh_tokens
+SET used_at = $3
+WHERE token_hash = $1 AND session_id = $2 AND used_at IS NULL
+`
+
+type MarkRefreshTokenUsedParams struct {
+	TokenHash []byte
+	SessionID uuid.UUID
+	UsedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) MarkRefreshTokenUsed(ctx context.Context, arg MarkRefreshTokenUsedParams) error {
+	_, err := q.db.Exec(ctx, markRefreshTokenUsed, arg.TokenHash, arg.SessionID, arg.UsedAt)
+	return err
+}
+
+const revokeAuthSession = `-- name: RevokeAuthSession :execrows
+UPDATE auth_sessions
+SET revoked_at = $2
+WHERE session_id = $1 AND revoked_at IS NULL
+`
+
+type RevokeAuthSessionParams struct {
+	SessionID uuid.UUID
+	RevokedAt pgtype.Timestamptz
+}
+
+func (q *Queries) RevokeAuthSession(ctx context.Context, arg RevokeAuthSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeAuthSession, arg.SessionID, arg.RevokedAt)
 	if err != nil {
 		return 0, err
 	}

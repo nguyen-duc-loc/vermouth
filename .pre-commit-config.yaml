@@ -30,6 +30,8 @@ repos:
     hooks:
       - id: check-merge-conflict
       - id: check-yaml
+        # Helm templates contain Go actions and become YAML only after rendering.
+        exclude: ^deploy/helm/vermouth/templates/
       - id: check-json
         # The tsconfig files carry /* block comments */, so they are JSONC and no
         # strict JSON parser will read them. Biome checks and formats those.

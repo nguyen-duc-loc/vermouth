@@ -156,10 +156,12 @@ func TestEveryTableCarriesTutorID(t *testing.T) {
 			// handled_events and goose_db_version are the shared module's and
 			// goose's own machinery, keyed by a consumer name and an event id:
 			// they hold no tutor's data to scope. login_attempts is identity's
-			// own exception (spec 0004): an in flight sign in exists before the
-			// tutor does, so it is keyed by a single use value from crypto/rand
-			// instead, and the tenancy guard on the queries says so by name.
-			if table == "handled_events" || table == "goose_db_version" || table == "login_attempts" {
+			// own exceptions (spec 0004): an in flight sign in exists before the
+			// tutor does, while a refresh token reaches its tutor through the
+			// auth_sessions foreign key. Both use unguessable values from
+			// crypto/rand, and the tenancy guard on the queries names every access.
+			if table == "handled_events" || table == "goose_db_version" || table == "login_attempts" ||
+				(service == "identity" && table == "refresh_tokens") {
 				continue
 			}
 			require.True(t, hasTutorID[table],
@@ -220,6 +222,34 @@ func TestProjectionKeysMatchTheirEventKey(t *testing.T) {
 			require.Equal(t, key, keys[table],
 				"%s.%s must be keyed by what its events carry, so a replay lands on the same row (AC-7)",
 				service, table)
+		}
+	}
+}
+
+func TestProjectionBookkeepingTimestampsAreComplete(t *testing.T) {
+	t.Parallel()
+	projections := map[string][]string{
+		"billing": {
+			"students", "classes", "sessions", "attendance", "roster_periods", "class_rates",
+		},
+		"notifications": {"recipients", "classes", "sessions", "roster_periods"},
+	}
+	for service, tables := range projections {
+		columns := liveColumns(t, connect(t, service))
+		found := make(map[string]map[string]bool, len(tables))
+		for _, table := range tables {
+			found[table] = make(map[string]bool)
+		}
+		for _, c := range columns {
+			if _, ok := found[c.table]; ok {
+				found[c.table][c.name] = true
+			}
+		}
+		for _, table := range tables {
+			require.True(t, found[table]["recorded_at"],
+				"%s.%s has no first insert bookkeeping timestamp (AC-3)", service, table)
+			require.True(t, found[table]["updated_at"],
+				"%s.%s has no applied upsert bookkeeping timestamp (AC-3)", service, table)
 		}
 	}
 }
@@ -338,11 +368,15 @@ func TestCompletenessGateIsGenerated(t *testing.T) {
 func TestOneOwningTablePerEntity(t *testing.T) {
 	t.Parallel()
 	expected := map[string][]string{
-		// identity's three extra tables are spec 0004's, not spec 0003's: the
-		// Google account link, the in flight sign in, and the refresh token
-		// family behind a session. None of them is a second home for an entity.
-		"identity": {"tutors", "tutor_identities", "login_attempts", "refresh_tokens"},
-		"teaching": {"students", "classes", "sessions", "roster_periods", "attendance"},
+		// identity's four extra tables are spec 0004's, not spec 0003's: the
+		// Google account link, the in flight sign in, the locked session family,
+		// and its hashed refresh tokens. None is a second home for an entity.
+		"identity": {"tutors", "tutor_identities", "login_attempts", "auth_sessions", "refresh_tokens"},
+		// command_receipts belongs to spec 0009's create retry contract. It owns
+		// command identity, not a second copy of a domain entity.
+		"teaching": {
+			"students", "classes", "sessions", "roster_periods", "attendance", "command_receipts",
+		},
 		"billing": {
 			"students", "classes", "sessions", "attendance", "roster_periods", "class_rates",
 			"invoice_profiles", "invoice_number_counters", "billing_runs", "invoices", "invoice_lines",
@@ -363,4 +397,66 @@ func TestOneOwningTablePerEntity(t *testing.T) {
 		}
 		require.Empty(t, live, "%s holds tables spec 0003 does not place there (AC-1)", service)
 	}
+}
+
+// TestIdentityAuthenticationSchemaKeepsOnlyHashedSecretsAndOwnedLinks proves
+// the durable database boundary for browser sign in.
+// covers: AC-8, AC-9, AC-11, AC-12
+func TestIdentityAuthenticationSchemaKeepsOnlyHashedSecretsAndOwnedLinks(t *testing.T) {
+	t.Parallel()
+	identity := connect(t, "identity")
+
+	var tutorChecks string
+	err := identity.QueryRow(t.Context(), `
+		SELECT string_agg(pg_get_constraintdef(oid), ' ')
+		FROM pg_constraint
+		WHERE contype = 'c' AND conrelid IN (
+			'tutors'::regclass,
+			'tutor_identities'::regclass
+		)`).Scan(&tutorChecks)
+	require.NoError(t, err)
+	require.Contains(t, tutorChecks, "lower(btrim(email))")
+	require.Contains(t, tutorChecks, "lower(btrim(provider_email))")
+
+	var foreignKeys string
+	err = identity.QueryRow(t.Context(), `
+		SELECT string_agg(pg_get_constraintdef(oid), ' ')
+		FROM pg_constraint
+		WHERE contype = 'f' AND conrelid IN (
+			'auth_sessions'::regclass,
+			'refresh_tokens'::regclass
+		)`).Scan(&foreignKeys)
+	require.NoError(t, err)
+	require.Contains(t, foreignKeys, "FOREIGN KEY (tutor_id) REFERENCES tutors(tutor_id) ON DELETE CASCADE")
+	require.Contains(t, foreignKeys, "FOREIGN KEY (session_id) REFERENCES auth_sessions(session_id) ON DELETE CASCADE")
+
+	var browserBindingType, refreshHashType string
+	err = identity.QueryRow(t.Context(), `
+		SELECT data_type
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+		  AND table_name = 'login_attempts'
+		  AND column_name = 'browser_binding_hash'`).Scan(&browserBindingType)
+	require.NoError(t, err)
+	err = identity.QueryRow(t.Context(), `
+		SELECT data_type
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+		  AND table_name = 'refresh_tokens'
+		  AND column_name = 'token_hash'`).Scan(&refreshHashType)
+	require.NoError(t, err)
+	require.Equal(t, "bytea", browserBindingType)
+	require.Equal(t, "bytea", refreshHashType)
+
+	var rawSecretColumns int
+	err = identity.QueryRow(t.Context(), `
+		SELECT count(*)
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+		  AND (
+			column_name ILIKE '%password%'
+			OR column_name IN ('browser_binding', 'refresh_token')
+		  )`).Scan(&rawSecretColumns)
+	require.NoError(t, err)
+	require.Zero(t, rawSecretColumns)
 }

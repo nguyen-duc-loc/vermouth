@@ -16,7 +16,19 @@ type Querier interface {
 	CloseRosterPeriod(ctx context.Context, arg CloseRosterPeriodParams) error
 	FindOpenRosterPeriod(ctx context.Context, arg FindOpenRosterPeriodParams) (FindOpenRosterPeriodRow, error)
 	GetAttendance(ctx context.Context, arg GetAttendanceParams) (Attendance, error)
-	InsertClass(ctx context.Context, arg InsertClassParams) (Class, error)
+	// Locking the owned session serialises corrections, including the first mark
+	// where no attendance row exists yet. The roster flag uses the same inclusive
+	// coverage predicate as every home and billing read.
+	GetAttendanceWriteContext(ctx context.Context, arg GetAttendanceWriteContextParams) (GetAttendanceWriteContextRow, error)
+	GetCommandReceipt(ctx context.Context, arg GetCommandReceiptParams) (CommandReceipt, error)
+	GetOwnedClass(ctx context.Context, arg GetOwnedClassParams) (GetOwnedClassRow, error)
+	GetOwnedSession(ctx context.Context, arg GetOwnedSessionParams) (Session, error)
+	GetOwnedStudent(ctx context.Context, arg GetOwnedStudentParams) (Student, error)
+	InsertClass(ctx context.Context, arg InsertClassParams) (InsertClassRow, error)
+	// The receipt is claimed before its business rows are inserted. A concurrent
+	// loser receives no row, rolls back, then reads the committed winner.
+	InsertCommandReceipt(ctx context.Context, arg InsertCommandReceiptParams) (CommandReceipt, error)
+	InsertRosterPeriod(ctx context.Context, arg InsertRosterPeriodParams) (RosterPeriod, error)
 	InsertSession(ctx context.Context, arg InsertSessionParams) (Session, error)
 	// Hand written SQL for teaching, compiled to typed Go by sqlc (STK-3). No ORM,
 	// and no SQL assembled by string concatenation at runtime.
@@ -27,6 +39,10 @@ type Querier interface {
 	// filters on the end timestamp being empty, because nothing is ever deleted
 	// (AC-11).
 	InsertStudent(ctx context.Context, arg InsertStudentParams) (Student, error)
+	// ListHomeSessions pages session rows before roster students are joined, so a
+	// large roster cannot consume the 51 row page proof.
+	ListHomeSessions(ctx context.Context, arg ListHomeSessionsParams) ([]ListHomeSessionsRow, error)
+	ListHomeStudents(ctx context.Context, arg ListHomeStudentsParams) ([]ListHomeStudentsRow, error)
 	// ListRosterPeriods is the whole membership history of one pair, oldest first,
 	// so a rejoin reads as two periods rather than one edited row.
 	ListRosterPeriods(ctx context.Context, arg ListRosterPeriodsParams) ([]ListRosterPeriodsRow, error)

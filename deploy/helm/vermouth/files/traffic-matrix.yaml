@@ -1,0 +1,233 @@
+schemaVersion: 1
+rows:
+  - id: default-deny-all
+    policyName: default-deny-all
+    direction: Both
+    environment: all
+    order: 10
+    podSelector: {}
+    peers: []
+    ports: []
+  - id: dns-egress
+    policyName: allow-dns
+    direction: Egress
+    environment: all
+    order: 20
+    podSelector: {}
+    peers:
+      - namespaceSelector: {kubernetes.io/metadata.name: kube-system}
+        podSelector: {k8s-app: kube-dns}
+    ports:
+      - {name: dns-udp, protocol: UDP, port: 53}
+      - {name: dns-tcp, protocol: TCP, port: 53}
+  - id: traefik-to-web
+    policyName: allow-traefik-to-web
+    direction: Ingress
+    environment: all
+    order: 30
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: web}
+    peers:
+      - namespaceSelector: {kubernetes.io/metadata.name: kube-system}
+        podSelector: {app.kubernetes.io/name: traefik}
+    ports: [{name: web-http, protocol: TCP, port: 8080}]
+  - id: traefik-to-gateway
+    policyName: allow-traefik-to-gateway
+    direction: Ingress
+    environment: all
+    order: 40
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: gateway}
+    peers:
+      - namespaceSelector: {kubernetes.io/metadata.name: kube-system}
+        podSelector: {app.kubernetes.io/name: traefik}
+    ports: [{name: gateway-http, protocol: TCP, port: 8080}]
+  - id: gateway-to-identity
+    policyName: gateway-to-services
+    direction: Egress
+    environment: all
+    order: 50
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: gateway}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: identity}}]
+    ports: [{name: identity-http, protocol: TCP, port: 8081}]
+  - id: gateway-to-teaching
+    policyName: gateway-to-services
+    direction: Egress
+    environment: all
+    order: 51
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: gateway}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: teaching}}]
+    ports: [{name: teaching-http, protocol: TCP, port: 8082}]
+  - id: gateway-to-billing
+    policyName: gateway-to-services
+    direction: Egress
+    environment: all
+    order: 52
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: gateway}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: billing}}]
+    ports: [{name: billing-http, protocol: TCP, port: 8083}]
+  - id: gateway-to-notifications
+    policyName: gateway-to-services
+    direction: Egress
+    environment: all
+    order: 53
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: gateway}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: notifications}}]
+    ports: [{name: notifications-http, protocol: TCP, port: 8084}]
+  - id: identity-from-gateway
+    policyName: allow-gateway-to-identity
+    direction: Ingress
+    environment: all
+    order: 60
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: identity}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: gateway}}]
+    ports: [{name: identity-http, protocol: TCP, port: 8081}]
+  - id: teaching-from-gateway
+    policyName: allow-gateway-to-teaching
+    direction: Ingress
+    environment: all
+    order: 61
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: teaching}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: gateway}}]
+    ports: [{name: teaching-http, protocol: TCP, port: 8082}]
+  - id: billing-from-gateway
+    policyName: allow-gateway-to-billing
+    direction: Ingress
+    environment: all
+    order: 62
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: billing}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: gateway}}]
+    ports: [{name: billing-http, protocol: TCP, port: 8083}]
+  - id: notifications-from-gateway
+    policyName: allow-gateway-to-notifications
+    direction: Ingress
+    environment: all
+    order: 63
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: notifications}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: gateway}}]
+    ports: [{name: notifications-http, protocol: TCP, port: 8084}]
+  - id: identity-to-postgres
+    policyName: identity-to-own-postgres
+    direction: Egress
+    environment: all
+    order: 70
+    podSelectorExpression: {key: app.kubernetes.io/component, values: [identity, migrate-identity, devtoken]}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: postgres-identity}}]
+    ports: [{name: postgres, protocol: TCP, port: 5432}]
+  - id: teaching-to-postgres
+    policyName: teaching-to-own-postgres
+    direction: Egress
+    environment: all
+    order: 71
+    podSelectorExpression: {key: app.kubernetes.io/component, values: [teaching, migrate-teaching]}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: postgres-teaching}}]
+    ports: [{name: postgres, protocol: TCP, port: 5432}]
+  - id: billing-to-postgres
+    policyName: billing-to-own-postgres
+    direction: Egress
+    environment: all
+    order: 72
+    podSelectorExpression: {key: app.kubernetes.io/component, values: [billing, migrate-billing]}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: postgres-billing}}]
+    ports: [{name: postgres, protocol: TCP, port: 5432}]
+  - id: notifications-to-postgres
+    policyName: notifications-to-own-postgres
+    direction: Egress
+    environment: all
+    order: 73
+    podSelectorExpression: {key: app.kubernetes.io/component, values: [notifications, migrate-notifications]}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: postgres-notifications}}]
+    ports: [{name: postgres, protocol: TCP, port: 5432}]
+  - id: postgres-identity-from-clients
+    policyName: allow-identity-postgres-clients
+    direction: Ingress
+    environment: all
+    order: 80
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: postgres-identity}
+    peers: [{podSelectorExpression: {key: app.kubernetes.io/component, values: [identity, migrate-identity, devtoken]}}]
+    ports: [{name: postgres, protocol: TCP, port: 5432}]
+  - id: postgres-teaching-from-clients
+    policyName: allow-teaching-postgres-clients
+    direction: Ingress
+    environment: all
+    order: 81
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: postgres-teaching}
+    peers: [{podSelectorExpression: {key: app.kubernetes.io/component, values: [teaching, migrate-teaching]}}]
+    ports: [{name: postgres, protocol: TCP, port: 5432}]
+  - id: postgres-billing-from-clients
+    policyName: allow-billing-postgres-clients
+    direction: Ingress
+    environment: all
+    order: 82
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: postgres-billing}
+    peers: [{podSelectorExpression: {key: app.kubernetes.io/component, values: [billing, migrate-billing]}}]
+    ports: [{name: postgres, protocol: TCP, port: 5432}]
+  - id: postgres-notifications-from-clients
+    policyName: allow-notifications-postgres-clients
+    direction: Ingress
+    environment: all
+    order: 83
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: postgres-notifications}
+    peers: [{podSelectorExpression: {key: app.kubernetes.io/component, values: [notifications, migrate-notifications]}}]
+    ports: [{name: postgres, protocol: TCP, port: 5432}]
+  - id: services-to-redpanda
+    policyName: services-to-redpanda
+    direction: Egress
+    environment: all
+    order: 90
+    podSelectorExpression: {key: app.kubernetes.io/component, values: [identity, teaching, billing, notifications]}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: redpanda}}]
+    ports: [{name: kafka, protocol: TCP, port: 9092}]
+  - id: redpanda-from-services
+    policyName: allow-services-to-redpanda
+    direction: Ingress
+    environment: all
+    order: 91
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: redpanda}
+    peers: [{podSelectorExpression: {key: app.kubernetes.io/component, values: [identity, teaching, billing, notifications]}}]
+    ports: [{name: kafka, protocol: TCP, port: 9092}]
+  - id: billing-to-garage
+    policyName: billing-to-garage
+    direction: Egress
+    environment: all
+    order: 100
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: billing}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: garage}}]
+    ports: [{name: s3, protocol: TCP, port: 3900}]
+  - id: garage-init-to-garage
+    policyName: garage-init-to-garage
+    direction: Egress
+    environment: all
+    order: 101
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: garage-init}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: garage}}]
+    ports:
+      - {name: s3, protocol: TCP, port: 3900}
+      - {name: admin, protocol: TCP, port: 3903}
+  - id: garage-from-billing
+    policyName: allow-garage-clients
+    direction: Ingress
+    environment: all
+    order: 110
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: garage}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: billing}}]
+    ports: [{name: s3, protocol: TCP, port: 3900}]
+  - id: garage-from-initializer
+    policyName: allow-garage-clients
+    direction: Ingress
+    environment: all
+    order: 111
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: garage}
+    peers: [{podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: garage-init}}]
+    ports:
+      - {name: s3, protocol: TCP, port: 3900}
+      - {name: admin, protocol: TCP, port: 3903}
+  - id: identity-google-oauth
+    policyName: identity-google-oauth
+    direction: Egress
+    environment: google-enabled
+    order: 120
+    podSelector: {app.kubernetes.io/name: vermouth, app.kubernetes.io/component: identity}
+    peers:
+      - ipBlock:
+          cidr: 0.0.0.0/0
+          except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]
+    ports: [{name: https, protocol: TCP, port: 443}]

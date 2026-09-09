@@ -25,6 +25,8 @@ import (
 const (
 	refreshCookieName = "vermouth_refresh"
 	refreshCookiePath = "/api/auth"
+	loginCookieName   = "vermouth_login"
+	loginCookiePath   = "/api/auth/google"
 )
 
 // signInPath is where a refused sign in lands, with one of the five codes the
@@ -67,8 +69,13 @@ func Mux(deps Deps) http.Handler {
 func startSignIn(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
+		if !deps.Auth.GoogleEnabled {
+			vermouth.WriteError(ctx, w, http.StatusServiceUnavailable, "auth_unavailable",
+				"Google sign in is not configured for this local environment")
+			return
+		}
 		query := r.URL.Query()
-		authorizeURL, err := deps.Handler.StartSignIn(ctx, handler.StartInput{
+		result, err := deps.Handler.StartSignIn(ctx, handler.StartInput{
 			Timezone:   query.Get("tz"),
 			Language:   query.Get("lang"),
 			RedirectTo: query.Get("redirect_to"),
@@ -80,7 +87,8 @@ func startSignIn(deps Deps) http.HandlerFunc {
 			redirectToSignIn(w, r, deps.Auth.AppURL, handler.SignInProviderError)
 			return
 		}
-		http.Redirect(w, r, authorizeURL, http.StatusFound)
+		setLoginCookie(w, result.BrowserBinding, result.ExpiresAt, deps.Auth.CookieSecure)
+		http.Redirect(w, r, result.AuthorizeURL, http.StatusFound)
 	}
 }
 
@@ -90,9 +98,15 @@ func startSignIn(deps Deps) http.HandlerFunc {
 func completeSignIn(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
+		clearLoginCookie(w, deps.Auth.CookieSecure)
+		if !deps.Auth.GoogleEnabled {
+			vermouth.WriteError(ctx, w, http.StatusServiceUnavailable, "auth_unavailable",
+				"Google sign in is not configured for this local environment")
+			return
+		}
 		query := r.URL.Query()
 		result, err := deps.Handler.CompleteSignIn(ctx,
-			query.Get("state"), query.Get("code"), query.Get("error"))
+			query.Get("state"), query.Get("code"), query.Get("error"), presentedLoginBinding(r))
 		if err != nil {
 			redirectToSignIn(w, r, deps.Auth.AppURL, refusalCode(ctx, deps.Logger, err))
 			return
@@ -108,10 +122,14 @@ func completeSignIn(deps Deps) http.HandlerFunc {
 func refusalCode(ctx context.Context, logger *slog.Logger, err error) string {
 	refused, isRefusal := errors.AsType[*handler.SignInError](err)
 	if isRefusal {
+		reason := refused.Err.Error()
+		if refused.Code == handler.SignInProviderError {
+			reason = "google did not return a valid identity"
+		}
 		logger.InfoContext(ctx, "Sign in refused",
 			slog.String("request_id", vermouth.RequestID(ctx)),
 			slog.String("code", refused.Code),
-			slog.String("reason", refused.Err.Error()))
+			slog.String("reason", reason))
 		return refused.Code
 	}
 	logger.ErrorContext(ctx, "Complete sign in",
@@ -133,6 +151,11 @@ type session struct {
 func refreshSession(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
+		if !deps.Auth.AllowsOrigin(r.Header.Get("Origin")) {
+			vermouth.WriteError(ctx, w, http.StatusForbidden, "forbidden",
+				"this origin may not change a session")
+			return
+		}
 		result, err := deps.Handler.Refresh(ctx, presentedRefreshToken(r))
 		if err != nil {
 			if errors.Is(err, handler.ErrSessionRefused) {
@@ -161,6 +184,11 @@ func refreshSession(deps Deps) http.HandlerFunc {
 func signOut(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
+		if !deps.Auth.AllowsOrigin(r.Header.Get("Origin")) {
+			vermouth.WriteError(ctx, w, http.StatusForbidden, "forbidden",
+				"this origin may not change a session")
+			return
+		}
 		err := deps.Handler.SignOut(ctx, presentedRefreshToken(r))
 		if err != nil {
 			// The cookie is deliberately left alone: answering 204 here would
@@ -230,9 +258,8 @@ func redirectToSignIn(w http.ResponseWriter, r *http.Request, appURL, code strin
 	http.Redirect(w, r, appURL+signInPath+"?error="+urlpkg.QueryEscape(code), http.StatusFound)
 }
 
-// setRefreshCookie writes the rotating refresh token. HttpOnly so no script can
-// read it, SameSite=Lax plus the POST method as the cross site protection, and
-// Secure because localhost already counts as a trustworthy origin.
+// setRefreshCookie writes the rotating refresh token. The exact Origin check is
+// the cross site decision, with the cookie flags as supporting layers.
 func setRefreshCookie(w http.ResponseWriter, issued handler.IssuedRefreshToken, secure bool) {
 	//nolint:gosec // G124: Secure is IDENTITY_COOKIE_SECURE, true unless an origin no browser trusts says otherwise.
 	http.SetCookie(w, &http.Cookie{
@@ -255,6 +282,35 @@ func clearRefreshCookie(w http.ResponseWriter, secure bool) {
 		Name:     refreshCookieName,
 		Value:    "",
 		Path:     refreshCookiePath,
+		Expires:  time.Unix(1, 0).UTC(),
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func setLoginCookie(w http.ResponseWriter, value string, expiresAt time.Time, secure bool) {
+	//nolint:gosec // G124: Secure is configuration, true unless a local origin explicitly opts out.
+	http.SetCookie(w, &http.Cookie{
+		Name:     loginCookieName,
+		Value:    value,
+		Path:     loginCookiePath,
+		Expires:  expiresAt,
+		MaxAge:   int(time.Until(expiresAt).Seconds()),
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func clearLoginCookie(w http.ResponseWriter, secure bool) {
+	//nolint:gosec // G124: this repeats the attributes of the browser binding cookie it clears.
+	http.SetCookie(w, &http.Cookie{
+		Name:     loginCookieName,
+		Value:    "",
+		Path:     loginCookiePath,
+		Expires:  time.Unix(1, 0).UTC(),
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   secure,
@@ -266,6 +322,14 @@ func clearRefreshCookie(w http.ResponseWriter, secure bool) {
 // the handler treats a missing cookie and a dead one the same way.
 func presentedRefreshToken(r *http.Request) string {
 	cookie, err := r.Cookie(refreshCookieName)
+	if err != nil {
+		return ""
+	}
+	return cookie.Value
+}
+
+func presentedLoginBinding(r *http.Request) string {
+	cookie, err := r.Cookie(loginCookieName)
 	if err != nil {
 		return ""
 	}

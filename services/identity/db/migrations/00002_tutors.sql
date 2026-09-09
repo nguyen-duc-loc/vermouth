@@ -7,7 +7,8 @@
 -- +goose Up
 CREATE TABLE tutors (
     tutor_id     uuid        PRIMARY KEY,
-    email        text        NOT NULL UNIQUE,
+    email        text        NOT NULL UNIQUE
+        CONSTRAINT tutors_email_canonical_check CHECK (email = lower(btrim(email))),
     display_name text        NOT NULL,
     timezone     text        NOT NULL,
     language     text        NOT NULL,

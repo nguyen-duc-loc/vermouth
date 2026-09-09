@@ -35,6 +35,12 @@
     }
   },
 
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+
   "linter": {
     "enabled": true,
     // The react domain turns on the hook rules (useHookAtTopLevel,
@@ -68,6 +74,19 @@
   },
 
   "overrides": [
+    {
+      // Radix composition modules expose roots, triggers, CVA variants, and
+      // hooks beside the renderable component. This is the source pattern
+      // owned by shadcn and the appearance context, not mixed screen logic.
+      "includes": ["src/components/ui/**", "src/appearance/appearance.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useComponentExportOnlyModules": "off"
+          }
+        }
+      }
+    },
     {
       // Static assets, not markup a screen reader ever reaches: a favicon and
       // an icon sprite carry no title element, and should not grow one.

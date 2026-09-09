@@ -1,0 +1,109 @@
+{{- if .Values.application.enabled }}
+{{- $matrix := .Files.Get "files/workload-matrix.yaml" | fromYaml }}
+{{- $workload := index $matrix.workloads "web" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "web") | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  selector:
+    app.kubernetes.io/name: vermouth
+    app.kubernetes.io/component: web
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "web") | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  replicas: {{ $workload.replicas }}
+  revisionHistoryLimit: 2
+  progressDeadlineSeconds: 180
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vermouth
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      annotations:
+        vermouth.dev/config-sha256: {{ toJson .Values.config | sha256sum }}
+      labels:
+        app.kubernetes.io/name: vermouth
+        app.kubernetes.io/component: web
+    spec:
+      serviceAccountName: web
+      {{- include "vermouth.imagePullSecrets" . | nindent 6 }}
+      automountServiceAccountToken: {{ $workload.automountServiceAccountToken }}
+      securityContext:
+        {{- include "vermouth.podSecurity" . | nindent 8 }}
+        runAsUser: {{ $workload.runAsUser }}
+        runAsGroup: {{ $workload.runAsGroup }}
+      containers:
+        - name: web
+          image: {{ include "vermouth.requireImage" (dict "name" "web" "image" .Values.images.web) }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- include "vermouth.containerSecurity" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: {{ $workload.readiness.path }}
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: {{ $workload.readiness.periodSeconds }}
+            timeoutSeconds: {{ $workload.readiness.timeoutSeconds }}
+            failureThreshold: {{ $workload.readiness.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: {{ $workload.liveness.path }}
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: {{ $workload.liveness.periodSeconds }}
+            timeoutSeconds: {{ $workload.liveness.timeoutSeconds }}
+            failureThreshold: {{ $workload.liveness.failureThreshold }}
+          resources:
+            {{- toYaml $workload.resources | nindent 12 }}
+          volumeMounts:
+            - name: runtime-config
+              mountPath: /usr/share/nginx/html/config.json
+              subPath: config.json
+              readOnly: true
+            - name: cache
+              mountPath: /var/cache/nginx
+            - name: run
+              mountPath: /var/run
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: runtime-config
+          configMap:
+            name: web-runtime-config
+        - name: cache
+          emptyDir:
+            sizeLimit: {{ (index $workload.writableMounts 0).sizeLimit }}
+        - name: run
+          emptyDir:
+            sizeLimit: {{ (index $workload.writableMounts 1).sizeLimit }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: {{ (index $workload.writableMounts 2).sizeLimit }}
+{{- end }}

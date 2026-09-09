@@ -5,7 +5,38 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f9fc" />
     <title>Vermouth</title>
+    <script>
+      ;(() => {
+        const themes = ['light', 'dark', 'system']
+        const accents = ['red', 'rose', 'orange', 'green', 'blue', 'yellow', 'violet']
+        let theme = 'system'
+        let accent = 'blue'
+
+        try {
+          const stored = JSON.parse(localStorage.getItem('vermouth.appearance.v1') || 'null')
+          if (stored && typeof stored === 'object') {
+            if (themes.includes(stored.theme)) theme = stored.theme
+            if (accents.includes(stored.accent)) accent = stored.accent
+          }
+        } catch {
+          // Appearance is optional. The safe finite defaults still render.
+        }
+
+        const resolved =
+          theme === 'system'
+            ? matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light'
+            : theme
+
+        document.documentElement.dataset.themeChoice = theme
+        document.documentElement.dataset.theme = resolved
+        document.documentElement.dataset.accent = accent
+        document.documentElement.style.colorScheme = resolved
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -31,6 +31,17 @@ type Class struct {
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 	ArchivedAt        pgtype.Timestamptz
+	Color             string
+}
+
+type CommandReceipt struct {
+	TutorID           uuid.UUID
+	Operation         string
+	IdempotencyKey    string
+	RequestHash       []byte
+	PrimaryResourceID uuid.UUID
+	RelatedResourceID pgtype.UUID
+	CreatedAt         time.Time
 }
 
 type HandledEvent struct {

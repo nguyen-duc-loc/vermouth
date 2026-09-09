@@ -11,6 +11,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AuthSession struct {
+	SessionID uuid.UUID
+	TutorID   uuid.UUID
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	RevokedAt pgtype.Timestamptz
+}
+
 type HandledEvent struct {
 	ConsumerName string
 	EventID      uuid.UUID
@@ -18,14 +26,15 @@ type HandledEvent struct {
 }
 
 type LoginAttempt struct {
-	State        string
-	CodeVerifier string
-	Nonce        string
-	RedirectTo   string
-	Timezone     string
-	Language     string
-	CreatedAt    time.Time
-	ExpiresAt    time.Time
+	State              string
+	CodeVerifier       string
+	Nonce              string
+	BrowserBindingHash []byte
+	RedirectTo         string
+	Timezone           string
+	Language           string
+	CreatedAt          time.Time
+	ExpiresAt          time.Time
 }
 
 type Outbox struct {
@@ -47,11 +56,9 @@ type Outbox struct {
 type RefreshToken struct {
 	TokenHash []byte
 	SessionID uuid.UUID
-	TutorID   uuid.UUID
 	IssuedAt  time.Time
 	ExpiresAt time.Time
 	UsedAt    pgtype.Timestamptz
-	RevokedAt pgtype.Timestamptz
 }
 
 type Tutor struct {

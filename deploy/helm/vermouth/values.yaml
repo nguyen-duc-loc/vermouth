@@ -1,0 +1,112 @@
+schemaVersion: 1
+release:
+  gitSHA: ""
+  githubRunID: ""
+  githubRunAttempt: ""
+  identity: ""
+  imagesJSONSHA256: ""
+  deploymentBaseSHA256: ""
+  migrationCompatEvidenceSHA256: ""
+  rateLimitEvidenceSHA256: ""
+  bundleManifestSHA256: ""
+foundation:
+  enabled: false
+  bootstrapStorage: false
+application:
+  enabled: false
+jobs:
+  runID: ""
+  migrations:
+    enabled: false
+    services: [identity, teaching, billing, notifications]
+  garageInit:
+    enabled: false
+  devtoken:
+    enabled: false
+    args: []
+
+imagePullSecrets: []
+
+images:
+  storageGuard: ""
+  postgres: ""
+  redpanda: ""
+  garage: ""
+  garageInit: ""
+  gateway: ""
+  identity: ""
+  teaching: ""
+  billing: ""
+  notifications: ""
+  web: ""
+  devtoken: ""
+  migrations:
+    identity: ""
+    teaching: ""
+    billing: ""
+    notifications: ""
+
+secrets:
+  gateway: ""
+  identity: ""
+  teaching: ""
+  billing: ""
+  notifications: ""
+  postgres:
+    identity: postgres-identity-bootstrap
+    teaching: postgres-teaching-bootstrap
+    billing: postgres-billing-bootstrap
+    notifications: postgres-notifications-bootstrap
+  garage: garage-bootstrap
+  billingS3: billing-s3-bootstrap
+
+config:
+  environment: local
+  apiBasePath: /api
+  logLevel: info
+  brokerSeeds: redpanda:9092
+  topicPartitions: "3"
+  relayInterval: 750ms
+  consumerRetryMax: "5"
+  consumerRetryBaseDelay: 200ms
+  gatewayTrustedProxyCIDRs: 10.42.0.0/16
+  gatewayAuthRateStartIP: 5/1m,20/1h
+  gatewayAuthRateStartGlobal: 100/1m,500/1h
+  gatewayAuthRateCallbackIP: 10/1m,60/1h
+  gatewayAuthRateCallbackGlobal: 200/1m,1000/1h
+  gatewayAuthRateRefreshIP: 30/1m,120/1h
+  gatewayAuthRateRefreshToken: 10/1m,120/1h
+  gatewayAuthRateRefreshGlobal: 300/1m,3000/1h
+  googleAuthEnabled: false
+  identityAppURL: http://vermouth.localhost:8080
+  identityGoogleRedirectURL: http://vermouth.localhost:8080/api/auth/google/callback
+  identitySignupAllowlist: ""
+  identityRefreshTTL: 720h
+  identityTokenTTL: 15m
+  identityRefreshGrace: 10s
+  identitySweepInterval: 10m
+  identityCookieSecure: "true"
+  billingS3Endpoint: http://garage:3900
+  billingS3Region: garage
+  billingS3Bucket: vermouth-invoices
+
+ingress:
+  enabled: true
+  hostname: vermouth.localhost
+  entryPoint: web
+  tls:
+    enabled: false
+    certResolver: ""
+
+storage:
+  className: vermouth-local
+  nodeName: k3d-vermouth-server-0
+  rootPath: /var/lib/vermouth
+  markerSHA256: ""
+  guard:
+    enabled: false
+  postgres: 2Gi
+  redpanda: 4Gi
+  garageMetadata: 1Gi
+  garageData: 5Gi
+  traefikACME: 256Mi

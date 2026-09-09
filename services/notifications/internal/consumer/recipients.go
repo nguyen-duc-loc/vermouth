@@ -4,8 +4,6 @@ package consumer
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -43,11 +41,6 @@ func Recipients() vermouth.Consumer {
 	}
 }
 
-// errNoTutorID is a publisher mistake rather than a version problem: the event
-// arrived at a version this consumer accepts, but without the field the
-// projection is keyed by.
-var errNoTutorID = errors.New("event carried no tutor_id")
-
 // handleTutorEvent runs inside the transaction that also inserted the
 // handled_events row, so handling the same message twice changes nothing the
 // second time (INV-5).
@@ -62,11 +55,12 @@ func handleTutorEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) err
 		if err != nil {
 			return err
 		}
-		if facts.TutorID == uuid.Nil {
-			return fmt.Errorf("%s: %w", env.EventName, errNoTutorID)
+		tutorID, err := vermouth.TrustedTutorID(env, facts.TutorID)
+		if err != nil {
+			return err
 		}
 		return store.Queries(tx).UpsertRecipient(ctx, sqlcgen.UpsertRecipientParams{
-			TutorID:     facts.TutorID,
+			TutorID:     tutorID,
 			Email:       facts.Email,
 			DisplayName: facts.DisplayName,
 			Timezone:    facts.Timezone,

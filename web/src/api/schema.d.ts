@@ -47,10 +47,11 @@ export interface paths {
         };
         /**
          * Begin Google sign in
-         * @description Writes the in flight sign in (its state, PKCE verifier and nonce) and
-         *     redirects the browser to Google. The browser follows this as a plain
-         *     link, so it is a GET; nothing here needs a token, because this is what
-         *     eventually produces one (spec 0004).
+         * @description Writes the in flight sign in (its state, PKCE verifier, nonce, and the
+         *     hash of an independent browser binding cookie) and redirects the browser
+         *     to Google. The browser follows this as a plain link, so it is a GET;
+         *     nothing here needs a token, because this is what eventually produces one
+         *     (spec 0004).
          */
         get: operations["startGoogleSignIn"];
         put?: never;
@@ -70,12 +71,13 @@ export interface paths {
         };
         /**
          * Complete Google sign in and start a session
-         * @description Google sends the browser here. The code is exchanged and the ID token
-         *     validated by identity, which holds the client secret; a first sign in
-         *     creates the tutor and its identity.tutor.registered event in one
-         *     transaction. The answer carries no access token on purpose: it sets the
-         *     refresh cookie and lands the browser in the app, which then calls
-         *     /api/auth/refresh, so a token never appears in a URL or in history.
+         * @description Google sends the browser here. The matching state and browser binding
+         *     are required, then the code is exchanged and the ID token validated by
+         *     identity, which holds the client secret. A first sign in creates the
+         *     tutor and its identity.tutor.registered event in one transaction. The
+         *     answer carries no access token on purpose: it sets the refresh cookie and
+         *     lands the browser in the app, which then calls /api/auth/refresh, so a
+         *     token never appears in a URL or in history.
          */
         get: operations["completeGoogleSignIn"];
         put?: never;
@@ -102,8 +104,8 @@ export interface paths {
          *     trip. The cookie rotates on every call: presenting an already rotated
          *     token later than the grace window revokes the whole session family.
          *
-         *     It is a POST rather than a GET because the method is half of the cross
-         *     site protection, together with SameSite=Lax on the cookie.
+         *     It is a POST and requires Origin to equal IDENTITY_APP_URL exactly.
+         *     SameSite=Lax on the cookie is a supporting cross site protection.
          */
         post: operations["refreshSession"];
         delete?: never;
@@ -123,9 +125,9 @@ export interface paths {
         put?: never;
         /**
          * End the session
-         * @description Revokes every refresh token in this session family and clears the
-         *     cookie. It answers 204 whether or not the cookie named a live session,
-         *     because signing out twice is not an error.
+         * @description Revokes the locked session family and clears the cookie. It answers 204
+         *     whether or not the cookie named a live session, because signing out
+         *     twice is not an error. Origin must equal IDENTITY_APP_URL exactly.
          */
         post: operations["signOut"];
         delete?: never;
@@ -155,25 +157,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/thread": {
+    "/api/classes": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * The state of the skeleton's one end to end thread
-         * @description A read the gateway fans out in parallel to two services (spec 0001,
-         *     gateway read aggregation): the tutor from identity, which owns it, and
-         *     from notifications whether its recipient projection has caught up yet.
-         *     No identity fact is read from notifications' copy (INV-10).
-         *
-         *     The relay polls, so `projection.recorded` is false for the first moment
-         *     after registering and true shortly after. That delay is the design
-         *     working, not a fault.
-         */
-        get: operations["getThread"];
+        get?: never;
+        put?: never;
+        /** Create a class with its first session */
+        post: operations["createClass"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/students": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Register a student */
+        post: operations["createStudent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/classes/{class_id}/roster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Join a student to a class */
+        post: operations["joinRoster"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/attendance/{student_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save or correct one attendance mark */
+        put: operations["markAttendance"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The tutor and today's teaching work */
+        get: operations["getHome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/home/billing-projection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Refresh only billing projection progress */
+        get: operations["getHomeBillingProjection"];
         put?: never;
         post?: never;
         delete?: never;
@@ -228,24 +305,154 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
-        /** @description notifications' own fact about how far its projection has caught up. */
-        ProjectionStatus: {
-            /** Format: uuid */
-            tutor_id: string;
-            recorded: boolean;
-            /** Format: date-time */
-            recorded_at?: string;
-            /** Format: date-time */
-            updated_at?: string;
+        /** @enum {string} */
+        ClassColor: "red" | "rose" | "orange" | "green" | "blue" | "yellow" | "violet";
+        /** @example 17:30 */
+        LocalTime: string;
+        FirstSessionInput: {
+            /** Format: date */
+            local_date: string;
+            start_time: components["schemas"]["LocalTime"];
+            end_time: components["schemas"]["LocalTime"];
         };
-        ThreadStatus: {
+        CreateClassRequest: {
+            name: string;
+            color?: components["schemas"]["ClassColor"] | null;
+            /** Format: int64 */
+            rate_amount: number;
+            first_session: components["schemas"]["FirstSessionInput"];
+        };
+        Class: {
+            /** Format: uuid */
+            class_id: string;
+            name: string;
+            color: components["schemas"]["ClassColor"];
+            /** Format: int64 */
+            rate_amount: number;
+            /** @constant */
+            currency: "VND";
+            /** Format: date */
+            rate_effective_from: string;
+        };
+        TeachingSession: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            class_id: string;
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            /** Format: date */
+            local_date: string;
+        };
+        CreateClassResponse: {
+            class: components["schemas"]["Class"];
+            first_session: components["schemas"]["TeachingSession"];
+        };
+        CreateStudentRequest: {
+            name: string;
+            phone?: string | null;
+        };
+        Student: {
+            /** Format: uuid */
+            student_id: string;
+            name: string;
+            phone: string | null;
+        };
+        JoinRosterRequest: {
+            /** Format: uuid */
+            student_id: string;
+            /** Format: date */
+            effective_from: string;
+        };
+        RosterPeriod: {
+            /** Format: uuid */
+            class_id: string;
+            /** Format: uuid */
+            student_id: string;
+            /** Format: date */
+            effective_from: string;
+            /** Format: date */
+            effective_to: string | null;
+        };
+        /** @enum {string} */
+        AttendanceState: "Present" | "Absent";
+        MarkAttendanceRequest: {
+            state: components["schemas"]["AttendanceState"];
+        };
+        Attendance: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            student_id: string;
+            state: components["schemas"]["AttendanceState"];
+            /** Format: date-time */
+            marked_at: string;
+        };
+        SetupDefaults: {
+            /** Format: date */
+            local_date: string;
+            start_time: components["schemas"]["LocalTime"];
+            end_time: components["schemas"]["LocalTime"];
+        };
+        HomeStudent: {
+            /** Format: uuid */
+            student_id: string;
+            name: string;
+            attendance_state: components["schemas"]["AttendanceState"] | null;
+            /** Format: date-time */
+            marked_at: string | null;
+        };
+        HomeSession: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            class_id: string;
+            class_name: string;
+            class_color: components["schemas"]["ClassColor"];
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            /** Format: date */
+            local_date: string;
+            students: components["schemas"]["HomeStudent"][];
+        };
+        TeachingHome: {
+            request_time_zone: string;
+            /** Format: date */
+            local_date: string;
+            /** Format: date-time */
+            next_local_midnight_at: string;
+            setup_defaults: components["schemas"]["SetupDefaults"];
+            sessions: components["schemas"]["HomeSession"][];
+            next_cursor: string | null;
+        };
+        BillingProjection: {
+            /** @enum {string} */
+            state: "waiting" | "active";
+            /** Format: int64 */
+            class_count: number;
+            /** Format: int64 */
+            session_count: number;
+            /** Format: int64 */
+            student_count: number;
+            /** Format: int64 */
+            open_roster_count: number;
+            /** Format: int64 */
+            attendance_count: number;
+            /** Format: date-time */
+            latest_updated_at: string | null;
+        };
+        HomeBillingProjection: {
+            billing_projection: components["schemas"]["BillingProjection"] | null;
+            billing_projection_unavailable: string | null;
+        };
+        Home: components["schemas"]["TeachingHome"] & {
             tutor: components["schemas"]["Tutor"];
-            projection: components["schemas"]["ProjectionStatus"];
-            /**
-             * @description Set when notifications did not answer. The tutor panel still
-             *     arrives, because one slow service degrades only its own panel.
-             */
-            projection_unavailable?: string;
+            billing_projection: components["schemas"]["BillingProjection"] | null;
+            billing_projection_unavailable: string | null;
         };
     };
     responses: {
@@ -267,8 +474,65 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The browser origin may not change this session */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description No owned resource matched */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The requested state conflicts with committed state */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description A required service did not answer successfully */
+        BadGateway: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Too many authentication requests reached an applicable budget */
+        RateLimited: {
+            headers: {
+                /** @description Whole seconds until every applicable rate budget can admit one request. */
+                "Retry-After": number;
+                /** @description Prevents a refusal from being stored by browsers or intermediaries. */
+                "Cache-Control": "no-store";
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
-    parameters: never;
+    parameters: {
+        /** @description One browser generated UUID, retained until this create step succeeds. */
+        IdempotencyKey: string;
+        ClassId: string;
+        SessionId: string;
+        StudentId: string;
+        /** @description Opaque cursor bound to the current tutor local date. */
+        HomeCursor: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -337,8 +601,8 @@ export interface operations {
                 lang?: "vi" | "en";
                 /**
                  * @description Where in the app to land after signing in. Kept only when it is a
-                 *     path starting with a single slash, so it cannot become an open
-                 *     redirect.
+                 *     clean relative path and query with one leading slash, no fragment,
+                 *     controls, backslash, scheme, or host.
                  */
                 redirect_to?: string;
             };
@@ -350,14 +614,30 @@ export interface operations {
         responses: {
             /**
              * @description Google's authorize URL, or /signin?error=provider_error when the
-             *     attempt could not be written.
+             *     attempt could not be written. A rate limited request instead uses
+             *     /signin?error=rate_limited and carries Retry-After plus no-store.
              */
             302: {
                 headers: {
                     Location: string;
+                    /** @description Whole seconds until every applicable rate budget can admit one request. */
+                    "Retry-After"?: number;
+                    /** @description Present as no-store on a rate limited redirect. */
+                    "Cache-Control"?: "no-store";
+                    /** @description The short lived HttpOnly browser binding cookie. */
+                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Google sign in is disabled in this local environment */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };
@@ -379,23 +659,47 @@ export interface operations {
         responses: {
             /**
              * @description The app, or /signin?error=<code> with one of not_allowed,
-             *     email_conflict, cancelled, expired_state or provider_error.
+             *     email_conflict, cancelled, expired_state, provider_error or
+             *     rate_limited. A rate limited redirect carries Retry-After plus
+             *     no-store.
              */
             302: {
                 headers: {
                     Location: string;
-                    /** @description The rotating refresh token, HttpOnly and scoped to /api/auth. */
+                    /** @description Whole seconds until every applicable rate budget can admit one request. */
+                    "Retry-After"?: number;
+                    /** @description Present as no-store on a rate limited redirect. */
+                    "Cache-Control"?: "no-store";
+                    /**
+                     * @description The browser binding clear, plus the rotating refresh token on
+                     *     success. Both are HttpOnly and repeat their original paths.
+                     */
                     "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Google sign in is disabled in this local environment */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };
     refreshSession: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Supplied automatically by the browser and required by identity. It
+                 *     must equal the configured app origin exactly.
+                 */
+                Origin?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -410,25 +714,49 @@ export interface operations {
                     "application/json": components["schemas"]["Session"];
                 };
             };
-            401: components["responses"]["Unauthenticated"];
+            /**
+             * @description The refresh cookie is missing, unknown, expired, revoked, or reused
+             *     outside the grace window. The response clears that cookie.
+             */
+            401: {
+                headers: {
+                    /** @description Clears the refresh cookie with the same path and flags. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
         };
     };
     signOut: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Supplied automatically by the browser and required by identity. It
+                 *     must equal the configured app origin exactly.
+                 */
+                Origin?: string;
+            };
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description The session is over */
+            /** @description The session is over and the refresh cookie is cleared */
             204: {
                 headers: {
+                    /** @description Clears the refresh cookie with the same path and flags. */
+                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content?: never;
             };
+            403: components["responses"]["Forbidden"];
         };
     };
     getMe: {
@@ -452,7 +780,181 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
         };
     };
-    getThread: {
+    createClass: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateClassRequest"];
+            };
+        };
+        responses: {
+            /** @description The original class and first session for a safe retry */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateClassResponse"];
+                };
+            };
+            /** @description The class and first session were created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateClassResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    createStudent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStudentRequest"];
+            };
+        };
+        responses: {
+            /** @description The original student for a safe retry */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Student"];
+                };
+            };
+            /** @description The student was registered */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Student"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    joinRoster: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                class_id: components["parameters"]["ClassId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinRosterRequest"];
+            };
+        };
+        responses: {
+            /** @description The exact open roster period already existed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RosterPeriod"];
+                };
+            };
+            /** @description The roster period was opened */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RosterPeriod"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    markAttendance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+                student_id: components["parameters"]["StudentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkAttendanceRequest"];
+            };
+        };
+        responses: {
+            /** @description The canonical attendance row */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Attendance"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getHome: {
+        parameters: {
+            query?: {
+                /** @description Opaque cursor bound to the current tutor local date. */
+                cursor?: components["parameters"]["HomeCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Required identity and teaching facts plus optional billing progress */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Home"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    getHomeBillingProjection: {
         parameters: {
             query?: never;
             header?: never;
@@ -461,13 +963,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The thread as it stands */
+            /** @description Billing progress or its isolated unavailable state */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ThreadStatus"];
+                    "application/json": components["schemas"]["HomeBillingProjection"];
                 };
             };
             401: components["responses"]["Unauthenticated"];

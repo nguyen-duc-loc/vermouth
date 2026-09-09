@@ -1,0 +1,35 @@
+imagePullSecrets:
+  - dockerhub-pull
+
+images:
+  storageGuard: docker.io/library/alpine@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+  postgres: docker.io/library/postgres@sha256:54451ecb8ab38c24c3ec123f2fd501303a3a1856a5c66e98cecf2460d5e1e9d7
+  redpanda: docker.redpanda.com/redpandadata/redpanda@sha256:7a967c3eff32b81689d3edf635a7a73b47a0518981ae6dff72b58fae9af3ffc0
+  garage: docker.io/dxflrs/garage@sha256:45a61ce3f7c9c24fc23d9ed2b09b27ed560ab87b34605d175d5c588f539c24e4
+
+config:
+  environment: production
+  gatewayTrustedProxyCIDRs: 10.42.0.0/16
+  gatewayAuthRateStartIP: 5/1m,20/1h
+  gatewayAuthRateStartGlobal: 100/1m,500/1h
+  gatewayAuthRateCallbackIP: 10/1m,60/1h
+  gatewayAuthRateCallbackGlobal: 200/1m,1000/1h
+  gatewayAuthRateRefreshIP: 30/1m,120/1h
+  gatewayAuthRateRefreshToken: 10/1m,120/1h
+  gatewayAuthRateRefreshGlobal: 300/1m,3000/1h
+  googleAuthEnabled: true
+  identityCookieSecure: "true"
+
+ingress:
+  hostname: ""
+  entryPoint: websecure
+  tls:
+    enabled: true
+    certResolver: letsencrypt-production
+
+storage:
+  nodeName: nguyenducloc-vm2
+  rootPath: /var/lib/vermouth
+  markerSHA256: ""
+  guard:
+    enabled: true

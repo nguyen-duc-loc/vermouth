@@ -1,0 +1,106 @@
+#!/bin/sh
+set -eu
+set -f
+umask 077
+
+entrypoint_fail() {
+  printf 'vermouth deployment: %s\n' "$*" >&2
+  exit 4
+}
+
+for tool in jq sudo; do
+  command -v "$tool" >/dev/null 2>&1 || entrypoint_fail "$tool is required"
+done
+
+set -- ${SSH_ORIGINAL_COMMAND:-}
+action=${1:-}
+case "$action" in
+  inspect-base)
+    [ "$#" -eq 4 ] || entrypoint_fail "inspect-base requires a Git SHA, GitHub run ID, and run attempt"
+    git_sha=$2
+    run_id=$3
+    run_attempt=$4
+    printf '%s' "$git_sha" | grep -Eq '^[0-9a-f]{40}$' || entrypoint_fail "the Git SHA is invalid"
+    printf '%s' "$run_id" | grep -Eq '^[1-9][0-9]*$' || entrypoint_fail "the GitHub run ID is invalid"
+    printf '%s' "$run_attempt" | grep -Eq '^[1-9][0-9]*$' || entrypoint_fail "the GitHub run attempt is invalid"
+    payload=$(cat)
+    [ -z "$payload" ] || entrypoint_fail "inspect-base requires empty standard input"
+    jq -n --arg action "$action" --arg git_sha "$git_sha" --arg github_run_id "$run_id" \
+      --arg github_run_attempt "$run_attempt" \
+      '{schema_version:1,action:$action,git_sha:$git_sha,github_run_id:$github_run_id,github_run_attempt:$github_run_attempt}' |
+      sudo --non-interactive /usr/local/sbin/vermouth-deploy-root
+    exit 0
+    ;;
+  preflight|deploy)
+    [ "$#" -eq 3 ] || entrypoint_fail "the deployment command must contain an action, Git SHA, and bundle checksum"
+    git_sha=$2
+    bundle_sha256=$3
+    ;;
+  *) entrypoint_fail "the deployment action is not allowed" ;;
+esac
+printf '%s' "$git_sha" | grep -Eq '^[0-9a-f]{40}$' || entrypoint_fail "the Git SHA is invalid"
+printf '%s' "$bundle_sha256" | grep -Eq '^[0-9a-f]{64}$' || entrypoint_fail "the bundle checksum is invalid"
+
+for tool in sha256sum tar zstd; do
+  command -v "$tool" >/dev/null 2>&1 || entrypoint_fail "$tool is required"
+done
+
+staging=$(mktemp -d /var/lib/vermouth-deploy/release.XXXXXX)
+cleanup_entrypoint() {
+  rm -rf "$staging"
+}
+trap cleanup_entrypoint EXIT HUP INT TERM
+archive=$staging/release.tar.zst
+cat >"$archive"
+[ "$(sha256sum "$archive" | awk '{print $1}')" = "$bundle_sha256" ] || entrypoint_fail "the release bundle checksum does not match"
+zstd -q -t "$archive" || entrypoint_fail "the release bundle is not valid zstd data"
+zstd -q -dc "$archive" | tar -tf - | while IFS= read -r entry; do
+  case "$entry" in
+    .|./|./images.json|./deployment-base.json|./rate-limit-evidence.json|./migration-compat-evidence.json|./bundle-manifest.json|./values-production.yaml|./chart/*) ;;
+    *) entrypoint_fail "the release bundle contains an unexpected path $entry" ;;
+  esac
+  case "$entry" in
+    /*|*../*|*/..|..|*\\*) entrypoint_fail "the release bundle path $entry is unsafe" ;;
+  esac
+done
+zstd -q -dc "$archive" | tar -tvf - | awk '$1 ~ /^[lh]/ {bad=1} END {exit bad}' || entrypoint_fail "the release bundle contains a link"
+content=$staging/content
+mkdir "$content"
+zstd -q -dc "$archive" | tar -xf - -C "$content" --no-same-owner --no-same-permissions
+
+for required in images.json deployment-base.json rate-limit-evidence.json migration-compat-evidence.json bundle-manifest.json values-production.yaml; do
+  [ -f "$content/$required" ] || entrypoint_fail "$required is missing from the release bundle"
+done
+jq -e '.schema_version == 1 and (.files | type == "object")' "$content/bundle-manifest.json" >/dev/null ||
+  entrypoint_fail "the bundle manifest is invalid"
+jq -r '.files | keys[]' "$content/bundle-manifest.json" | while IFS= read -r relative; do
+  case "$relative" in
+    images.json|deployment-base.json|rate-limit-evidence.json|migration-compat-evidence.json|values-production.yaml|chart/*) ;;
+    *) entrypoint_fail "the bundle manifest contains an unexpected file $relative" ;;
+  esac
+  [ -f "$content/$relative" ] || entrypoint_fail "the bundle file $relative is missing"
+  expected=$(jq -r --arg name "$relative" '.files[$name]' "$content/bundle-manifest.json")
+  actual=$(sha256sum "$content/$relative" | awk '{print $1}')
+  [ "$actual" = "$expected" ] || entrypoint_fail "the bundle checksum failed for $relative"
+done
+find "$content" -type f ! -name bundle-manifest.json -print | while IFS= read -r file; do
+  relative=${file#"$content/"}
+  jq -e --arg name "$relative" '.files[$name] | strings | test("^[0-9a-f]{64}$")' \
+    "$content/bundle-manifest.json" >/dev/null ||
+    entrypoint_fail "the extracted file $relative is not covered by the bundle manifest"
+done
+
+run_id=$(jq -r '.github_run_id | tostring' "$content/images.json")
+run_attempt=$(jq -r '.github_run_attempt | tostring' "$content/images.json")
+printf '%s' "$run_id" | grep -Eq '^[1-9][0-9]*$' || entrypoint_fail "the GitHub run ID is invalid"
+printf '%s' "$run_attempt" | grep -Eq '^[1-9][0-9]*$' || entrypoint_fail "the GitHub run attempt is invalid"
+incoming=/var/lib/vermouth/releases/.incoming/$run_id-$run_attempt
+[ ! -e "$incoming" ] || entrypoint_fail "release staging $run_id already exists"
+mv "$content" "$incoming"
+trap - EXIT HUP INT TERM
+rm -rf "$staging"
+
+jq -n --arg action "$action" --arg git_sha "$git_sha" --arg bundle_sha256 "$bundle_sha256" \
+  --arg github_run_id "$run_id" --arg github_run_attempt "$run_attempt" --arg incoming "$incoming" \
+  '{schema_version:1,action:$action,git_sha:$git_sha,bundle_sha256:$bundle_sha256,github_run_id:$github_run_id,github_run_attempt:$github_run_attempt,incoming:$incoming}' |
+  sudo --non-interactive /usr/local/sbin/vermouth-deploy-root

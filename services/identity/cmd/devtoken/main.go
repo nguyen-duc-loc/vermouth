@@ -17,9 +17,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 	_ "time/tzdata"
 
@@ -32,7 +34,13 @@ import (
 	"github.com/nguyen-duc-loc/vermouth/services/identity/internal/token"
 )
 
-const service = "devtoken"
+const (
+	service           = "devtoken"
+	databaseWait      = 30 * time.Second
+	databaseRetryWait = time.Second
+)
+
+type poolOpener func(context.Context, string) (*pgxpool.Pool, error)
 
 func main() {
 	err := run()
@@ -57,6 +65,7 @@ type tutorRegistered struct {
 // answer is what this program prints, shaped like the session the browser gets
 // so test/thread.sh reads one JSON object either way.
 type answer struct {
+	SchemaVersion   int       `json:"schema_version"`
 	TutorID         uuid.UUID `json:"tutor_id"`
 	Email           string    `json:"email"`
 	AccessToken     string    `json:"access_token"`
@@ -79,6 +88,7 @@ func run() error {
 	if *email == "" {
 		*email = fmt.Sprintf("tutor-%d@example.com", time.Now().UnixNano())
 	}
+	*email = strings.ToLower(strings.TrimSpace(*email))
 	databaseURL := os.Getenv("IDENTITY_DATABASE_URL")
 	if databaseURL == "" {
 		return &vermouth.MissingEnvError{Name: "IDENTITY_DATABASE_URL", Reason: ""}
@@ -89,7 +99,9 @@ func run() error {
 	}
 
 	ctx := context.Background()
-	pool, err := vermouth.OpenPool(ctx, databaseURL)
+	waitCtx, cancel := context.WithTimeout(ctx, databaseWait)
+	pool, err := openPoolWithRetry(waitCtx, databaseURL, databaseRetryWait, vermouth.OpenPool)
+	cancel()
 	if err != nil {
 		return err
 	}
@@ -118,11 +130,39 @@ func run() error {
 	encoder.SetIndent("", "  ")
 	//nolint:gosec // G117: printing the token is this program's whole purpose, and it never leaves a development machine.
 	return encoder.Encode(answer{
+		SchemaVersion:   1,
 		TutorID:         row.TutorID,
 		Email:           row.Email,
 		AccessToken:     accessToken,
 		AccessExpiresAt: expiresAt,
 	})
+}
+
+func openPoolWithRetry(
+	ctx context.Context,
+	databaseURL string,
+	retryDelay time.Duration,
+	open poolOpener,
+) (*pgxpool.Pool, error) {
+	var lastErr error
+	for {
+		ctxErr := ctx.Err()
+		if ctxErr != nil {
+			return nil, fmt.Errorf("wait for identity database: %w", errors.Join(lastErr, ctxErr))
+		}
+		pool, err := open(ctx, databaseURL)
+		if err == nil {
+			return pool, nil
+		}
+		lastErr = err
+		timer := time.NewTimer(retryDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, fmt.Errorf("wait for identity database: %w", errors.Join(lastErr, ctx.Err()))
+		case <-timer.C:
+		}
+	}
 }
 
 // insertTutor writes the tutor and its event in one transaction, which is the

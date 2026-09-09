@@ -102,6 +102,34 @@ func (q *Queries) GetBillingRun(ctx context.Context, arg GetBillingRunParams) (B
 	return i, err
 }
 
+const getClassRateBookkeeping = `-- name: GetClassRateBookkeeping :one
+SELECT recorded_at, updated_at
+FROM class_rates
+WHERE tutor_id = $1
+  AND class_id = $2
+  AND effective_from = $3
+`
+
+type GetClassRateBookkeepingParams struct {
+	TutorID       uuid.UUID
+	ClassID       uuid.UUID
+	EffectiveFrom pgtype.Date
+}
+
+type GetClassRateBookkeepingRow struct {
+	RecordedAt time.Time
+	UpdatedAt  time.Time
+}
+
+// GetClassRateBookkeeping exposes the consumer transaction clock for the model
+// regression tests. Business code reads rates through RateInForceOn instead.
+func (q *Queries) GetClassRateBookkeeping(ctx context.Context, arg GetClassRateBookkeepingParams) (GetClassRateBookkeepingRow, error) {
+	row := q.db.QueryRow(ctx, getClassRateBookkeeping, arg.TutorID, arg.ClassID, arg.EffectiveFrom)
+	var i GetClassRateBookkeepingRow
+	err := row.Scan(&i.RecordedAt, &i.UpdatedAt)
+	return i, err
+}
+
 const getInvoice = `-- name: GetInvoice :one
 SELECT invoice_id, tutor_id, billing_run_id, student_id, invoice_number, period_year,
        period_month, total_amount, currency, issued_at, pdf_location, paid_at, voided_at,
@@ -196,6 +224,82 @@ func (q *Queries) GetInvoiceProfile(ctx context.Context, tutorID uuid.UUID) (Inv
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.IsComplete,
+	)
+	return i, err
+}
+
+const getTeachingProjectionStatus = `-- name: GetTeachingProjectionStatus :one
+SELECT
+    (SELECT count(*) FROM classes c WHERE c.tutor_id = $1)::bigint
+        AS class_count,
+    (SELECT count(*) FROM sessions s WHERE s.tutor_id = $1)::bigint
+        AS session_count,
+    (SELECT count(*) FROM students st
+        WHERE st.tutor_id = $1 AND st.removed_at IS NULL)::bigint
+        AS student_count,
+    (SELECT count(*) FROM roster_periods rp
+        WHERE rp.tutor_id = $1 AND rp.effective_to IS NULL)::bigint
+        AS open_roster_count,
+    (SELECT count(*) FROM attendance a WHERE a.tutor_id = $1)::bigint
+        AS attendance_count,
+    (
+        SELECT count(*) > 0
+        FROM (
+            SELECT c.updated_at FROM classes c WHERE c.tutor_id = $1
+            UNION ALL
+            SELECT s.updated_at FROM sessions s WHERE s.tutor_id = $1
+            UNION ALL
+            SELECT st.updated_at FROM students st WHERE st.tutor_id = $1
+            UNION ALL
+            SELECT rp.updated_at FROM roster_periods rp WHERE rp.tutor_id = $1
+            UNION ALL
+            SELECT a.updated_at FROM attendance a WHERE a.tutor_id = $1
+            UNION ALL
+            SELECT cr.updated_at FROM class_rates cr WHERE cr.tutor_id = $1
+        ) updates
+    )::boolean AS has_updated_at,
+    (
+        SELECT coalesce(max(updated_at), 'epoch'::timestamptz)
+        FROM (
+            SELECT c.updated_at FROM classes c WHERE c.tutor_id = $1
+            UNION ALL
+            SELECT s.updated_at FROM sessions s WHERE s.tutor_id = $1
+            UNION ALL
+            SELECT st.updated_at FROM students st WHERE st.tutor_id = $1
+            UNION ALL
+            SELECT rp.updated_at FROM roster_periods rp WHERE rp.tutor_id = $1
+            UNION ALL
+            SELECT a.updated_at FROM attendance a WHERE a.tutor_id = $1
+            UNION ALL
+            SELECT cr.updated_at FROM class_rates cr WHERE cr.tutor_id = $1
+        ) updates
+    )::timestamptz AS latest_updated_at
+`
+
+type GetTeachingProjectionStatusRow struct {
+	ClassCount      int64
+	SessionCount    int64
+	StudentCount    int64
+	OpenRosterCount int64
+	AttendanceCount int64
+	HasUpdatedAt    bool
+	LatestUpdatedAt time.Time
+}
+
+// Projection status is diagnostic progress only. Each count is scoped to the
+// trusted tutor, and latest_updated_at covers every teaching projection table,
+// including the rate history that is not itself a displayed count.
+func (q *Queries) GetTeachingProjectionStatus(ctx context.Context, ownerTutorID uuid.UUID) (GetTeachingProjectionStatusRow, error) {
+	row := q.db.QueryRow(ctx, getTeachingProjectionStatus, ownerTutorID)
+	var i GetTeachingProjectionStatusRow
+	err := row.Scan(
+		&i.ClassCount,
+		&i.SessionCount,
+		&i.StudentCount,
+		&i.OpenRosterCount,
+		&i.AttendanceCount,
+		&i.HasUpdatedAt,
+		&i.LatestUpdatedAt,
 	)
 	return i, err
 }
@@ -837,7 +941,8 @@ INSERT INTO class_rates (class_id, effective_from, tutor_id, rate_amount, curren
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (class_id, effective_from) DO UPDATE
 SET rate_amount = excluded.rate_amount,
-    currency    = excluded.currency
+    currency    = excluded.currency,
+    updated_at  = now()
 WHERE class_rates.tutor_id = excluded.tutor_id
 `
 

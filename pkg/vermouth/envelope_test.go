@@ -71,3 +71,69 @@ func TestDecodeIntoIgnoresUnknownFields(t *testing.T) {
 	require.NoError(t, vermouth.DecodeInto(env, []int{1}, &target))
 	require.Equal(t, "tutor@example.com", target.Email)
 }
+
+// TestTrustedTutorIDUsesTheEnvelope covers AC-4 at the event boundary. The
+// envelope is the trusted tenant source, while the payload can only agree or
+// omit its duplicate value.
+func TestTrustedTutorIDUsesTheEnvelope(t *testing.T) {
+	t.Parallel()
+
+	envelopeTutorID := uuid.New()
+	tests := []struct {
+		name            string
+		envelopeTutorID uuid.UUID
+		payloadTutorID  uuid.UUID
+		want            uuid.UUID
+		wantConflict    bool
+		wantError       bool
+	}{
+		{
+			name:            "matching payload tenant",
+			envelopeTutorID: envelopeTutorID,
+			payloadTutorID:  envelopeTutorID,
+			want:            envelopeTutorID,
+		},
+		{
+			name:            "payload omits tenant",
+			envelopeTutorID: envelopeTutorID,
+			want:            envelopeTutorID,
+		},
+		{
+			name:            "payload conflicts with envelope",
+			envelopeTutorID: envelopeTutorID,
+			payloadTutorID:  uuid.New(),
+			wantConflict:    true,
+			wantError:       true,
+		},
+		{
+			name:      "envelope omits tenant",
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			must := require.New(t)
+			env := vermouth.Envelope{
+				EventName: vermouth.EventTutorRegistered,
+				TutorID:   tt.envelopeTutorID,
+			}
+
+			got, err := vermouth.TrustedTutorID(env, tt.payloadTutorID)
+			if tt.wantError {
+				must.Error(err)
+			} else {
+				must.NoError(err)
+			}
+			must.Equal(tt.want, got)
+			if tt.wantConflict {
+				var conflict *vermouth.TutorIDConflictError
+				must.ErrorAs(err, &conflict)
+				must.Equal(vermouth.EventTutorRegistered, conflict.EventName)
+				must.Equal(tt.envelopeTutorID, conflict.EnvelopeTutorID)
+				must.Equal(tt.payloadTutorID, conflict.PayloadTutorID)
+			}
+		})
+	}
+}

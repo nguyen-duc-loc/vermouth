@@ -64,12 +64,16 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 	if err != nil {
 		return err
 	}
+	tutorID, err := vermouth.TrustedTutorID(env, facts.TutorID)
+	if err != nil {
+		return err
+	}
 	q := store.Queries(tx)
 
 	switch env.EventName {
 	case vermouth.EventClassCreated:
 		err = q.UpsertClass(ctx, sqlcgen.UpsertClassParams{
-			ClassID: facts.ClassID, TutorID: facts.TutorID, Name: facts.Name,
+			ClassID: facts.ClassID, TutorID: tutorID, Name: facts.Name,
 		})
 		if err != nil {
 			return err
@@ -82,13 +86,13 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 			return err
 		}
 		return q.UpsertClassRate(ctx, sqlcgen.UpsertClassRateParams{
-			ClassID: facts.ClassID, EffectiveFrom: from, TutorID: facts.TutorID,
+			ClassID: facts.ClassID, EffectiveFrom: from, TutorID: tutorID,
 			RateAmount: facts.RateAmount, Currency: facts.Currency,
 		})
 
 	case vermouth.EventClassChanged:
 		return q.UpsertClass(ctx, sqlcgen.UpsertClassParams{
-			ClassID: facts.ClassID, TutorID: facts.TutorID, Name: facts.Name,
+			ClassID: facts.ClassID, TutorID: tutorID, Name: facts.Name,
 		})
 
 	case vermouth.EventClassRateChanged:
@@ -97,20 +101,20 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 			return err
 		}
 		return q.UpsertClassRate(ctx, sqlcgen.UpsertClassRateParams{
-			ClassID: facts.ClassID, EffectiveFrom: from, TutorID: facts.TutorID,
+			ClassID: facts.ClassID, EffectiveFrom: from, TutorID: tutorID,
 			RateAmount: facts.RateAmount, Currency: facts.Currency,
 		})
 
 	case vermouth.EventStudentRegistered, vermouth.EventStudentChanged:
 		return q.UpsertStudent(ctx, sqlcgen.UpsertStudentParams{
-			StudentID: facts.StudentID, TutorID: facts.TutorID, Name: facts.Name,
+			StudentID: facts.StudentID, TutorID: tutorID, Name: facts.Name,
 		})
 
 	case vermouth.EventStudentRemoved:
 		// The event carries no timestamp of its own, so the end is the envelope's
 		// occurred_at (INV-4).
 		return q.MarkStudentRemoved(ctx, sqlcgen.MarkStudentRemovedParams{
-			TutorID: facts.TutorID, StudentID: facts.StudentID, RemovedAt: at(env.OccurredAt),
+			TutorID: tutorID, StudentID: facts.StudentID, RemovedAt: at(env.OccurredAt),
 		})
 
 	case vermouth.EventSessionScheduled, vermouth.EventSessionMoved:
@@ -119,18 +123,18 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 			return err
 		}
 		return q.UpsertSession(ctx, sqlcgen.UpsertSessionParams{
-			SessionID: facts.SessionID, ClassID: facts.ClassID, TutorID: facts.TutorID,
+			SessionID: facts.SessionID, ClassID: facts.ClassID, TutorID: tutorID,
 			StartsAt: facts.StartsAt, EndsAt: facts.EndsAt, LocalDate: localDate,
 		})
 
 	case vermouth.EventSessionCancelled:
 		return q.MarkSessionCancelled(ctx, sqlcgen.MarkSessionCancelledParams{
-			TutorID: facts.TutorID, SessionID: facts.SessionID, CancelledAt: at(env.OccurredAt),
+			TutorID: tutorID, SessionID: facts.SessionID, CancelledAt: at(env.OccurredAt),
 		})
 
 	case vermouth.EventAttendanceMarked:
 		return q.UpsertAttendance(ctx, sqlcgen.UpsertAttendanceParams{
-			SessionID: facts.SessionID, StudentID: facts.StudentID, TutorID: facts.TutorID,
+			SessionID: facts.SessionID, StudentID: facts.StudentID, TutorID: tutorID,
 			State: facts.State, MarkedAt: facts.MarkedAt,
 		})
 
@@ -140,7 +144,7 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 			return err
 		}
 		return q.OpenRosterPeriod(ctx, sqlcgen.OpenRosterPeriodParams{
-			ClassID: facts.ClassID, StudentID: facts.StudentID, EffectiveFrom: from, TutorID: facts.TutorID,
+			ClassID: facts.ClassID, StudentID: facts.StudentID, EffectiveFrom: from, TutorID: tutorID,
 		})
 
 	case vermouth.EventRosterLeft:
@@ -148,7 +152,7 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 		// is the only well defined target, which the partial unique index makes
 		// true rather than hoped for.
 		return q.CloseRosterPeriod(ctx, sqlcgen.CloseRosterPeriodParams{
-			TutorID: facts.TutorID, ClassID: facts.ClassID, StudentID: facts.StudentID,
+			TutorID: tutorID, ClassID: facts.ClassID, StudentID: facts.StudentID,
 			EffectiveTo: day(env.OccurredAt.Month(), env.OccurredAt.Day()),
 		})
 
@@ -162,6 +166,28 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 // errGroupNotEmpty is the one way the replay refuses: a consumer that still holds
 // its group cannot have its offsets reset under it.
 var errGroupNotEmpty = errors.New("the consumer group still has a member")
+
+func TestTeachingConsumerRejectsAConflictingPayloadTenant(t *testing.T) {
+	t.Parallel()
+
+	envelopeTutorID := newID(t)
+	payloadTutorID := newID(t)
+	env := newEvent(
+		t,
+		vermouth.EventStudentRegistered,
+		envelopeTutorID,
+		vermouth.Key{Kind: vermouth.KeyStudentID, Value: newID(t)},
+		teachingFacts{
+			TutorID:   payloadTutorID,
+			StudentID: newID(t),
+			Name:      "Mai",
+		},
+	)
+
+	var tx pgx.Tx
+	err := handleTeachingEvent(t.Context(), tx, env)
+	require.ErrorAs(t, err, new(*vermouth.TutorIDConflictError))
+}
 
 // parseDay reads the calendar day an event carries. A day travels as a day, so no
 // timezone is involved in reading it back.
@@ -281,7 +307,7 @@ func TestReplayRebuildsProjectionsAndNeverTouchesAnInvoice(t *testing.T) {
 	drain(t, cfg, consumer, group, len(envelopes))
 
 	require.Equal(t, billable, billableFor(t, q, tutorID, time.September),
-		"a full replay must leave every projection exactly as it was (AC-7, INV-11)")
+		"a full replay must leave every projection business field as it was (AC-7, INV-11)")
 
 	invoiceAfter, err := q.GetInvoice(ctx, sqlcgen.GetInvoiceParams{TutorID: tutorID, InvoiceID: invoice.InvoiceID})
 	require.NoError(t, err)

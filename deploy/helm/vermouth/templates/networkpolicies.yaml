@@ -1,0 +1,130 @@
+{{- if or .Values.foundation.enabled .Values.foundation.bootstrapStorage }}
+{{- $matrix := .Files.Get "files/traffic-matrix.yaml" | fromYaml }}
+{{- if ne (int $matrix.schemaVersion) 1 }}{{ fail "traffic matrix schemaVersion must be 1" }}{{- end }}
+{{- $policies := dict }}
+{{- range $row := $matrix.rows }}
+  {{- $enabled := or (eq $row.environment "all") (and (eq $row.environment "google-enabled") $.Values.config.googleAuthEnabled) }}
+  {{- if $enabled }}
+    {{- $rows := get $policies $row.policyName | default (list) }}
+    {{- $_ := set $policies $row.policyName (append $rows $row) }}
+  {{- end }}
+{{- end }}
+{{- range $policyName := keys $policies | sortAlpha }}
+{{- $rows := get $policies $policyName }}
+{{- $first := index $rows 0 }}
+{{- $ids := list }}
+{{- range $row := $rows }}{{ $ids = append $ids $row.id }}{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $policyName }}
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" $ "component" "network-boundary") | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+    vermouth.dev/traffic-row-ids: {{ join "," $ids | quote }}
+spec:
+  podSelector:
+    {{- if $first.podSelector }}
+    matchLabels:
+      {{- toYaml $first.podSelector | nindent 6 }}
+    {{- else if $first.podSelectorExpression }}
+    matchLabels:
+      app.kubernetes.io/name: vermouth
+    matchExpressions:
+      - key: {{ $first.podSelectorExpression.key }}
+        operator: In
+        values:
+          {{- toYaml $first.podSelectorExpression.values | nindent 10 }}
+    {{- else }}
+    {}
+    {{- end }}
+  policyTypes:
+    {{- if eq $first.direction "Both" }}
+    - Ingress
+    - Egress
+    {{- else }}
+    - {{ $first.direction }}
+    {{- end }}
+  {{- if eq $first.direction "Ingress" }}
+  ingress:
+    {{- range $row := $rows }}
+    - from:
+        {{- range $peer := $row.peers }}
+        - {{- if $peer.namespaceSelector }}
+          namespaceSelector:
+            matchLabels:
+              {{- toYaml $peer.namespaceSelector | nindent 14 }}
+          {{- end }}
+          {{- if $peer.podSelector }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $peer.podSelector | nindent 14 }}
+          {{- else if $peer.podSelectorExpression }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vermouth
+            matchExpressions:
+              - key: {{ $peer.podSelectorExpression.key }}
+                operator: In
+                values:
+                  {{- toYaml $peer.podSelectorExpression.values | nindent 18 }}
+          {{- end }}
+          {{- if $peer.ipBlock }}
+          ipBlock:
+            cidr: {{ $peer.ipBlock.cidr }}
+            {{- with $peer.ipBlock.except }}
+            except:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+      ports:
+        {{- range $port := $row.ports }}
+        - protocol: {{ $port.protocol }}
+          port: {{ $port.port }}
+        {{- end }}
+    {{- end }}
+  {{- else if eq $first.direction "Egress" }}
+  egress:
+    {{- range $row := $rows }}
+    - to:
+        {{- range $peer := $row.peers }}
+        - {{- if $peer.namespaceSelector }}
+          namespaceSelector:
+            matchLabels:
+              {{- toYaml $peer.namespaceSelector | nindent 14 }}
+          {{- end }}
+          {{- if $peer.podSelector }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $peer.podSelector | nindent 14 }}
+          {{- else if $peer.podSelectorExpression }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vermouth
+            matchExpressions:
+              - key: {{ $peer.podSelectorExpression.key }}
+                operator: In
+                values:
+                  {{- toYaml $peer.podSelectorExpression.values | nindent 18 }}
+          {{- end }}
+          {{- if $peer.ipBlock }}
+          ipBlock:
+            cidr: {{ $peer.ipBlock.cidr }}
+            {{- with $peer.ipBlock.except }}
+            except:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+      ports:
+        {{- range $port := $row.ports }}
+        - protocol: {{ $port.protocol }}
+          port: {{ $port.port }}
+        {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}

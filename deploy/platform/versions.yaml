@@ -1,0 +1,132 @@
+schemaVersion: 1
+host:
+  os: darwin
+  architecture: arm64
+  colimaProfile: default
+  dockerContext: colima
+  dockerEndpointTemplate: $HOME/.colima/default/docker.sock
+  minimumCPUs: 4
+  minimumMemoryGiB: 8
+builder:
+  name: colima
+  driver: docker
+  status: running
+  buildkitVersion: v0.30.0
+  platforms: [linux/arm64, linux/amd64]
+tools:
+  colima:
+    series: "0.10"
+    minimum: "0.10.3"
+  dockerClient:
+    series: "29"
+    minimum: "29.7.2"
+  dockerServer:
+    series: "29"
+    minimum: "29.5.2"
+  buildx:
+    series: "0.36"
+    minimum: "0.36.1"
+  k3d:
+    series: "5.9"
+    minimum: "5.9.0"
+  kubectl:
+    acceptedSeries: ["1.35", "1.36"]
+  helm:
+    series: "4.2"
+    minimum: "4.2.4"
+  task:
+    series: "3.53"
+    minimum: "3.53.1"
+  go:
+    series: "1.27"
+    minimum: "1.27.0"
+  node:
+    series: "24.19"
+    minimum: "24.19.0"
+  pnpm:
+    exact: "11.22.0"
+cluster:
+  name: vermouth
+  context: k3d-vermouth
+  servers: 1
+  agents: 0
+  k3sImageTag: v1.36.3-k3s1
+  k3sLiveVersion: v1.36.3+k3s1
+  nodeName: k3d-vermouth-server-0
+  networkName: k3d-vermouth
+bindings:
+  applicationHost: 127.0.0.1
+  applicationPort: 8080
+  registryHost: 127.0.0.1
+  registryPort: 5111
+registry:
+  k3dName: vermouth-registry
+  inventoryName: vermouth-registry
+  containerName: vermouth-registry
+  networkAlias: vermouth-registry
+  hostEndpoint: 127.0.0.1:5111
+  clusterEndpoint: vermouth-registry:5000
+  mirrorKey: vermouth-registry:5000
+  mirrorEndpoint: http://vermouth-registry:5000
+  dataVolume: vermouth-registry-data
+traefik:
+  release: traefik
+  namespace: kube-system
+  image: rancher/mirrored-library-traefik
+  imageVersion: "3.7.8"
+  imageDigest: sha256:4299bbed850421258fc5448c2e0e6ad350981d4d335a68de11b92448aedbefe5
+  chartVersion: "40.1.4+up40.1.0"
+storage:
+  dataVolume: vermouth-data
+  rootPath: /var/lib/vermouth
+  className: vermouth-local
+  labels:
+    platformKey: vermouth.dev/platform
+    platformValue: vermouth
+    roleKey: vermouth.dev/role
+  roles:
+    data: data
+    registry: registry
+deadlines:
+  doctorSeconds: 120
+  bootstrapSeconds: 600
+  coldDevSeconds: 1200
+  warmDevSeconds: 480
+  statusSeconds: 30
+  logsSeconds: 30
+  stopSeconds: 120
+  cleanSeconds: 300
+  recreateSeconds: 900
+  jobsCleanSeconds: 120
+  cacheCleanSeconds: 300
+  measureSeconds: 600
+  lockRenewSeconds: 10
+  staleGraceSeconds: 60
+deletionInventory:
+  clusters: [vermouth]
+  registries: [vermouth-registry]
+  volumes: [vermouth-data, vermouth-registry-data]
+  generatedStateRoot: .tmp/platform
+immutableIdentityFields:
+  - cluster.name
+  - cluster.servers
+  - cluster.agents
+  - cluster.k3sImageTag
+  - cluster.nodeName
+  - cluster.networkName
+  - bindings.applicationHost
+  - bindings.applicationPort
+  - bindings.registryHost
+  - bindings.registryPort
+  - registry.k3dName
+  - registry.inventoryName
+  - registry.containerName
+  - registry.networkAlias
+  - registry.hostEndpoint
+  - registry.clusterEndpoint
+  - registry.mirrorKey
+  - registry.mirrorEndpoint
+  - registry.dataVolume
+  - storage.dataVolume
+  - storage.rootPath
+  - storage.className

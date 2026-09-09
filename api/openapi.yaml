@@ -11,10 +11,9 @@ info:
     Only the gateway is described here. Services are reached by the gateway
     alone (INV-1), so their endpoints are not a public surface.
 
-    This is the skeleton surface of feature 2, with feature 7's sign in on it:
-    the four auth endpoints are unauthenticated because they are what produces a
-    token, and everything else under /api/ needs one. Feature 8 adds the first
-    real teaching endpoints.
+    The four auth endpoints are unauthenticated because they are what produces
+    a token. Everything else under /api/ needs one. The teaching endpoints are
+    the first real product thread through the gateway.
 servers:
   - url: http://localhost:8080
     description: local development
@@ -57,10 +56,11 @@ paths:
       operationId: startGoogleSignIn
       summary: Begin Google sign in
       description: |
-        Writes the in flight sign in (its state, PKCE verifier and nonce) and
-        redirects the browser to Google. The browser follows this as a plain
-        link, so it is a GET; nothing here needs a token, because this is what
-        eventually produces one (spec 0004).
+        Writes the in flight sign in (its state, PKCE verifier, nonce, and the
+        hash of an independent browser binding cookie) and redirects the browser
+        to Google. The browser follows this as a plain link, so it is a GET;
+        nothing here needs a token, because this is what eventually produces one
+        (spec 0004).
       security: []
       parameters:
         - name: tz
@@ -85,8 +85,8 @@ paths:
           required: false
           description: |
             Where in the app to land after signing in. Kept only when it is a
-            path starting with a single slash, so it cannot become an open
-            redirect.
+            clean relative path and query with one leading slash, no fragment,
+            controls, backslash, scheme, or host.
           schema:
             type: string
             examples: ["/"]
@@ -94,24 +94,48 @@ paths:
         "302":
           description: |
             Google's authorize URL, or /signin?error=provider_error when the
-            attempt could not be written.
+            attempt could not be written. A rate limited request instead uses
+            /signin?error=rate_limited and carries Retry-After plus no-store.
           headers:
             Location:
               required: true
               schema:
                 type: string
+            Retry-After:
+              description: Whole seconds until every applicable rate budget can admit one request.
+              required: false
+              schema:
+                type: integer
+                minimum: 1
+            Cache-Control:
+              description: Present as no-store on a rate limited redirect.
+              required: false
+              schema:
+                type: string
+                const: no-store
+            Set-Cookie:
+              description: The short lived HttpOnly browser binding cookie.
+              schema:
+                type: string
+        "503":
+          description: Google sign in is disabled in this local environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /api/auth/google/callback:
     get:
       operationId: completeGoogleSignIn
       summary: Complete Google sign in and start a session
       description: |
-        Google sends the browser here. The code is exchanged and the ID token
-        validated by identity, which holds the client secret; a first sign in
-        creates the tutor and its identity.tutor.registered event in one
-        transaction. The answer carries no access token on purpose: it sets the
-        refresh cookie and lands the browser in the app, which then calls
-        /api/auth/refresh, so a token never appears in a URL or in history.
+        Google sends the browser here. The matching state and browser binding
+        are required, then the code is exchanged and the ID token validated by
+        identity, which holds the client secret. A first sign in creates the
+        tutor and its identity.tutor.registered event in one transaction. The
+        answer carries no access token on purpose: it sets the refresh cookie and
+        lands the browser in the app, which then calls /api/auth/refresh, so a
+        token never appears in a URL or in history.
       security: []
       parameters:
         - name: code
@@ -136,16 +160,38 @@ paths:
         "302":
           description: |
             The app, or /signin?error=<code> with one of not_allowed,
-            email_conflict, cancelled, expired_state or provider_error.
+            email_conflict, cancelled, expired_state, provider_error or
+            rate_limited. A rate limited redirect carries Retry-After plus
+            no-store.
           headers:
             Location:
               required: true
               schema:
                 type: string
-            Set-Cookie:
-              description: The rotating refresh token, HttpOnly and scoped to /api/auth.
+            Retry-After:
+              description: Whole seconds until every applicable rate budget can admit one request.
+              required: false
+              schema:
+                type: integer
+                minimum: 1
+            Cache-Control:
+              description: Present as no-store on a rate limited redirect.
+              required: false
               schema:
                 type: string
+                const: no-store
+            Set-Cookie:
+              description: |
+                The browser binding clear, plus the rotating refresh token on
+                success. Both are HttpOnly and repeat their original paths.
+              schema:
+                type: string
+        "503":
+          description: Google sign in is disabled in this local environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /api/auth/refresh:
     post:
@@ -157,9 +203,19 @@ paths:
         trip. The cookie rotates on every call: presenting an already rotated
         token later than the grace window revokes the whole session family.
 
-        It is a POST rather than a GET because the method is half of the cross
-        site protection, together with SameSite=Lax on the cookie.
+        It is a POST and requires Origin to equal IDENTITY_APP_URL exactly.
+        SameSite=Lax on the cookie is a supporting cross site protection.
       security: []
+      parameters:
+        - name: Origin
+          in: header
+          required: false
+          description: |
+            Supplied automatically by the browser and required by identity. It
+            must equal the configured app origin exactly.
+          schema:
+            type: string
+            format: uri
       responses:
         "200":
           description: A fresh access token, and a rotated cookie
@@ -168,20 +224,52 @@ paths:
               schema:
                 $ref: "#/components/schemas/Session"
         "401":
-          $ref: "#/components/responses/Unauthenticated"
+          description: |
+            The refresh cookie is missing, unknown, expired, revoked, or reused
+            outside the grace window. The response clears that cookie.
+          headers:
+            Set-Cookie:
+              description: Clears the refresh cookie with the same path and flags.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /api/auth/signout:
     post:
       operationId: signOut
       summary: End the session
       description: |
-        Revokes every refresh token in this session family and clears the
-        cookie. It answers 204 whether or not the cookie named a live session,
-        because signing out twice is not an error.
+        Revokes the locked session family and clears the cookie. It answers 204
+        whether or not the cookie named a live session, because signing out
+        twice is not an error. Origin must equal IDENTITY_APP_URL exactly.
       security: []
+      parameters:
+        - name: Origin
+          in: header
+          required: false
+          description: |
+            Supplied automatically by the browser and required by identity. It
+            must equal the configured app origin exactly.
+          schema:
+            type: string
+            format: uri
       responses:
         "204":
-          description: The session is over
+          description: The session is over and the refresh cookie is cleared
+          headers:
+            Set-Cookie:
+              description: Clears the refresh cookie with the same path and flags.
+              schema:
+                type: string
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /api/me:
     get:
@@ -200,30 +288,206 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthenticated"
 
-  /api/thread:
-    get:
-      operationId: getThread
-      summary: The state of the skeleton's one end to end thread
-      description: |
-        A read the gateway fans out in parallel to two services (spec 0001,
-        gateway read aggregation): the tutor from identity, which owns it, and
-        from notifications whether its recipient projection has caught up yet.
-        No identity fact is read from notifications' copy (INV-10).
-
-        The relay polls, so `projection.recorded` is false for the first moment
-        after registering and true shortly after. That delay is the design
-        working, not a fault.
+  /api/classes:
+    post:
+      operationId: createClass
+      summary: Create a class with its first session
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClassRequest"
       responses:
         "200":
-          description: The thread as it stands
+          description: The original class and first session for a safe retry
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ThreadStatus"
+                $ref: "#/components/schemas/CreateClassResponse"
+        "201":
+          description: The class and first session were created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateClassResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/students:
+    post:
+      operationId: createStudent
+      summary: Register a student
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStudentRequest"
+      responses:
+        "200":
+          description: The original student for a safe retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+        "201":
+          description: The student was registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/classes/{class_id}/roster:
+    post:
+      operationId: joinRoster
+      summary: Join a student to a class
+      parameters:
+        - $ref: "#/components/parameters/ClassId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinRosterRequest"
+      responses:
+        "200":
+          description: The exact open roster period already existed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RosterPeriod"
+        "201":
+          description: The roster period was opened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RosterPeriod"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/sessions/{session_id}/attendance/{student_id}:
+    put:
+      operationId: markAttendance
+      summary: Save or correct one attendance mark
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/StudentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkAttendanceRequest"
+      responses:
+        "200":
+          description: The canonical attendance row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attendance"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/home:
+    get:
+      operationId: getHome
+      summary: The tutor and today's teaching work
+      parameters:
+        - $ref: "#/components/parameters/HomeCursor"
+      responses:
+        "200":
+          description: Required identity and teaching facts plus optional billing progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Home"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /api/home/billing-projection:
+    get:
+      operationId: getHomeBillingProjection
+      summary: Refresh only billing projection progress
+      responses:
+        "200":
+          description: Billing progress or its isolated unavailable state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HomeBillingProjection"
         "401":
           $ref: "#/components/responses/Unauthenticated"
 
 components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: One browser generated UUID, retained until this create step succeeds.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    ClassId:
+      name: class_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    StudentId:
+      name: student_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    HomeCursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor bound to the current tutor local date.
+      schema:
+        type: string
   securitySchemes:
     bearerAuth:
       type: http
@@ -240,6 +504,49 @@ components:
             $ref: "#/components/schemas/Error"
     Unauthenticated:
       description: No valid token was supplied
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: The browser origin may not change this session
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: No owned resource matched
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: The requested state conflicts with committed state
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    BadGateway:
+      description: A required service did not answer successfully
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Too many authentication requests reached an applicable budget
+      headers:
+        Retry-After:
+          required: true
+          description: Whole seconds until every applicable rate budget can admit one request.
+          schema:
+            type: integer
+            minimum: 1
+        Cache-Control:
+          required: true
+          description: Prevents a refusal from being stored by browsers or intermediaries.
+          schema:
+            type: string
+            const: no-store
       content:
         application/json:
           schema:
@@ -320,36 +627,314 @@ components:
           type: string
           format: date-time
 
-    ProjectionStatus:
+    ClassColor:
+      type: string
+      enum: [red, rose, orange, green, blue, yellow, violet]
+
+    LocalTime:
+      type: string
+      pattern: "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+      examples: ["17:30"]
+
+    FirstSessionInput:
       type: object
-      description: notifications' own fact about how far its projection has caught up.
-      required: [tutor_id, recorded]
+      required: [local_date, start_time, end_time]
       properties:
-        tutor_id:
+        local_date:
+          type: string
+          format: date
+        start_time:
+          $ref: "#/components/schemas/LocalTime"
+        end_time:
+          $ref: "#/components/schemas/LocalTime"
+
+    CreateClassRequest:
+      type: object
+      required: [name, rate_amount, first_session]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        color:
+          oneOf:
+            - $ref: "#/components/schemas/ClassColor"
+            - type: "null"
+        rate_amount:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1000000000
+        first_session:
+          $ref: "#/components/schemas/FirstSessionInput"
+
+    Class:
+      type: object
+      required:
+        [class_id, name, color, rate_amount, currency, rate_effective_from]
+      properties:
+        class_id:
           type: string
           format: uuid
-        recorded:
-          type: boolean
-        recorded_at:
+        name:
+          type: string
+        color:
+          $ref: "#/components/schemas/ClassColor"
+        rate_amount:
+          type: integer
+          format: int64
+        currency:
+          type: string
+          const: VND
+        rate_effective_from:
+          type: string
+          format: date
+
+    TeachingSession:
+      type: object
+      required: [session_id, class_id, starts_at, ends_at, local_date]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        starts_at:
           type: string
           format: date-time
-        updated_at:
+        ends_at:
+          type: string
+          format: date-time
+        local_date:
+          type: string
+          format: date
+
+    CreateClassResponse:
+      type: object
+      required: [class, first_session]
+      properties:
+        class:
+          $ref: "#/components/schemas/Class"
+        first_session:
+          $ref: "#/components/schemas/TeachingSession"
+
+    CreateStudentRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        phone:
+          type: [string, "null"]
+          maxLength: 40
+
+    Student:
+      type: object
+      required: [student_id, name, phone]
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone:
+          type: [string, "null"]
+
+    JoinRosterRequest:
+      type: object
+      required: [student_id, effective_from]
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        effective_from:
+          type: string
+          format: date
+
+    RosterPeriod:
+      type: object
+      required: [class_id, student_id, effective_from, effective_to]
+      properties:
+        class_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type: [string, "null"]
+          format: date
+
+    AttendanceState:
+      type: string
+      enum: [Present, Absent]
+
+    MarkAttendanceRequest:
+      type: object
+      required: [state]
+      properties:
+        state:
+          $ref: "#/components/schemas/AttendanceState"
+
+    Attendance:
+      type: object
+      required: [session_id, student_id, state, marked_at]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        state:
+          $ref: "#/components/schemas/AttendanceState"
+        marked_at:
           type: string
           format: date-time
 
-    ThreadStatus:
+    SetupDefaults:
       type: object
-      required: [tutor, projection]
+      required: [local_date, start_time, end_time]
       properties:
-        tutor:
-          $ref: "#/components/schemas/Tutor"
-        projection:
-          $ref: "#/components/schemas/ProjectionStatus"
-        projection_unavailable:
+        local_date:
           type: string
-          description: |
-            Set when notifications did not answer. The tutor panel still
-            arrives, because one slow service degrades only its own panel.
+          format: date
+        start_time:
+          $ref: "#/components/schemas/LocalTime"
+        end_time:
+          $ref: "#/components/schemas/LocalTime"
+
+    HomeStudent:
+      type: object
+      required: [student_id, name, attendance_state, marked_at]
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        attendance_state:
+          oneOf:
+            - $ref: "#/components/schemas/AttendanceState"
+            - type: "null"
+        marked_at:
+          type: [string, "null"]
+          format: date-time
+
+    HomeSession:
+      type: object
+      required:
+        [session_id, class_id, class_name, class_color, starts_at, ends_at, local_date, students]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        class_name:
+          type: string
+        class_color:
+          $ref: "#/components/schemas/ClassColor"
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        local_date:
+          type: string
+          format: date
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/HomeStudent"
+
+    TeachingHome:
+      type: object
+      required:
+        [request_time_zone, local_date, next_local_midnight_at, setup_defaults, sessions, next_cursor]
+      properties:
+        request_time_zone:
+          type: string
+        local_date:
+          type: string
+          format: date
+        next_local_midnight_at:
+          type: string
+          format: date-time
+        setup_defaults:
+          $ref: "#/components/schemas/SetupDefaults"
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/HomeSession"
+        next_cursor:
+          type: [string, "null"]
+
+    BillingProjection:
+      type: object
+      required:
+        [state, class_count, session_count, student_count, open_roster_count, attendance_count, latest_updated_at]
+      properties:
+        state:
+          type: string
+          enum: [waiting, active]
+        class_count:
+          type: integer
+          format: int64
+          minimum: 0
+        session_count:
+          type: integer
+          format: int64
+          minimum: 0
+        student_count:
+          type: integer
+          format: int64
+          minimum: 0
+        open_roster_count:
+          type: integer
+          format: int64
+          minimum: 0
+        attendance_count:
+          type: integer
+          format: int64
+          minimum: 0
+        latest_updated_at:
+          type: [string, "null"]
+          format: date-time
+
+    HomeBillingProjection:
+      type: object
+      required: [billing_projection, billing_projection_unavailable]
+      properties:
+        billing_projection:
+          oneOf:
+            - $ref: "#/components/schemas/BillingProjection"
+            - type: "null"
+        billing_projection_unavailable:
+          type: [string, "null"]
+
+    Home:
+      allOf:
+        - $ref: "#/components/schemas/TeachingHome"
+        - type: object
+          required: [tutor, billing_projection, billing_projection_unavailable]
+          properties:
+            tutor:
+              $ref: "#/components/schemas/Tutor"
+            billing_projection:
+              oneOf:
+                - $ref: "#/components/schemas/BillingProjection"
+                - type: "null"
+            billing_projection_unavailable:
+              type: [string, "null"]
 
 security:
   - bearerAuth: []

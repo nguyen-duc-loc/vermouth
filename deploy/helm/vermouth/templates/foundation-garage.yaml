@@ -1,0 +1,133 @@
+{{- if .Values.foundation.enabled }}
+{{- $matrix := .Files.Get "files/workload-matrix.yaml" | fromYaml }}
+{{- $workload := index $matrix.workloads "garage" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: garage
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "garage") | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: vermouth
+    app.kubernetes.io/component: garage
+  ports:
+    - name: s3
+      port: 3900
+      targetPort: s3
+    - name: rpc
+      port: 3901
+      targetPort: rpc
+    - name: admin
+      port: 3903
+      targetPort: admin
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: garage
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "garage") | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: spec-0005
+spec:
+  serviceName: garage
+  replicas: {{ $workload.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vermouth
+      app.kubernetes.io/component: garage
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vermouth
+        app.kubernetes.io/component: garage
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: garage
+      {{- include "vermouth.imagePullSecrets" . | nindent 6 }}
+      automountServiceAccountToken: {{ $workload.automountServiceAccountToken }}
+      securityContext:
+        {{- include "vermouth.podSecurity" . | nindent 8 }}
+        runAsUser: {{ $workload.runAsUser }}
+        runAsGroup: {{ $workload.runAsGroup }}
+        fsGroup: {{ $workload.fsGroup }}
+        fsGroupChangePolicy: OnRootMismatch
+      {{- include "vermouth.storageGuard" . | nindent 6 }}
+      containers:
+        - name: garage
+          image: {{ include "vermouth.requireImage" (dict "name" "garage" "image" .Values.images.garage) }}
+          imagePullPolicy: IfNotPresent
+          command: [/garage]
+          args: [server]
+          securityContext:
+            {{- include "vermouth.containerSecurity" . | nindent 12 }}
+          env:
+            - name: GARAGE_CONFIG_FILE
+              value: /etc/garage.toml
+            - name: GARAGE_RPC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.garage }}
+                  key: GARAGE_RPC_SECRET
+            - name: GARAGE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.garage }}
+                  key: GARAGE_ADMIN_TOKEN
+          ports:
+            - name: s3
+              containerPort: 3900
+            - name: rpc
+              containerPort: 3901
+            - name: admin
+              containerPort: 3903
+          readinessProbe:
+            exec:
+              command: [/garage, status]
+            initialDelaySeconds: 10
+            periodSeconds: {{ $workload.readiness.periodSeconds }}
+            timeoutSeconds: {{ $workload.readiness.timeoutSeconds }}
+            failureThreshold: {{ $workload.readiness.failureThreshold }}
+          livenessProbe:
+            exec:
+              command: [/garage, status]
+            initialDelaySeconds: 30
+            periodSeconds: {{ $workload.liveness.periodSeconds }}
+            timeoutSeconds: {{ $workload.liveness.timeoutSeconds }}
+            failureThreshold: {{ $workload.liveness.failureThreshold }}
+          resources:
+            {{- toYaml $workload.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/garage.toml
+              subPath: garage.toml
+              readOnly: true
+            - name: metadata
+              mountPath: /var/lib/garage/meta
+            - name: data
+              mountPath: /var/lib/garage/data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        {{- include "vermouth.storageGuardVolume" . | nindent 8 }}
+        - name: config
+          configMap:
+            name: garage-config
+        - name: metadata
+          persistentVolumeClaim:
+            claimName: garage-metadata
+        - name: data
+          persistentVolumeClaim:
+            claimName: garage-data
+        - name: tmp
+          emptyDir:
+            medium: {{ (index $workload.writableMounts 2).medium }}
+            sizeLimit: {{ (index $workload.writableMounts 2).sizeLimit }}
+{{- end }}

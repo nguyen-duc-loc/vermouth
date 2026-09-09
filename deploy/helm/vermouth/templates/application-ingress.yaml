@@ -1,0 +1,58 @@
+{{- if and .Values.application.enabled .Values.ingress.enabled }}
+{{- $hostname := required "ingress.hostname is required when the application is enabled" .Values.ingress.hostname }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vermouth
+  labels:
+    {{- include "vermouth.componentLabels" (dict "root" . "component" "ingress") | nindent 4 }}
+  annotations:
+    vermouth.dev/decision: {{ ternary "spec-0006" "spec-0005" (eq .Values.config.environment "production") }}
+    traefik.ingress.kubernetes.io/router.entrypoints: {{ .Values.ingress.entryPoint | quote }}
+    {{- if .Values.ingress.tls.enabled }}
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: {{ required "ingress.tls.certResolver is required when TLS is enabled" .Values.ingress.tls.certResolver | quote }}
+    {{- end }}
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: {{ $hostname | quote }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 8080
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 8080
+          - path: /ready
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 8080
+          - path: /config.json
+            pathType: Exact
+            backend:
+              service:
+                name: web
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 8080
+{{- end }}

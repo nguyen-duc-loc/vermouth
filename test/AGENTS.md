@@ -17,7 +17,7 @@ the end to end thread.
 | `start-service.sh` | Start one binary from `bin/`, record its pid under `.tmp/run`, and confirm it stayed up |
 | `stop-service.sh` | Stop one service and wait until it is really gone, forcing it after 20 seconds |
 | `thread.sh` | Register a tutor through the gateway, then poll `/api/thread` until `notifications` has recorded the event |
-| `e2e/` | Empty. Playwright for the money path lands here when `/test` sets the runners up |
+| `e2e/` | Empty. Playwright for the money path lands here when `$test` sets the runners up |
 
 ## Commands
 
@@ -71,4 +71,4 @@ The gateway on 8080, then the services on 8081 to 8084.
 - [0002 stack and scaffold](../docs/specs/0002-stack-and-scaffold/index.md) (STK-15 to STK-17, STK-22, STK-23, and the scaffold target the thread proves)
 - [0001 service boundaries and communication](../docs/specs/0001-service-boundaries-and-communication/index.md) (the thread `thread.sh` drives, browser to gateway to service to broker to consumer)
 
-_Drafted by /audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._
+_Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

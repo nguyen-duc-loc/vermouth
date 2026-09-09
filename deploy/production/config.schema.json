@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "target", "k3s", "traefik", "storage", "thresholds", "namespace", "storage_class", "network", "dns_suffix"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "vm_name", "location", "vm_size", "cpus", "memory_gib", "operator_user", "deploy_user", "node_name"],
+      "properties": {
+        "host": { "const": "4.194.251.123" },
+        "vm_name": { "const": "nguyenducloc-vm2" },
+        "location": { "const": "southeastasia" },
+        "vm_size": { "const": "Standard_D2ads_v6" },
+        "cpus": { "const": 2 },
+        "memory_gib": { "const": 8 },
+        "operator_user": { "const": "azureuser" },
+        "deploy_user": { "const": "vermouth-deploy" },
+        "node_name": { "const": "nguyenducloc-vm2" }
+      }
+    },
+    "k3s": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["live_version", "image_tag", "pod_cidr"],
+      "properties": {
+        "live_version": { "const": "v1.36.3+k3s1" },
+        "image_tag": { "const": "v1.36.3-k3s1" },
+        "pod_cidr": { "const": "10.42.0.0/16" }
+      }
+    },
+    "traefik": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "image_digest", "chart"],
+      "properties": {
+        "image": { "const": "rancher/mirrored-library-traefik:3.7.8" },
+        "image_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "chart": { "const": "40.1.4+up40.1.0" }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filesystem", "uuid", "dedicated_root", "fallback_root", "marker"],
+      "properties": {
+        "filesystem": { "const": "xfs" },
+        "uuid": { "const": "37f07a74-8426-45fd-8e55-79515376a136" },
+        "dedicated_root": { "const": "/var/lib/vermouth" },
+        "fallback_root": { "const": "/var/lib/rancher/k3s/storage/vermouth" },
+        "marker": { "const": ".vermouth-storage" }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available_memory_gib", "free_os_disk_gib", "maximum_total_memory_gib"],
+      "properties": {
+        "available_memory_gib": { "const": 3 },
+        "free_os_disk_gib": { "const": 15 },
+        "maximum_total_memory_gib": { "const": 7 }
+      }
+    },
+    "namespace": { "const": "vermouth" },
+    "storage_class": { "const": "vermouth-local" },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["public_ports", "blocked_ports"],
+      "properties": {
+        "public_ports": { "const": [22, 80, 443] },
+        "blocked_ports": { "const": [3900, 5000, 5432, 6443, 8080, 8081, 8082, 8083, 8084, 9092, 9644, 10250] }
+      }
+    },
+    "dns_suffix": { "const": "southeastasia.cloudapp.azure.com" }
+  }
+}

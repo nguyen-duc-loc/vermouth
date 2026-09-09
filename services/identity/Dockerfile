@@ -1,37 +1,56 @@
-# syntax=docker/dockerfile:1
-#
-# Build this image with the repository root as the context, never this
-# directory (STK-24):
-#
-#     docker build -f services/identity/Dockerfile -t vermouth/identity:dev .
-#     task image -- identity
-#
-# The shared module carries no published version, so the build needs both
-# modules present. This is the first thing that breaks a FROM scratch build,
-# which is why the spec fixes it rather than leaving it to be discovered.
+# syntax=docker/dockerfile:1.12@sha256:93bfd3b68c109427185cd78b4779fc82b484b0b7618e36d0f104d4d801e66d25
 
-FROM golang:1.27-alpine AS build
+ARG GO_IMAGE=golang:1.27-alpine@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc
+
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS base
+ARG TARGETOS
+ARG TARGETARCH
 WORKDIR /src
 
-# Dependencies first, so a code change does not re download the module cache.
 COPY pkg/vermouth/go.mod pkg/vermouth/go.sum ./pkg/vermouth/
 COPY services/identity/go.mod services/identity/go.sum ./services/identity/
-RUN cd services/identity && go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    cd services/identity && go mod download
 
 COPY pkg/vermouth ./pkg/vermouth
 COPY services/identity ./services/identity
 
-# CGO off and a static binary, which is what makes FROM scratch possible
-# (STK-6). The zone database is embedded in the binary, because a scratch image
-# carries no system tzdata.
-RUN cd services/identity && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/identity ./cmd/identity
+FROM base AS runtime-build
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    cd services/identity && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags="-s -w" -o /out/identity ./cmd/identity
+FROM base AS devtoken-build
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    cd services/identity && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags="-s -w" -o /out/devtoken ./cmd/devtoken
+FROM base AS migration-build
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    mkdir -p /out && \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go install github.com/pressly/goose/v3/cmd/goose@v3.27.3 && \
+    goose=/go/bin/goose && \
+    if [ -f "/go/bin/${TARGETOS}_${TARGETARCH}/goose" ]; then goose="/go/bin/${TARGETOS}_${TARGETARCH}/goose"; fi && \
+    cp "$goose" /out/goose && \
+    cd pkg/vermouth && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags="-s -w" -o /out/migrationwait ./cmd/migrationwait
 
-# Nothing but the binary. No shell, no package manager, nothing to patch.
-#
-# Note for later: a scratch image also carries no CA certificates. The first
-# outbound TLS call, which is the email provider in feature 17 and object
-# storage in feature 14, needs ca-certificates copied in from the build stage.
-FROM scratch
-COPY --from=build /out/identity /identity
+FROM scratch AS runtime
+COPY --from=runtime-build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=runtime-build /out/identity /identity
 USER 65534:65534
 ENTRYPOINT ["/identity"]
+
+FROM scratch AS migration
+COPY --from=migration-build /out/goose /goose
+COPY --from=migration-build /out/migrationwait /migrationwait
+COPY services/identity/db/migrations /migrations
+USER 65534:65534
+ENV GOOSE_DRIVER=postgres GOOSE_MIGRATION_DIR=/migrations
+ENTRYPOINT ["/migrationwait"]
+
+FROM scratch AS devtoken
+COPY --from=devtoken-build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=devtoken-build /out/devtoken /devtoken
+USER 65534:65534
+ENTRYPOINT ["/devtoken"]

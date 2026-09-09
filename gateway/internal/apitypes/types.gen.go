@@ -9,6 +9,90 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AttendanceState.
+const (
+	Absent  AttendanceState = "Absent"
+	Present AttendanceState = "Present"
+)
+
+// Valid indicates whether the value is a known member of the AttendanceState enum.
+func (e AttendanceState) Valid() bool {
+	switch e {
+	case Absent:
+		return true
+	case Present:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BillingProjectionState.
+const (
+	Active  BillingProjectionState = "active"
+	Waiting BillingProjectionState = "waiting"
+)
+
+// Valid indicates whether the value is a known member of the BillingProjectionState enum.
+func (e BillingProjectionState) Valid() bool {
+	switch e {
+	case Active:
+		return true
+	case Waiting:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClassCurrency.
+const (
+	VND ClassCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the ClassCurrency enum.
+func (e ClassCurrency) Valid() bool {
+	switch e {
+	case VND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClassColor.
+const (
+	Blue   ClassColor = "blue"
+	Green  ClassColor = "green"
+	Orange ClassColor = "orange"
+	Red    ClassColor = "red"
+	Rose   ClassColor = "rose"
+	Violet ClassColor = "violet"
+	Yellow ClassColor = "yellow"
+)
+
+// Valid indicates whether the value is a known member of the ClassColor enum.
+func (e ClassColor) Valid() bool {
+	switch e {
+	case Blue:
+		return true
+	case Green:
+		return true
+	case Orange:
+		return true
+	case Red:
+		return true
+	case Rose:
+		return true
+	case Violet:
+		return true
+	case Yellow:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TutorLanguage.
 const (
 	TutorLanguageEn TutorLanguage = "en"
@@ -45,6 +129,67 @@ func (e StartGoogleSignInParamsLang) Valid() bool {
 	}
 }
 
+// Attendance defines model for Attendance.
+type Attendance struct {
+	MarkedAt  time.Time          `json:"marked_at"`
+	SessionId openapi_types.UUID `json:"session_id"`
+	State     AttendanceState    `json:"state"`
+	StudentId openapi_types.UUID `json:"student_id"`
+}
+
+// AttendanceState defines model for AttendanceState.
+type AttendanceState string
+
+// BillingProjection defines model for BillingProjection.
+type BillingProjection struct {
+	AttendanceCount int64                  `json:"attendance_count"`
+	ClassCount      int64                  `json:"class_count"`
+	LatestUpdatedAt *time.Time             `json:"latest_updated_at"`
+	OpenRosterCount int64                  `json:"open_roster_count"`
+	SessionCount    int64                  `json:"session_count"`
+	State           BillingProjectionState `json:"state"`
+	StudentCount    int64                  `json:"student_count"`
+}
+
+// BillingProjectionState defines model for BillingProjection.State.
+type BillingProjectionState string
+
+// Class defines model for Class.
+type Class struct {
+	ClassId           openapi_types.UUID `json:"class_id"`
+	Color             ClassColor         `json:"color"`
+	Currency          ClassCurrency      `json:"currency"`
+	Name              string             `json:"name"`
+	RateAmount        int64              `json:"rate_amount"`
+	RateEffectiveFrom openapi_types.Date `json:"rate_effective_from"`
+}
+
+// ClassCurrency defines model for Class.Currency.
+type ClassCurrency string
+
+// ClassColor defines model for ClassColor.
+type ClassColor string
+
+// CreateClassRequest defines model for CreateClassRequest.
+type CreateClassRequest struct {
+	Color        *ClassColor       `json:"color,omitempty"`
+	FirstSession FirstSessionInput `json:"first_session"`
+	Name         string            `json:"name"`
+	RateAmount   int64             `json:"rate_amount"`
+}
+
+// CreateClassResponse defines model for CreateClassResponse.
+type CreateClassResponse struct {
+	Class        Class           `json:"class"`
+	FirstSession TeachingSession `json:"first_session"`
+}
+
+// CreateStudentRequest defines model for CreateStudentRequest.
+type CreateStudentRequest struct {
+	Name  string  `json:"name"`
+	Phone *string `json:"phone,omitempty"`
+}
+
 // Error The one error shape at the gateway boundary (spec 0001).
 type Error struct {
 	Error struct {
@@ -55,18 +200,73 @@ type Error struct {
 	} `json:"error"`
 }
 
+// FirstSessionInput defines model for FirstSessionInput.
+type FirstSessionInput struct {
+	// EndTime Examples: 17:30
+	EndTime   LocalTime          `json:"end_time"`
+	LocalDate openapi_types.Date `json:"local_date"`
+
+	// StartTime Examples: 17:30
+	StartTime LocalTime `json:"start_time"`
+}
+
 // Health defines model for Health.
 type Health struct {
 	Service string `json:"service"`
 	Status  string `json:"status"`
 }
 
-// ProjectionStatus notifications' own fact about how far its projection has caught up.
-type ProjectionStatus struct {
-	Recorded   bool               `json:"recorded"`
-	RecordedAt *time.Time         `json:"recorded_at,omitempty"`
-	TutorId    openapi_types.UUID `json:"tutor_id"`
-	UpdatedAt  *time.Time         `json:"updated_at,omitempty"`
+// Home defines model for Home.
+type Home struct {
+	BillingProjection            *BillingProjection `json:"billing_projection"`
+	BillingProjectionUnavailable *string            `json:"billing_projection_unavailable"`
+	LocalDate                    openapi_types.Date `json:"local_date"`
+	NextCursor                   *string            `json:"next_cursor"`
+	NextLocalMidnightAt          time.Time          `json:"next_local_midnight_at"`
+	RequestTimeZone              string             `json:"request_time_zone"`
+	Sessions                     []HomeSession      `json:"sessions"`
+	SetupDefaults                SetupDefaults      `json:"setup_defaults"`
+	Tutor                        Tutor              `json:"tutor"`
+}
+
+// HomeBillingProjection defines model for HomeBillingProjection.
+type HomeBillingProjection struct {
+	BillingProjection            *BillingProjection `json:"billing_projection"`
+	BillingProjectionUnavailable *string            `json:"billing_projection_unavailable"`
+}
+
+// HomeSession defines model for HomeSession.
+type HomeSession struct {
+	ClassColor ClassColor         `json:"class_color"`
+	ClassId    openapi_types.UUID `json:"class_id"`
+	ClassName  string             `json:"class_name"`
+	EndsAt     time.Time          `json:"ends_at"`
+	LocalDate  openapi_types.Date `json:"local_date"`
+	SessionId  openapi_types.UUID `json:"session_id"`
+	StartsAt   time.Time          `json:"starts_at"`
+	Students   []HomeStudent      `json:"students"`
+}
+
+// HomeStudent defines model for HomeStudent.
+type HomeStudent struct {
+	AttendanceState *AttendanceState   `json:"attendance_state"`
+	MarkedAt        *time.Time         `json:"marked_at"`
+	Name            string             `json:"name"`
+	StudentId       openapi_types.UUID `json:"student_id"`
+}
+
+// JoinRosterRequest defines model for JoinRosterRequest.
+type JoinRosterRequest struct {
+	EffectiveFrom openapi_types.Date `json:"effective_from"`
+	StudentId     openapi_types.UUID `json:"student_id"`
+}
+
+// LocalTime Examples: 17:30
+type LocalTime = string
+
+// MarkAttendanceRequest defines model for MarkAttendanceRequest.
+type MarkAttendanceRequest struct {
+	State AttendanceState `json:"state"`
 }
 
 // Readiness defines model for Readiness.
@@ -74,6 +274,14 @@ type Readiness struct {
 	Checks  *map[string]string `json:"checks,omitempty"`
 	Service string             `json:"service"`
 	Status  string             `json:"status"`
+}
+
+// RosterPeriod defines model for RosterPeriod.
+type RosterPeriod struct {
+	ClassId       openapi_types.UUID  `json:"class_id"`
+	EffectiveFrom openapi_types.Date  `json:"effective_from"`
+	EffectiveTo   *openapi_types.Date `json:"effective_to"`
+	StudentId     openapi_types.UUID  `json:"student_id"`
 }
 
 // Session What the browser holds after a refresh: an access token in memory only,
@@ -84,15 +292,40 @@ type Session struct {
 	AccessToken     string    `json:"access_token"`
 }
 
-// ThreadStatus defines model for ThreadStatus.
-type ThreadStatus struct {
-	// Projection notifications' own fact about how far its projection has caught up.
-	Projection ProjectionStatus `json:"projection"`
+// SetupDefaults defines model for SetupDefaults.
+type SetupDefaults struct {
+	// EndTime Examples: 17:30
+	EndTime   LocalTime          `json:"end_time"`
+	LocalDate openapi_types.Date `json:"local_date"`
 
-	// ProjectionUnavailable Set when notifications did not answer. The tutor panel still
-	// arrives, because one slow service degrades only its own panel.
-	ProjectionUnavailable *string `json:"projection_unavailable,omitempty"`
-	Tutor                 Tutor   `json:"tutor"`
+	// StartTime Examples: 17:30
+	StartTime LocalTime `json:"start_time"`
+}
+
+// Student defines model for Student.
+type Student struct {
+	Name      string             `json:"name"`
+	Phone     *string            `json:"phone"`
+	StudentId openapi_types.UUID `json:"student_id"`
+}
+
+// TeachingHome defines model for TeachingHome.
+type TeachingHome struct {
+	LocalDate           openapi_types.Date `json:"local_date"`
+	NextCursor          *string            `json:"next_cursor"`
+	NextLocalMidnightAt time.Time          `json:"next_local_midnight_at"`
+	RequestTimeZone     string             `json:"request_time_zone"`
+	Sessions            []HomeSession      `json:"sessions"`
+	SetupDefaults       SetupDefaults      `json:"setup_defaults"`
+}
+
+// TeachingSession defines model for TeachingSession.
+type TeachingSession struct {
+	ClassId   openapi_types.UUID `json:"class_id"`
+	EndsAt    time.Time          `json:"ends_at"`
+	LocalDate openapi_types.Date `json:"local_date"`
+	SessionId openapi_types.UUID `json:"session_id"`
+	StartsAt  time.Time          `json:"starts_at"`
 }
 
 // Tutor defines model for Tutor.
@@ -108,8 +341,38 @@ type Tutor struct {
 // TutorLanguage defines model for Tutor.Language.
 type TutorLanguage string
 
+// ClassId defines model for ClassId.
+type ClassId = openapi_types.UUID
+
+// HomeCursor defines model for HomeCursor.
+type HomeCursor = string
+
+// IdempotencyKey defines model for IdempotencyKey.
+type IdempotencyKey = string
+
+// SessionId defines model for SessionId.
+type SessionId = openapi_types.UUID
+
+// StudentId defines model for StudentId.
+type StudentId = openapi_types.UUID
+
+// BadGateway The one error shape at the gateway boundary (spec 0001).
+type BadGateway = Error
+
 // BadRequest The one error shape at the gateway boundary (spec 0001).
 type BadRequest = Error
+
+// Conflict The one error shape at the gateway boundary (spec 0001).
+type Conflict = Error
+
+// Forbidden The one error shape at the gateway boundary (spec 0001).
+type Forbidden = Error
+
+// NotFound The one error shape at the gateway boundary (spec 0001).
+type NotFound = Error
+
+// RateLimited The one error shape at the gateway boundary (spec 0001).
+type RateLimited = Error
 
 // Unauthenticated The one error shape at the gateway boundary (spec 0001).
 type Unauthenticated = Error
@@ -137,10 +400,54 @@ type StartGoogleSignInParams struct {
 	Lang *StartGoogleSignInParamsLang `form:"lang,omitempty" json:"lang,omitempty"`
 
 	// RedirectTo Where in the app to land after signing in. Kept only when it is a
-	// path starting with a single slash, so it cannot become an open
-	// redirect.
+	// clean relative path and query with one leading slash, no fragment,
+	// controls, backslash, scheme, or host.
 	RedirectTo *string `form:"redirect_to,omitempty" json:"redirect_to,omitempty"`
 }
 
 // StartGoogleSignInParamsLang defines parameters for StartGoogleSignIn.
 type StartGoogleSignInParamsLang string
+
+// RefreshSessionParams defines parameters for RefreshSession.
+type RefreshSessionParams struct {
+	// Origin Supplied automatically by the browser and required by identity. It
+	// must equal the configured app origin exactly.
+	Origin *string `json:"Origin,omitempty"`
+}
+
+// SignOutParams defines parameters for SignOut.
+type SignOutParams struct {
+	// Origin Supplied automatically by the browser and required by identity. It
+	// must equal the configured app origin exactly.
+	Origin *string `json:"Origin,omitempty"`
+}
+
+// CreateClassParams defines parameters for CreateClass.
+type CreateClassParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetHomeParams defines parameters for GetHome.
+type GetHomeParams struct {
+	// Cursor Opaque cursor bound to the current tutor local date.
+	Cursor *HomeCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// CreateStudentParams defines parameters for CreateStudent.
+type CreateStudentParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// CreateClassJSONRequestBody defines body for CreateClass for application/json ContentType.
+type CreateClassJSONRequestBody = CreateClassRequest
+
+// JoinRosterJSONRequestBody defines body for JoinRoster for application/json ContentType.
+type JoinRosterJSONRequestBody = JoinRosterRequest
+
+// MarkAttendanceJSONRequestBody defines body for MarkAttendance for application/json ContentType.
+type MarkAttendanceJSONRequestBody = MarkAttendanceRequest
+
+// CreateStudentJSONRequestBody defines body for CreateStudent for application/json ContentType.
+type CreateStudentJSONRequestBody = CreateStudentRequest
