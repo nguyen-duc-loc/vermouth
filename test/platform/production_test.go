@@ -44,6 +44,18 @@ func TestProductionWorkflowInstallsTheAuthEvidenceToolchain(t *testing.T) {
 }
 
 // covers: AC-4
+func TestProductionWorkflowInstallsReleasePackagesFromUbuntuOnly(t *testing.T) {
+	t.Parallel()
+
+	workflow, err := os.ReadFile(repoFile(t, ".github", "workflows", "production.yml"))
+	require.NoError(t, err)
+
+	source := string(workflow)
+	require.Contains(t, source, "Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources")
+	require.Contains(t, source, "Dir::Etc::sourceparts=-")
+}
+
+// covers: AC-4
 func TestProductionPublisherAssemblesEveryVerifiedImageRecord(t *testing.T) {
 	t.Parallel()
 
