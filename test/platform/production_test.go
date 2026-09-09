@@ -89,6 +89,22 @@ func TestMigrationCompatibilityResolvesTheDeploymentBaseBeforeChangingDirectory(
 	require.Equal(t, base, arguments[len(arguments)-1])
 }
 
+// covers: AC-4, AC-6, AC-13
+func TestReleaseBundleResolvesCallerInputsBeforeChangingDirectory(t *testing.T) {
+	t.Parallel()
+
+	bundler, err := os.ReadFile(repoFile(t, "deploy", "production", "release-bundle.sh"))
+	require.NoError(t, err)
+
+	source := string(bundler)
+	resolution := strings.Index(source, "images_directory=$(CDPATH= cd --")
+	validation := strings.Index(source, "platform_config validate-document \"$production/images.schema.json\"")
+	require.Positive(t, resolution)
+	require.Greater(t, validation, resolution)
+	require.Contains(t, source[resolution:validation], "images_input=$images_directory/${images_input##*/}")
+	require.Contains(t, source[resolution:validation], "base_input=$base_directory/${base_input##*/}")
+}
+
 // covers: AC-1, AC-2
 func TestProductionConfigurationRejectsAnotherHost(t *testing.T) {
 	t.Parallel()

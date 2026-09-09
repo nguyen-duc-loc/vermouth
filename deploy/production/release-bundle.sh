@@ -23,6 +23,10 @@ migration_evidence=$root/.tmp/production/migration-compat-evidence.json
 for file in "$images_input" "$base_input" "$rate_evidence" "$migration_evidence"; do
   [ -f "$file" ] && [ ! -L "$file" ] || bundle_fail "$file is missing or unsafe"
 done
+images_directory=$(CDPATH= cd -- "$(dirname "$images_input")" && pwd)
+images_input=$images_directory/${images_input##*/}
+base_directory=$(CDPATH= cd -- "$(dirname "$base_input")" && pwd)
+base_input=$base_directory/${base_input##*/}
 
 platform_config() {
   (
