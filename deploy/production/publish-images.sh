@@ -99,7 +99,7 @@ verify_image() {
         .annotations["vermouth.dev/build-input-sha256"] == $input
       ' "$child" >/dev/null || publish_fail "$workload child manifest $child_digest does not match its production plan"
   done
-  jq -c \
+  jq -cn \
     --arg workload "$workload" --arg repository "$repository" --arg tag "$(jq -r '.tag' "$plan")" \
     --arg digest "$root_digest" --arg input "$input_hash" --arg revision "$source" --arg created "$created_at" \
     '{workload:$workload,repository:$repository,tag:$tag,digest:$digest,platforms:["linux/amd64","linux/arm64"],build_input_sha256:$input,source_revision:$revision,created_at:$created}'

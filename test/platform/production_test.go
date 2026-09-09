@@ -57,6 +57,7 @@ func TestProductionPublisherAssemblesEveryVerifiedImageRecord(t *testing.T) {
 	require.Greater(t, assembly, publication)
 	require.Contains(t, source[:assembly], "verify_image \"$plan\" \"$reference\" >\"$record\"")
 	require.NotContains(t, source, "record=$3")
+	require.Contains(t, source[:assembly], "jq -cn \\")
 	require.Contains(t, source[assembly:], "[ -s \"$record\" ]")
 	require.Contains(t, source[assembly:], "cat \"$record\" >>\"$records\"")
 	require.NotContains(t, source[:assembly], ">>\"$records\"")
