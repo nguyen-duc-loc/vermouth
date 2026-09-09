@@ -15,6 +15,8 @@ done
 [ -f "$base_input" ] && [ ! -L "$base_input" ] || compat_fail "$base_input is missing or unsafe"
 
 root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
+base_directory=$(CDPATH= cd -- "$(dirname "$base_input")" && pwd)
+base_input=$base_directory/$(basename "$base_input")
 production=$root/deploy/production
 output=$root/.tmp/production/migration-compat-evidence.json
 work=$(mktemp -d)

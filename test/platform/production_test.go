@@ -63,6 +63,32 @@ func TestProductionPublisherAssemblesEveryVerifiedImageRecord(t *testing.T) {
 	require.NotContains(t, source[:assembly], ">>\"$records\"")
 }
 
+// covers: AC-13
+func TestMigrationCompatibilityResolvesTheDeploymentBaseBeforeChangingDirectory(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	base := filepath.Join(directory, "deployment-base.json")
+	require.NoError(t, os.WriteFile(base, []byte("{}\n"), 0o600))
+
+	tools := t.TempDir()
+	writeExecutable(t, tools, "go", "printf '%s\\n' \"$*\"\nexit 17\n")
+	writeExecutable(t, tools, "goose", "exit 0\n")
+	relativeBase, err := filepath.Rel(repoFile(t), base)
+	require.NoError(t, err)
+	result := runCommand(
+		t,
+		"",
+		map[string]string{"PATH": tools + string(os.PathListSeparator) + os.Getenv("PATH")},
+		[]string{repoFile(t, "test", "migrationcompat", "run.sh"), relativeBase},
+	)
+
+	require.Error(t, result.err)
+	arguments := strings.Fields(result.stdout)
+	require.NotEmpty(t, arguments, result.stderr)
+	require.Equal(t, base, arguments[len(arguments)-1])
+}
+
 // covers: AC-1, AC-2
 func TestProductionConfigurationRejectsAnotherHost(t *testing.T) {
 	t.Parallel()
