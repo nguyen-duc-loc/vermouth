@@ -293,6 +293,19 @@ validate_release_documents() {
   } >"$release_evidence_values"
 }
 
+load_registry_credentials() {
+  env_file=/etc/vermouth/production.env
+  [ -f "$env_file" ] && [ "$(stat -c '%U:%G:%a' "$env_file")" = root:root:600 ] ||
+    release_fail "$env_file must be root owned with mode 0600"
+  set -a
+  . "$env_file"
+  set +a
+  for name in DOCKERHUB_READ_USERNAME DOCKERHUB_READ_TOKEN; do
+    eval "value=\${$name:-}"
+    [ -n "$value" ] || release_fail "$env_file is missing $name"
+  done
+}
+
 dockerhub_token() {
   repository_path=$1
   output=$2
@@ -746,6 +759,7 @@ deploy_release() (
   trap 'rm -rf "$release_work"' EXIT HUP INT TERM
   validate_release_documents "$release" "$git_sha" "$run_id" "$run_attempt"
   verify_live_deployment_base "$release/deployment-base.json"
+  load_registry_credentials
   verify_registry_images "$release/images.json"
   create_release_secrets
   write_platform_values
