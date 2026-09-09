@@ -86,6 +86,14 @@ Ordinary restore now requires a bootstrapped platform. An empty replacement clus
 
 Restore uses two local decrypt passes. The first authenticates and validates the archive while computing the plaintext stream hash. The second sends the same bytes to an incoming VM file that becomes staged only after the hash, sync, and full validation pass. A single pass was smaller, but a failed local decrypt can still close its pipe after partial output, which the receiver must never mistake for a complete backup (basis: fail closed streaming and atomic publish practice).
 
+### Secret identity and recovery options compared
+
+The full runtime Secret source SHA256 is stored as annotation `vermouth.dev/source-sha256`, while labels keep only queryable application, component, and service identity. This reuses spec 0005's working contract and preserves the complete integrity value. A full hash label is impossible because Kubernetes label values allow only 63 characters. Truncating the label to 63 characters was rejected because the evidence model already has a full hash, and splitting it across labels adds assembly rules without operational value.
+
+Each Helm application revision records its referenced Secret name, full hash, and sorted keys. Name only references were rejected because a deleted and recreated Secret could keep the same name with different metadata or values. Putting decoded Secret values in Helm or immutable release bundles was also rejected because those stores are not secret containers.
+
+Encrypted exports snapshot the decoded current and previous referenced runtime Secret values after validating them against live Helm evidence. Keeping only the current `production.env` was rejected because it cannot reconstruct the previous revision after credential rotation. Capturing live referenced Secrets adds archive size and validation work, but it keeps rollback and disaster restore honest without creating another persistent secret store on the VM.
+
 ### Migration baseline sources compared
 
 Live Helm history plus the immutable release directory is the chosen source. It is closest to the application state that migrations must preserve and it can prove the prior source revision through the stored `images.json`. Its cost is a read only SSH round trip and a required stale base comparison before deployment.
@@ -105,6 +113,8 @@ Static local PVs are deliberate. Dynamic local path directory IDs are simple for
 GitHub Actions is useful for repeatable two architecture builds and a durable release record. GitHub OIDC plus Azure VM Run Command was the stronger credential model, but the subscription cannot create its required Entra application. A dedicated user, forced deployment entrypoint, limited sudo rule, pinned host key, and independently rotated key bound the temporary SSH risk. The `azureuser` key never enters GitHub.
 
 Production image tags keep the full 64 character build input SHA256 and shorten only the Git SHA to 12 characters. This keeps the tag readable while preserving the complete content identity that detects a changed build input. The tag remains within Docker Hub limits. A 12 character build input prefix, as used by the local workflow in spec 0005, would create an avoidable second collision domain in the production release record. The existing canonical hash algorithm remains the one source of build identity, with a production image plan command adding the full revision, Docker Hub repository, and tag.
+
+Production Secret identity reuses the complete `vermouth-secret-v1` algorithm and inventory from spec 0005. A 12 character name suffix is only an address, never the authority. The full annotation, sorted keys, decoded values, immutable state, and per revision Helm evidence decide whether an existing Secret is the intended object. This makes prefix collision, recreation, rollback, export, and restore checks explicit while leaving Secret values out of Helm and release bundles.
 
 Runtime still uses the root OCI index digest, while the tag remains an immutable discovery key. Docker Hub immutable tag protection closes the race between inspection and publication. Workflow concurrency keeps normal production runs orderly, and a losing publisher inspects the winner rather than overwriting it. Disabling attestations keeps the root index to the exact two runnable platforms this small release model understands.
 

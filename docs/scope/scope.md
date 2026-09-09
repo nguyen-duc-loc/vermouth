@@ -198,6 +198,7 @@ spec [0006](../specs/0006-cloud-deployment-friend-testing/index.md) · code in `
   - [x] Promote two architecture Docker Hub digests through manual GitHub Actions, require rate limit and migration evidence, and prove the first secure production thread · AC-4, AC-6, AC-9, AC-10, AC-13
   - [x] Complete the full topology, capacity gate, status, logs, retention, and guarded application rollback · AC-7, AC-14, AC-15, AC-16, AC-19, AC-20
   - [x] Add encrypted export and full stopped state restore, then prove every stateful marker and external path · AC-17, AC-18
+  - [x] Bind complete runtime Secret identity to Helm revisions, reject collisions and recreated objects, make garbage collection fail closed, and preserve current plus previous Secret values through encrypted export and restore · AC-12, AC-13, AC-14, AC-17, AC-18, AC-20
 - [ ] Verify it: `$check verify cloud deployment for friend testing`
 - [ ] Test it: `$test cloud deployment for friend testing`
 

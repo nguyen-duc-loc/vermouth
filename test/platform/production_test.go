@@ -123,6 +123,46 @@ func TestProductionDeployLoadsRegistryCredentialsBeforeVerificationAndMutation(t
 	require.Greater(t, secrets, registry)
 }
 
+// covers: AC-12, AC-13, AC-14, AC-20
+func TestProductionRuntimeSecretsUseCompleteRevisionEvidence(t *testing.T) {
+	t.Parallel()
+
+	library, err := os.ReadFile(repoFile(t, "deploy", "production", "deploy-root-lib.sh"))
+	require.NoError(t, err)
+
+	source := string(library)
+	for _, required := range []string{
+		"release.runtimeSecrets",
+		"vermouth.dev/source-sha256",
+		"verify_revision_runtime_secrets",
+		"decoded values do not match its source hash",
+		"garbage collection found an ambiguous candidate",
+		"runtime-secret-candidate-names",
+	} {
+		require.Contains(t, source, required)
+	}
+	require.NotContains(t, source, "metadata.labels.vermouth\\.dev/source-sha256")
+}
+
+// covers: AC-17, AC-18
+func TestProductionExportRestoresRevisionSecretSnapshots(t *testing.T) {
+	t.Parallel()
+
+	operations, err := os.ReadFile(repoFile(t, "deploy", "production", "prod-ops-root.sh"))
+	require.NoError(t, err)
+
+	source := string(operations)
+	for _, required := range []string{
+		"capture_runtime_secret_snapshots",
+		"secrets/runtime",
+		"helm/previous.json",
+		"restore_release_secrets",
+		"runtime Secret snapshot $name values do not match its source hash",
+	} {
+		require.Contains(t, source, required)
+	}
+}
+
 // covers: AC-1, AC-2
 func TestProductionConfigurationRejectsAnotherHost(t *testing.T) {
 	t.Parallel()

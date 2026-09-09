@@ -154,6 +154,7 @@ export_release_record() {
   output=$3
   values=$release_work/export-values-$revision.json
   helm --namespace vermouth get values vermouth --revision "$revision" -o json >"$values"
+  verify_revision_runtime_secrets "$values"
   release=/var/lib/vermouth/releases/$identity
   [ -d "$release" ] && [ ! -L "$release" ] || ops_fail "release directory $identity is missing"
   for pair in \
@@ -186,6 +187,33 @@ export_release_record() {
         image_digests:$digests
       }
     ' >"$output"
+}
+
+capture_runtime_secret_snapshots() {
+  snapshot_root=$1
+  shift
+  mkdir -p "$snapshot_root"
+  for values in "$@"; do
+    [ -f "$values" ] || continue
+    runtime_secret_evidence "$values"
+    for service in gateway identity teaching billing notifications; do
+      name=$(jq -r --arg service "$service" '.release.runtimeSecrets[$service].name' "$values")
+      hash=$(jq -r --arg service "$service" '.release.runtimeSecrets[$service].sourceSHA256' "$values")
+      keys=$(jq -c --arg service "$service" '.release.runtimeSecrets[$service].keys' "$values")
+      verify_runtime_secret "$name" "$service" "$hash" "$keys"
+      destination=$snapshot_root/$name.json
+      if [ -f "$destination" ]; then
+        jq -e --arg name "$name" --arg hash "$hash" --argjson keys "$keys" '
+          .name == $name and .source_sha256 == $hash and .keys == $keys
+        ' "$destination" >/dev/null || ops_fail "duplicate runtime Secret snapshot $name is inconsistent"
+        continue
+      fi
+      jq -S -c --arg name "$name" --arg service "$service" --arg hash "$hash" --argjson keys "$keys" \
+        '{schema_version:1,name:$name,service:$service,source_sha256:$hash,keys:$keys,values:.}' \
+        "$release_work/secret-$service-decoded.json" >"$destination"
+      chmod 0600 "$destination"
+    done
+  done
 }
 
 capture_scale_target() {
@@ -255,7 +283,9 @@ prod_export_root() {
   done
 
   stage=$work/stage
-  mkdir -p "$stage/config" "$stage/postgres" "$stage/helm" "$stage/releases" "$stage/storage"
+  mkdir -p "$stage/config" "$stage/postgres" "$stage/helm" "$stage/releases" "$stage/storage" "$stage/secrets/runtime"
+  capture_runtime_secret_snapshots "$stage/secrets/runtime" \
+    "$work/current-values.json" "$release_work/export-values-${previous_revision:-missing}.json"
   for service in identity teaching billing notifications; do
     kubectl --namespace vermouth exec "statefulset/postgres-$service" -- \
       pg_dump -U "vermouth_$service" -d "vermouth_$service" --format=custom >"$stage/postgres/$service.dump"
@@ -265,6 +295,11 @@ prod_export_root() {
       '{revision:$revision,values:.}' >"$stage/helm/foundation.json"
   jq -S -c -n --argjson revision "$current_revision" --slurpfile values "$work/current-values.json" \
     '{revision:$revision,values:$values[0]}' >"$stage/helm/application.json"
+  if [ "$previous_release_json" != null ]; then
+    jq -S -c -n --argjson revision "$previous_revision" \
+      --slurpfile values "$release_work/export-values-$previous_revision.json" \
+      '{revision:$revision,values:$values[0]}' >"$stage/helm/previous.json"
+  fi
 
   for stateful in postgres-identity postgres-teaching postgres-billing postgres-notifications redpanda garage; do
     capture_scale_target vermouth statefulset "$stateful"
@@ -292,9 +327,9 @@ prod_export_root() {
     cp -a "$storage_root/$component/." "$stage/storage/$component/"
   done
 
-  roots='["config/production.env","helm/application.json","helm/foundation.json","postgres/billing.dump","postgres/identity.dump","postgres/notifications.dump","postgres/teaching.dump","releases/current","storage/garage-data","storage/garage-metadata","storage/postgres-billing","storage/postgres-identity","storage/postgres-notifications","storage/postgres-teaching","storage/redpanda","storage/traefik-acme"]'
+  roots='["config/production.env","helm/application.json","helm/foundation.json","postgres/billing.dump","postgres/identity.dump","postgres/notifications.dump","postgres/teaching.dump","releases/current","secrets/runtime","storage/garage-data","storage/garage-metadata","storage/postgres-billing","storage/postgres-identity","storage/postgres-notifications","storage/postgres-teaching","storage/redpanda","storage/traefik-acme"]'
   if [ "$previous_release_json" != null ]; then
-    roots=$(printf '%s' "$roots" | jq -c '. + ["releases/previous"] | sort')
+    roots=$(printf '%s' "$roots" | jq -c '. + ["helm/previous.json","releases/previous"] | sort')
   fi
   platform=/etc/vermouth/platform.json
   jq -S -c -n \
@@ -524,9 +559,52 @@ restore_prepare_release() {
   run=${identity#*/}
   validate_release_documents "$release" "$git_sha" "${run%%-*}" "${run#*-}"
   verify_registry_images "$release/images.json"
-  create_release_secrets
+  restore_release_secrets "$release"
   write_platform_values
   restore_values="--values $release/chart/values-production.yaml --values $release/values-production.yaml --values $release_evidence_values --values $secrets_values --values $platform_values"
+}
+
+restore_release_secrets() {
+  release=$1
+  values=$release_work/restore-release-values.json
+  identity=$(jq -r '.git_sha + "/" + .github_run_id + "-" + .github_run_attempt' "$release/images.json")
+  revision=$(jq -r --arg identity "$identity" '
+    if .current_release.identity == $identity then .current_release.helm_revision
+    elif .previous_release.identity == $identity then .previous_release.helm_revision
+    else empty end
+  ' "$restore_manifest")
+  [ -n "$revision" ] || ops_fail "the restore release is absent from the archive manifest"
+  if [ "$(jq -r '.current_release.helm_revision' "$restore_manifest")" = "$revision" ]; then
+    cp "$restore_tree/helm/application.json" "$release_work/application-record.json"
+    jq '.values' "$release_work/application-record.json" >"$values"
+  else
+    jq '.values' "$restore_tree/helm/previous.json" >"$values"
+  fi
+  runtime_secret_evidence "$values"
+  secrets_values=$release_work/secrets-values.yaml
+  {
+    printf '%s\n' 'release:'
+    printf '%s\n' '  runtimeSecrets:'
+    for service in gateway identity teaching billing notifications; do
+      name=$(jq -r --arg service "$service" '.release.runtimeSecrets[$service].name' "$values")
+      hash=$(jq -r --arg service "$service" '.release.runtimeSecrets[$service].sourceSHA256' "$values")
+      keys=$(jq -c --arg service "$service" '.release.runtimeSecrets[$service].keys' "$values")
+      snapshot=$restore_tree/secrets/runtime/$name.json
+      jq -e --arg name "$name" --arg service "$service" --arg hash "$hash" --argjson keys "$keys" '
+        .schema_version == 1 and .name == $name and .service == $service and
+        .source_sha256 == $hash and .keys == $keys and (.values | keys | sort) == $keys
+      ' "$snapshot" >/dev/null || ops_fail "runtime Secret snapshot $name does not match its release evidence"
+      jq -S -c '.values' "$snapshot" >"$release_work/$service.json"
+      [ "$(vermouth-platformconfig secret-hash <"$release_work/$service.json")" = "$hash" ] ||
+        ops_fail "runtime Secret snapshot $name values do not match its source hash"
+      apply_secret "$name" "$service" "$release_work/$service.json" runtime-secret
+      printf '    %s:\n      name: %s\n      sourceSHA256: %s\n      keys: %s\n' "$service" "$name" "$hash" "$keys"
+    done
+    printf '%s\n' 'secrets:'
+    for service in gateway identity teaching billing notifications; do
+      printf '  %s: %s\n' "$service" "$(jq -r --arg service "$service" '.release.runtimeSecrets[$service].name' "$values")"
+    done
+  } >"$secrets_values"
 }
 
 prod_restore_apply_root() {
@@ -563,6 +641,9 @@ prod_restore_apply_root() {
   trap cleanup_restore_apply EXIT HUP INT TERM
   vermouth-platformconfig production-archive-validate <"$staged" >/dev/null
   extract_validated_export "$staged" "$work/tree"
+  restore_tree=$work/tree
+  restore_manifest=$restore_tree/manifest.json
+  export restore_tree restore_manifest
   restore_preflight_tree "$work/tree"
   printf '%s\n' "Restoring $(jq -r '.current_release.identity' "$work/tree/manifest.json") to $(jq -r '.hostname' "$work/tree/manifest.json")"
   restore_scale_all_zero

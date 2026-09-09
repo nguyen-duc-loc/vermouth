@@ -242,6 +242,7 @@ func productionExportRoots() []string {
 		"postgres/notifications.dump",
 		"postgres/teaching.dump",
 		"releases/current",
+		"secrets/runtime",
 		"storage/garage-data",
 		"storage/garage-metadata",
 		"storage/postgres-billing",
@@ -254,7 +255,7 @@ func productionExportRoots() []string {
 }
 
 func productionExportRootsWithPrevious() []string {
-	roots := append(productionExportRoots(), "releases/previous")
+	roots := append(productionExportRoots(), "helm/previous.json", "releases/previous")
 	slices.Sort(roots)
 	return roots
 }
