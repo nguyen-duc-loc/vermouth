@@ -55,6 +55,8 @@ func TestProductionPublisherAssemblesEveryVerifiedImageRecord(t *testing.T) {
 	assembly := strings.Index(source, "records=$work/verified-records.jsonl")
 	require.Positive(t, publication)
 	require.Greater(t, assembly, publication)
+	require.Contains(t, source[:assembly], "verify_image \"$plan\" \"$reference\" >\"$record\"")
+	require.NotContains(t, source, "record=$3")
 	require.Contains(t, source[assembly:], "[ -s \"$record\" ]")
 	require.Contains(t, source[assembly:], "cat \"$record\" >>\"$records\"")
 	require.NotContains(t, source[:assembly], ">>\"$records\"")
