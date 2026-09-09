@@ -105,6 +105,24 @@ func TestReleaseBundleResolvesCallerInputsBeforeChangingDirectory(t *testing.T) 
 	require.Contains(t, source[resolution:validation], "base_input=$base_directory/${base_input##*/}")
 }
 
+// covers: AC-12, AC-13
+func TestProductionDeployLoadsRegistryCredentialsBeforeVerificationAndMutation(t *testing.T) {
+	t.Parallel()
+
+	library, err := os.ReadFile(repoFile(t, "deploy", "production", "deploy-root-lib.sh"))
+	require.NoError(t, err)
+
+	start := bytes.Index(library, []byte("deploy_release() ("))
+	require.Positive(t, start)
+	deploy := string(library[start:])
+	credentials := strings.Index(deploy, "load_registry_credentials")
+	registry := strings.Index(deploy, "verify_registry_images")
+	secrets := strings.Index(deploy, "create_release_secrets")
+	require.Positive(t, credentials)
+	require.Greater(t, registry, credentials)
+	require.Greater(t, secrets, registry)
+}
+
 // covers: AC-1, AC-2
 func TestProductionConfigurationRejectsAnotherHost(t *testing.T) {
 	t.Parallel()
