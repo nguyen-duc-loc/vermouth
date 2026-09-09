@@ -8,7 +8,7 @@
     "release": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["gitSHA", "githubRunID", "githubRunAttempt", "identity", "imagesJSONSHA256", "deploymentBaseSHA256", "migrationCompatEvidenceSHA256", "rateLimitEvidenceSHA256", "bundleManifestSHA256"],
+      "required": ["gitSHA", "githubRunID", "githubRunAttempt", "identity", "imagesJSONSHA256", "deploymentBaseSHA256", "migrationCompatEvidenceSHA256", "rateLimitEvidenceSHA256", "bundleManifestSHA256", "runtimeSecrets"],
       "properties": {
         "gitSHA": { "type": "string", "pattern": "^$|^[0-9a-f]{40}$" },
         "githubRunID": { "type": "string", "pattern": "^$|^[1-9][0-9]*$" },
@@ -18,7 +18,18 @@
         "deploymentBaseSHA256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
         "migrationCompatEvidenceSHA256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
         "rateLimitEvidenceSHA256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
-        "bundleManifestSHA256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" }
+        "bundleManifestSHA256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
+        "runtimeSecrets": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "gateway": { "$ref": "#/definitions/runtimeSecret" },
+            "identity": { "$ref": "#/definitions/runtimeSecret" },
+            "teaching": { "$ref": "#/definitions/runtimeSecret" },
+            "billing": { "$ref": "#/definitions/runtimeSecret" },
+            "notifications": { "$ref": "#/definitions/runtimeSecret" }
+          }
+        }
       }
     },
     "foundation": {
@@ -199,6 +210,21 @@
     }
   },
   "definitions": {
+    "runtimeSecret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sourceSHA256", "keys"],
+      "properties": {
+        "name": { "$ref": "#/definitions/secretName" },
+        "sourceSHA256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "keys": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "authRate": {
       "type": "string",
       "pattern": "^[1-9][0-9]*/1m,[1-9][0-9]*/1h$"

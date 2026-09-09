@@ -9,6 +9,7 @@ release:
   migrationCompatEvidenceSHA256: ""
   rateLimitEvidenceSHA256: ""
   bundleManifestSHA256: ""
+  runtimeSecrets: {}
 foundation:
   enabled: false
   bootstrapStorage: false

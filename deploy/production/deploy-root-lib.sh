@@ -73,6 +73,61 @@ verify_release_evidence_checksum() {
   [ "$(sha256sum "$release/$file_name" | awk '{print $1}')" = "$expected" ]
 }
 
+runtime_secret_evidence() {
+  values=$1
+  jq -e '
+    .release.runtimeSecrets |
+    type == "object" and length == 5 and
+    (keys == ["billing","gateway","identity","notifications","teaching"]) and
+    all(to_entries[];
+      .key as $service |
+      .value.name == ($service + "-runtime-" + (.value.sourceSHA256[0:12])) and
+      (.value.sourceSHA256 | test("^[0-9a-f]{64}$")) and
+      (.value.keys | type == "array" and length > 0 and . == (sort | unique)))
+  ' "$values" >/dev/null || release_fail "the Helm revision runtime Secret evidence is incomplete"
+}
+
+verify_runtime_secret() {
+  name=$1
+  service=$2
+  expected_hash=$3
+  expected_keys=$4
+  expected_values=${5:-}
+  live=$release_work/secret-$service.json
+  kubectl --namespace vermouth get secret "$name" -o json >"$live" ||
+    release_fail "runtime Secret $name is missing"
+  jq -e --arg name "$name" --arg service "$service" --arg hash "$expected_hash" --argjson keys "$expected_keys" '
+    .metadata.namespace == "vermouth" and .metadata.name == $name and
+    .metadata.labels["app.kubernetes.io/name"] == "vermouth" and
+    .metadata.labels["app.kubernetes.io/component"] == "runtime-secret" and
+    .metadata.labels["vermouth.dev/runtime-service"] == $service and
+    .metadata.annotations["vermouth.dev/source-sha256"] == $hash and
+    .immutable == true and ((.data | keys | sort) == $keys)
+  ' "$live" >/dev/null || release_fail "runtime Secret $name identity does not match its revision evidence"
+  decoded=$release_work/secret-$service-decoded.json
+  jq -S -c '.data | with_entries(.value |= @base64d)' "$live" >"$decoded"
+  [ "$(vermouth-platformconfig secret-hash <"$decoded")" = "$expected_hash" ] ||
+    release_fail "runtime Secret $name decoded values do not match its source hash"
+  if [ -n "$expected_values" ]; then
+    jq -S -c . "$expected_values" >"$release_work/secret-$service-expected.json"
+    cmp -s "$decoded" "$release_work/secret-$service-expected.json" ||
+      release_fail "runtime Secret $name decoded values differ from the requested values"
+  fi
+}
+
+verify_revision_runtime_secrets() {
+  values=$1
+  runtime_secret_evidence "$values"
+  for service in gateway identity teaching billing notifications; do
+    name=$(jq -r --arg service "$service" '.release.runtimeSecrets[$service].name' "$values")
+    hash=$(jq -r --arg service "$service" '.release.runtimeSecrets[$service].sourceSHA256' "$values")
+    keys=$(jq -c --arg service "$service" '.release.runtimeSecrets[$service].keys' "$values")
+    verify_runtime_secret "$name" "$service" "$hash" "$keys"
+    [ "$(jq -r --arg service "$service" '.secrets[$service]' "$values")" = "$name" ] ||
+      release_fail "runtime Secret $service chart reference disagrees with release evidence"
+  done
+}
+
 write_deployment_base_unlocked() (
   candidate_git_sha=$1
   github_run_id=$2
@@ -142,10 +197,7 @@ write_deployment_base_unlocked() (
     release_fail "the deployed revision rate limit evidence checksum is invalid"
   verify_release_evidence_checksum "$values" "$previous_release" bundleManifestSHA256 bundle-manifest.json ||
     release_fail "the deployed revision bundle manifest checksum is invalid"
-  jq -r '.secrets | .. | strings | select(length > 0)' "$values" | while IFS= read -r secret; do
-    kubectl --namespace vermouth get secret "$secret" >/dev/null 2>&1 ||
-      release_fail "the deployed revision runtime Secret $secret is missing"
-  done
+  verify_revision_runtime_secrets "$values"
   previous_source=$(jq -r '.git_sha' "$previous_release/images.json")
   [ "${previous_identity%%/*}" = "$previous_source" ] ||
     release_fail "the deployed revision source identity does not match images.json"
@@ -410,13 +462,13 @@ apply_secret() {
   label_component=${4:-$component}
   source_hash=$(vermouth-platformconfig secret-hash <"$values")
   if kubectl --namespace vermouth get secret "$name" >/dev/null 2>&1; then
-    live_hash=$(kubectl --namespace vermouth get secret "$name" -o jsonpath='{.metadata.labels.vermouth\.dev/source-sha256}')
+    if [ "$label_component" = runtime-secret ]; then
+      keys=$(jq -c 'keys | sort' "$values")
+      verify_runtime_secret "$name" "$component" "$source_hash" "$keys" "$values"
+      return
+    fi
+    live_hash=$(kubectl --namespace vermouth get secret "$name" -o jsonpath='{.metadata.annotations.vermouth\.dev/source-sha256}')
     [ "$live_hash" = "$source_hash" ] || release_fail "existing Secret $name has different source values"
-    kubectl --namespace vermouth label secret "$name" --overwrite \
-      "app.kubernetes.io/name=vermouth" \
-      "app.kubernetes.io/component=$label_component" \
-      "vermouth.dev/runtime-service=$component" \
-      "vermouth.dev/source-sha256=$source_hash" >/dev/null
     return
   fi
   jq \
@@ -430,9 +482,9 @@ apply_secret() {
           labels:{
             "app.kubernetes.io/name":"vermouth",
             "app.kubernetes.io/component":$label_component,
-            "vermouth.dev/runtime-service":$component,
-            "vermouth.dev/source-sha256":$hash
-          }
+            "vermouth.dev/runtime-service":$component
+          },
+          annotations:{"vermouth.dev/source-sha256":$hash}
         },
         immutable:true,
         type:"Opaque",
@@ -497,6 +549,17 @@ create_release_secrets() {
 
   secrets_values=$release_work/secrets-values.yaml
   {
+    printf '%s\n' 'release:'
+    printf '%s\n' '  runtimeSecrets:'
+    for service in gateway identity teaching billing notifications; do
+      eval "secret_name=\${${service}_secret}"
+      hash=$(vermouth-platformconfig secret-hash <"$release_work/$service.json")
+      keys=$(jq -c 'keys | sort' "$release_work/$service.json")
+      printf '    %s:\n' "$service"
+      printf '      name: %s\n' "$secret_name"
+      printf '      sourceSHA256: %s\n' "$hash"
+      printf '      keys: %s\n' "$keys"
+    done
     printf '%s\n' 'secrets:'
     printf '  gateway: %s\n' "$gateway_secret"
     printf '  identity: %s\n' "$identity_secret"
@@ -687,21 +750,42 @@ garbage_collect_runtime_secrets() {
   current_revision=$1
   previous_revision=$2
   references=$release_work/runtime-secret-references
+  candidates=$release_work/runtime-secret-candidates
   : >"$references"
   for revision in "$current_revision" "$previous_revision"; do
     [ "$revision" != null ] || continue
-    helm --namespace vermouth get values vermouth --revision "$revision" -o json |
-      jq -r '.secrets | .. | strings | select(length > 0)' >>"$references"
+    values=$release_work/gc-values-$revision.json
+    helm --namespace vermouth get values vermouth --revision "$revision" -o json >"$values" ||
+      release_fail "cannot read retained revision $revision for Secret garbage collection"
+    verify_revision_runtime_secrets "$values"
+    jq -r '.release.runtimeSecrets[].name' "$values" >>"$references"
   done
   LC_ALL=C sort -u "$references" -o "$references"
   kubectl --namespace vermouth get secrets \
     -l app.kubernetes.io/name=vermouth,app.kubernetes.io/component=runtime-secret \
-    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' |
-    while IFS= read -r secret; do
-      [ -n "$secret" ] || continue
-      grep -Fx "$secret" "$references" >/dev/null ||
-        kubectl --namespace vermouth delete secret "$secret" --wait=true >/dev/null
-    done
+    -o json >"$candidates" || release_fail "cannot list runtime Secrets for garbage collection"
+  jq -e '
+    all(.items[];
+      .metadata.namespace == "vermouth" and .immutable == true and
+      .metadata.labels["vermouth.dev/runtime-service"] as $service |
+      ($service | IN("gateway","identity","teaching","billing","notifications")) and
+      (.metadata.annotations["vermouth.dev/source-sha256"] | test("^[0-9a-f]{64}$")) and
+      (.metadata.name == ($service + "-runtime-" + .metadata.annotations["vermouth.dev/source-sha256"][0:12])))
+  ' "$candidates" >/dev/null || release_fail "runtime Secret garbage collection found an ambiguous candidate"
+  jq -r '.items[].metadata.name' "$candidates" | LC_ALL=C sort -u >"$release_work/runtime-secret-candidate-names"
+  while IFS= read -r secret; do
+    [ -n "$secret" ] || continue
+    service=$(printf '%s' "$secret" | sed 's/-runtime-.*//')
+    hash=$(jq -r --arg name "$secret" '.items[] | select(.metadata.name == $name) | .metadata.annotations["vermouth.dev/source-sha256"]' "$candidates")
+    keys=$(jq -c --arg name "$secret" '.items[] | select(.metadata.name == $name) | .data | keys | sort' "$candidates")
+    verify_runtime_secret "$secret" "$service" "$hash" "$keys"
+  done <"$release_work/runtime-secret-candidate-names"
+  while IFS= read -r secret; do
+    [ -n "$secret" ] || continue
+    grep -Fx "$secret" "$references" >/dev/null ||
+      kubectl --namespace vermouth delete secret "$secret" --wait=true >/dev/null ||
+      release_fail "runtime Secret garbage collection stopped after failing to delete $secret"
+  done <"$release_work/runtime-secret-candidate-names"
 }
 
 record_platform_release() {
