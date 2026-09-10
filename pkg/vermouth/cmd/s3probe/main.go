@@ -25,7 +25,7 @@ const (
 	s3Service        = "s3"
 )
 
-var runIDPattern = regexp.MustCompile(`^[0-9a-f]{12}$`)
+var runIDPattern = regexp.MustCompile(`^([0-9a-f]{12}|[1-9]\d*-[1-9]\d*)$`)
 
 type config struct {
 	endpoint  *urlpkg.URL
@@ -133,7 +133,9 @@ func loadConfig() (config, error) {
 		return config{}, errors.New("GARAGE_BUCKET must be vermouth-invoices")
 	}
 	if !runIDPattern.MatchString(values["VERMOUTH_RUN_ID"]) {
-		return config{}, errors.New("VERMOUTH_RUN_ID must contain 12 lowercase hexadecimal characters")
+		return config{}, errors.New(
+			"VERMOUTH_RUN_ID must contain 12 lowercase hexadecimal characters or a GitHub run ID and attempt",
+		)
 	}
 	return config{
 		endpoint:  endpoint,

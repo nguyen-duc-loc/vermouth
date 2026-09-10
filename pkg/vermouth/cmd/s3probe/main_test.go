@@ -111,6 +111,58 @@ func TestRunReportsTheExactFailedS3Operation(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_AcceptsSupportedRunIdentities(t *testing.T) {
+	tests := []struct {
+		name  string
+		runID string
+	}{
+		{name: "local hexadecimal identity", runID: "0123456789ab"},
+		{name: "production workflow identity", runID: "34436178670-1"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("GARAGE_S3_ENDPOINT", "http://garage:3900")
+			t.Setenv("GARAGE_S3_REGION", "garage")
+			t.Setenv("GARAGE_BUCKET", "vermouth-invoices")
+			t.Setenv("GARAGE_ACCESS_KEY_ID", "GK0123456789abcdef01234567")
+			t.Setenv("GARAGE_SECRET_ACCESS_KEY", strings.Repeat("a", 64))
+			t.Setenv("VERMOUTH_RUN_ID", test.runID)
+
+			cfg, err := loadConfig()
+			require.NoError(t, err)
+			require.Equal(t, test.runID, cfg.runID)
+		})
+	}
+}
+
+func TestLoadConfig_RejectsMalformedRunIdentities(t *testing.T) {
+	tests := []struct {
+		name  string
+		runID string
+	}{
+		{name: "short local identity", runID: "0123456789a"},
+		{name: "uppercase local identity", runID: "0123456789aB"},
+		{name: "zero workflow run", runID: "0-1"},
+		{name: "zero workflow attempt", runID: "123-0"},
+		{name: "extra workflow segment", runID: "123-1-1"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("GARAGE_S3_ENDPOINT", "http://garage:3900")
+			t.Setenv("GARAGE_S3_REGION", "garage")
+			t.Setenv("GARAGE_BUCKET", "vermouth-invoices")
+			t.Setenv("GARAGE_ACCESS_KEY_ID", "GK0123456789abcdef01234567")
+			t.Setenv("GARAGE_SECRET_ACCESS_KEY", strings.Repeat("a", 64))
+			t.Setenv("VERMOUTH_RUN_ID", test.runID)
+
+			_, err := loadConfig()
+			require.ErrorContains(t, err, "GitHub run ID and attempt")
+		})
+	}
+}
+
 func TestLoadConfig_RejectsEndpointDrift(t *testing.T) {
 	t.Setenv("GARAGE_S3_ENDPOINT", "http://127.0.0.1:3900")
 	t.Setenv("GARAGE_S3_REGION", "garage")
