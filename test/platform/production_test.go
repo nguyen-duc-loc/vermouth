@@ -394,6 +394,19 @@ func TestProductionBootstrapWaitsForOneTraefikBeforeRequestingACertificate(t *te
 	require.Less(t, waitForOne, createProbe)
 }
 
+// covers: AC-2, AC-3
+func TestProductionBootstrapMakesStorageMarkerReadableByNonRootGuards(t *testing.T) {
+	t.Parallel()
+
+	script, err := os.ReadFile(repoFile(t, "deploy", "production", "bootstrap-root.sh"))
+	require.NoError(t, err)
+
+	source := string(script)
+	require.Contains(t, source, "chown root:root \"$marker\"")
+	require.Contains(t, source, "chmod 0644 \"$marker\"")
+	require.NotContains(t, source, "chmod 0600 \"$storage_root/.vermouth-storage\"")
+}
+
 // covers: AC-17, AC-18
 func TestProductionRecoveryAcceptsOneProtectedNativeAgeIdentity(t *testing.T) {
 	t.Parallel()
