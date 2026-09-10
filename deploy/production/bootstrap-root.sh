@@ -237,14 +237,16 @@ chmod 0600 "$next"
 vermouth-platformconfig validate-document /usr/local/share/vermouth/platform.schema.json "$next"
 mv "$next" "$platform_file"
 identity_hash=$(jq -S -c '{schema_version,vm_name,node_name,storage_mode,storage_root,storage_uuid,selected_at,locked}' "$platform_file" | sha256sum | awk '{print $1}')
+marker=$storage_root/.vermouth-storage
 if [ "$platform_existing" = false ]; then
   if [ "$restore_bootstrap" = true ]; then
     [ "$identity_hash" = "$(jq -r '.storage_identity.marker_sha256' "$restore_manifest")" ] ||
       bootstrap_fail "the recreated platform identity does not match the export marker"
   fi
-  printf '%s\n' "$identity_hash" >"$storage_root/.vermouth-storage"
-  chmod 0600 "$storage_root/.vermouth-storage"
+  printf '%s\n' "$identity_hash" >"$marker"
 fi
+chown root:root "$marker"
+chmod 0644 "$marker"
 
 for item in postgres-identity:70:70 postgres-teaching:70:70 postgres-billing:70:70 postgres-notifications:70:70 redpanda:101:101 garage-metadata:1000:1000 garage-data:1000:1000 traefik-acme:65532:65532; do
   name=${item%%:*}
