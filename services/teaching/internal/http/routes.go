@@ -2,11 +2,14 @@
 package http
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/nguyen-duc-loc/vermouth/pkg/vermouth"
@@ -31,12 +34,146 @@ func Mux(deps Deps) http.Handler {
 	deps.Health.Mount(mux)
 	mux.HandleFunc("POST /classes", createClass(deps))
 	mux.HandleFunc("PUT /classes/{class_id}/schedule", putSchedule(deps))
+	mux.HandleFunc("POST /classes/{class_id}/schedule/end", endSchedule(deps))
+	mux.HandleFunc("POST /sessions/{session_id}/move", moveSession(deps))
+	mux.HandleFunc("POST /sessions/{session_id}/cancel", cancelSession(deps))
+	mux.HandleFunc("POST /sessions/{session_id}/restore", restoreSession(deps))
 	mux.HandleFunc("POST /students", createStudent(deps))
 	mux.HandleFunc("POST /classes/{class_id}/roster", joinRoster(deps))
 	mux.HandleFunc("PUT /sessions/{session_id}/attendance/{student_id}", markAttendance(deps))
 	mux.HandleFunc("GET /home", readHome(deps))
 	mux.HandleFunc("GET /schedule", readSchedule(deps))
 	return vermouth.RequestIDMiddleware(deps.Logger, mux)
+}
+
+func endSchedule(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := verifiedClaims(deps, w, r)
+		if !ok {
+			return
+		}
+		classID, err := uuid.Parse(r.PathValue("class_id"))
+		if err != nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "class_id must be a UUID")
+			return
+		}
+		var input handler.EndScheduleInput
+		if !decodeJSON(w, r, &input) {
+			return
+		}
+		result, status, err := deps.Handler.EndSchedule(
+			r.Context(), claims.TutorID, classID, r.Header.Get("Idempotency-Key"), input,
+		)
+		if err != nil {
+			writeHandlerError(deps, w, r, "End schedule", err)
+			return
+		}
+		vermouth.WriteJSON(r.Context(), deps.Logger, w, status, result)
+	}
+}
+
+func moveSession(deps Deps) http.HandlerFunc {
+	return sessionCommand(deps, "Move session", func(
+		ctx context.Context,
+		tutorID uuid.UUID,
+		sessionID uuid.UUID,
+		timezone string,
+		key string,
+		body []byte,
+	) (handler.CanonicalSession, int, error) {
+		var input handler.MoveSessionInput
+		if !decodeJSONBytes(body, &input) {
+			return handler.CanonicalSession{}, 0, &handler.ValidationError{
+				Field: "body", Message: "must be valid JSON",
+			}
+		}
+		return deps.Handler.MoveSession(ctx, tutorID, sessionID, timezone, key, input)
+	})
+}
+
+func cancelSession(deps Deps) http.HandlerFunc {
+	return versionedSessionCommand(deps, "Cancel session", deps.Handler.CancelSession)
+}
+
+func restoreSession(deps Deps) http.HandlerFunc {
+	return versionedSessionCommand(deps, "Restore session", deps.Handler.RestoreSession)
+}
+
+type sessionCommandFunc func(
+	context.Context,
+	uuid.UUID,
+	uuid.UUID,
+	string,
+	string,
+	[]byte,
+) (handler.CanonicalSession, int, error)
+
+func sessionCommand(deps Deps, operation string, command sessionCommandFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := verifiedClaims(deps, w, r)
+		if !ok {
+			return
+		}
+		sessionID, err := uuid.Parse(r.PathValue("session_id"))
+		if err != nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "session_id must be a UUID")
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBody)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "the JSON body is invalid")
+			return
+		}
+		result, status, err := command(
+			r.Context(), claims.TutorID, sessionID, claims.Timezone,
+			r.Header.Get("Idempotency-Key"), body,
+		)
+		if err != nil {
+			writeHandlerError(deps, w, r, operation, err)
+			return
+		}
+		vermouth.WriteJSON(r.Context(), deps.Logger, w, status, result)
+	}
+}
+
+func versionedSessionCommand(
+	deps Deps,
+	operation string,
+	command func(
+		context.Context,
+		uuid.UUID,
+		uuid.UUID,
+		string,
+		string,
+		handler.SessionVersionInput,
+	) (handler.CanonicalSession, int, error),
+) http.HandlerFunc {
+	return sessionCommand(deps, operation, func(
+		ctx context.Context,
+		tutorID uuid.UUID,
+		sessionID uuid.UUID,
+		timezone string,
+		key string,
+		body []byte,
+	) (handler.CanonicalSession, int, error) {
+		var input handler.SessionVersionInput
+		if !decodeJSONBytes(body, &input) {
+			return handler.CanonicalSession{}, 0, &handler.ValidationError{
+				Field: "body", Message: "must be valid JSON",
+			}
+		}
+		return command(ctx, tutorID, sessionID, timezone, key, input)
+	})
+}
+
+func decodeJSONBytes(body []byte, target any) bool {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(target) != nil {
+		return false
+	}
+	return errors.Is(decoder.Decode(&struct{}{}), io.EOF)
 }
 
 func putSchedule(deps Deps) http.HandlerFunc {
@@ -243,6 +380,9 @@ func readSchedule(deps Deps) http.HandlerFunc {
 			r.URL.Query().Get("from"),
 			r.URL.Query().Get("through"),
 			classIDs,
+			r.URL.Query().Get("include_replaced") == "true",
+			parseHistoryLimit(r.URL.Query().Get("history_limit")),
+			r.URL.Query().Get("history_cursor"),
 		)
 		if err != nil {
 			writeHandlerError(deps, w, r, "Read schedule", err)
@@ -250,6 +390,17 @@ func readSchedule(deps Deps) http.HandlerFunc {
 		}
 		vermouth.WriteJSON(r.Context(), deps.Logger, w, http.StatusOK, result)
 	}
+}
+
+func parseHistoryLimit(value string) int {
+	if value == "" {
+		return 0
+	}
+	result, err := strconv.Atoi(value)
+	if err != nil {
+		return -1
+	}
+	return result
 }
 
 func verifiedClaims(deps Deps, w http.ResponseWriter, r *http.Request) (vermouth.Claims, bool) {
@@ -290,10 +441,18 @@ func writeHandlerError(deps Deps, w http.ResponseWriter, r *http.Request, operat
 		vermouth.WriteError(ctx, w, http.StatusBadRequest, "invalid_input", validation.Error())
 		return
 	}
+	if conflict, ok := errors.AsType[*handler.ConflictError](err); ok {
+		vermouth.WriteErrorDetails(
+			ctx, w, http.StatusConflict, conflict.Code, conflict.Message, conflict.Details,
+		)
+		return
+	}
 	switch {
 	case errors.Is(err, handler.ErrNotFound):
 		vermouth.WriteError(ctx, w, http.StatusNotFound, "not_found", "no owned teaching resource matched")
-	case errors.Is(err, handler.ErrConflict), errors.Is(err, handler.ErrIdempotencyConflict):
+	case errors.Is(err, handler.ErrIdempotencyConflict):
+		vermouth.WriteError(ctx, w, http.StatusConflict, "idempotency_conflict", "the idempotency key names different input")
+	case errors.Is(err, handler.ErrConflict):
 		vermouth.WriteError(ctx, w, http.StatusConflict, "conflict", "the request conflicts with committed state")
 	default:
 		deps.Logger.ErrorContext(ctx, "Teaching request failed",

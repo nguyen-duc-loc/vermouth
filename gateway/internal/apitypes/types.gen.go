@@ -205,6 +205,27 @@ type BillingProjection struct {
 // BillingProjectionState defines model for BillingProjection.State.
 type BillingProjectionState string
 
+// CanonicalSession defines model for CanonicalSession.
+type CanonicalSession struct {
+	CancelledAt     *time.Time           `json:"cancelled_at"`
+	ClassId         openapi_types.UUID   `json:"class_id"`
+	DisplayTimeZone string               `json:"display_time_zone"`
+	EndUtcOffset    string               `json:"end_utc_offset"`
+	EndsAt          time.Time            `json:"ends_at"`
+	LocalDate       openapi_types.Date   `json:"local_date"`
+	MovedAt         *time.Time           `json:"moved_at"`
+	OriginLocalDate openapi_types.Date   `json:"origin_local_date"`
+	ScheduleRuleId  *openapi_types.UUID  `json:"schedule_rule_id"`
+	SessionId       openapi_types.UUID   `json:"session_id"`
+	SourceTimeZone  *string              `json:"source_time_zone"`
+	StartUtcOffset  string               `json:"start_utc_offset"`
+	StartsAt        time.Time            `json:"starts_at"`
+	State           ScheduleSessionState `json:"state"`
+	SupersededAt    *time.Time           `json:"superseded_at"`
+	UpdatedAt       time.Time            `json:"updated_at"`
+	Version         int64                `json:"version"`
+}
+
 // Class defines model for Class.
 type Class struct {
 	ClassId           openapi_types.UUID `json:"class_id"`
@@ -247,13 +268,28 @@ type CreateStudentRequest struct {
 	Phone *string `json:"phone,omitempty"`
 }
 
+// EndScheduleRequest defines model for EndScheduleRequest.
+type EndScheduleRequest struct {
+	ExpectedRevision int64              `json:"expected_revision"`
+	LastDate         openapi_types.Date `json:"last_date"`
+}
+
+// EndScheduleResponse defines model for EndScheduleResponse.
+type EndScheduleResponse struct {
+	Class           Class               `json:"class"`
+	PreservedCount  int                 `json:"preserved_count"`
+	Rule            ScheduleRuleSummary `json:"rule"`
+	SupersededCount int                 `json:"superseded_count"`
+}
+
 // Error The one error shape at the gateway boundary (spec 0001).
 type Error struct {
 	Error struct {
 		// Code Examples: invalid_input
-		Code      string `json:"code"`
-		Message   string `json:"message"`
-		RequestId string `json:"request_id"`
+		Code      string                  `json:"code"`
+		Details   *map[string]interface{} `json:"details,omitempty"`
+		Message   string                  `json:"message"`
+		RequestId string                  `json:"request_id"`
 	} `json:"error"`
 }
 
@@ -326,6 +362,17 @@ type MarkAttendanceRequest struct {
 	State AttendanceState `json:"state"`
 }
 
+// MoveSessionRequest defines model for MoveSessionRequest.
+type MoveSessionRequest struct {
+	// EndTime Examples: 17:30
+	EndTime         LocalTime          `json:"end_time"`
+	ExpectedVersion int64              `json:"expected_version"`
+	LocalDate       openapi_types.Date `json:"local_date"`
+
+	// StartTime Examples: 17:30
+	StartTime LocalTime `json:"start_time"`
+}
+
 // PutScheduleRequest defines model for PutScheduleRequest.
 type PutScheduleRequest struct {
 	EffectiveFrom    openapi_types.Date        `json:"effective_from"`
@@ -366,6 +413,7 @@ type Schedule struct {
 	Classes           []ScheduleClass       `json:"classes"`
 	From              openapi_types.Date    `json:"from"`
 	NextHistoryCursor *string               `json:"next_history_cursor"`
+	ReplacedHistory   []ScheduleSession     `json:"replaced_history"`
 	RequestTimeZone   string                `json:"request_time_zone"`
 	Rules             []ScheduleRuleSummary `json:"rules"`
 	Sessions          []ScheduleSession     `json:"sessions"`
@@ -438,6 +486,11 @@ type ScheduleSessionState string
 type Session struct {
 	AccessExpiresAt time.Time `json:"access_expires_at"`
 	AccessToken     string    `json:"access_token"`
+}
+
+// SessionVersionRequest defines model for SessionVersionRequest.
+type SessionVersionRequest struct {
+	ExpectedVersion int64 `json:"expected_version"`
 }
 
 // SetupDefaults defines model for SetupDefaults.
@@ -599,6 +652,12 @@ type PutClassScheduleParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// EndClassScheduleParams defines parameters for EndClassSchedule.
+type EndClassScheduleParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // GetHomeParams defines parameters for GetHome.
 type GetHomeParams struct {
 	// Cursor Opaque cursor bound to the current tutor local date.
@@ -607,9 +666,30 @@ type GetHomeParams struct {
 
 // GetScheduleParams defines parameters for GetSchedule.
 type GetScheduleParams struct {
-	From    openapi_types.Date    `form:"from" json:"from"`
-	Through openapi_types.Date    `form:"through" json:"through"`
-	ClassId *[]openapi_types.UUID `form:"class_id,omitempty" json:"class_id,omitempty"`
+	From            openapi_types.Date    `form:"from" json:"from"`
+	Through         openapi_types.Date    `form:"through" json:"through"`
+	ClassId         *[]openapi_types.UUID `form:"class_id,omitempty" json:"class_id,omitempty"`
+	IncludeReplaced *bool                 `form:"include_replaced,omitempty" json:"include_replaced,omitempty"`
+	HistoryLimit    *int                  `form:"history_limit,omitempty" json:"history_limit,omitempty"`
+	HistoryCursor   *string               `form:"history_cursor,omitempty" json:"history_cursor,omitempty"`
+}
+
+// CancelSessionParams defines parameters for CancelSession.
+type CancelSessionParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// MoveSessionParams defines parameters for MoveSession.
+type MoveSessionParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// RestoreSessionParams defines parameters for RestoreSession.
+type RestoreSessionParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // CreateStudentParams defines parameters for CreateStudent.
@@ -627,8 +707,20 @@ type JoinRosterJSONRequestBody = JoinRosterRequest
 // PutClassScheduleJSONRequestBody defines body for PutClassSchedule for application/json ContentType.
 type PutClassScheduleJSONRequestBody = PutScheduleRequest
 
+// EndClassScheduleJSONRequestBody defines body for EndClassSchedule for application/json ContentType.
+type EndClassScheduleJSONRequestBody = EndScheduleRequest
+
 // MarkAttendanceJSONRequestBody defines body for MarkAttendance for application/json ContentType.
 type MarkAttendanceJSONRequestBody = MarkAttendanceRequest
+
+// CancelSessionJSONRequestBody defines body for CancelSession for application/json ContentType.
+type CancelSessionJSONRequestBody = SessionVersionRequest
+
+// MoveSessionJSONRequestBody defines body for MoveSession for application/json ContentType.
+type MoveSessionJSONRequestBody = MoveSessionRequest
+
+// RestoreSessionJSONRequestBody defines body for RestoreSession for application/json ContentType.
+type RestoreSessionJSONRequestBody = SessionVersionRequest
 
 // CreateStudentJSONRequestBody defines body for CreateStudent for application/json ContentType.
 type CreateStudentJSONRequestBody = CreateStudentRequest

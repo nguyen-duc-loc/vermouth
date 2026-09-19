@@ -51,6 +51,8 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 	switch env.EventName {
 	case vermouth.EventClassCreated,
 		vermouth.EventSessionScheduled,
+		vermouth.EventSessionMoved,
+		vermouth.EventSessionCancelled,
 		vermouth.EventStudentRegistered,
 		vermouth.EventRosterJoined,
 		vermouth.EventAttendanceMarked:
@@ -89,7 +91,7 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 			return fmt.Errorf("project first class rate: %w", err)
 		}
 		return nil
-	case vermouth.EventSessionScheduled:
+	case vermouth.EventSessionScheduled, vermouth.EventSessionMoved:
 		localDate, err := parseDay(facts.LocalDate)
 		if err != nil {
 			return err
@@ -100,6 +102,15 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 		})
 		if err != nil {
 			return fmt.Errorf("project session: %w", err)
+		}
+		return nil
+	case vermouth.EventSessionCancelled:
+		err = queries.MarkSessionCancelled(ctx, sqlcgen.MarkSessionCancelledParams{
+			TutorID: tutorID, SessionID: facts.SessionID,
+			CancelledAt: pgtype.Timestamptz{Time: env.OccurredAt, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("cancel projected session: %w", err)
 		}
 		return nil
 	case vermouth.EventStudentRegistered:

@@ -255,6 +255,7 @@ ON CONFLICT (session_id) DO UPDATE
 SET starts_at  = excluded.starts_at,
     ends_at    = excluded.ends_at,
     local_date = excluded.local_date,
+    cancelled_at = NULL,
     updated_at = now()
 WHERE sessions.tutor_id = excluded.tutor_id
 `

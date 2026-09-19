@@ -20,18 +20,40 @@ type APIErrorBody struct {
 	Code      string `json:"code"`
 	Message   string `json:"message"`
 	RequestID string `json:"request_id"`
+	Details   any    `json:"details,omitempty"`
 }
 
 // WriteError answers in the one error shape.
 func WriteError(ctx context.Context, w http.ResponseWriter, status int, code, message string) {
-	// The body is three strings, so encoding it cannot fail. It is marshalled
-	// before the status goes out, because after WriteHeader there is no way
-	// left to report a problem.
-	body, _ := json.Marshal(APIError{Error: APIErrorBody{
+	WriteErrorDetails(ctx, w, status, code, message, nil)
+}
+
+// WriteErrorDetails adds safe structured recovery data to the shared boundary
+// error without changing its stable outer shape.
+func WriteErrorDetails(
+	ctx context.Context,
+	w http.ResponseWriter,
+	status int,
+	code string,
+	message string,
+	details any,
+) {
+	// Marshal before the status goes out, because after WriteHeader there is no
+	// way left to replace unsafe detail data with the stable string fields.
+	body, err := json.Marshal(APIError{Error: APIErrorBody{
 		Code:      code,
 		Message:   message,
 		RequestID: RequestID(ctx),
+		Details:   details,
 	}})
+	if err != nil {
+		body, err = json.Marshal(APIError{Error: APIErrorBody{
+			Code: code, Message: message, RequestID: RequestID(ctx),
+		}})
+		if err != nil {
+			return
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_, _ = w.Write(body)

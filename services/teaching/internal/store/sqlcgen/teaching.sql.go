@@ -86,6 +86,65 @@ func (q *Queries) AdoptStandaloneSession(ctx context.Context, arg AdoptStandalon
 	return i, err
 }
 
+const cancelOwnedSession = `-- name: CancelOwnedSession :one
+UPDATE sessions
+SET cancelled_at = $3,
+    version = version + 1,
+    updated_at = $3
+WHERE tutor_id = $1
+  AND session_id = $2
+  AND cancelled_at IS NULL
+  AND superseded_at IS NULL
+RETURNING session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+          schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+          created_at, updated_at, cancelled_at
+`
+
+type CancelOwnedSessionParams struct {
+	TutorID     uuid.UUID
+	SessionID   uuid.UUID
+	CancelledAt pgtype.Timestamptz
+}
+
+type CancelOwnedSessionRow struct {
+	SessionID       uuid.UUID
+	ClassID         uuid.UUID
+	TutorID         uuid.UUID
+	StartsAt        time.Time
+	EndsAt          time.Time
+	LocalDate       pgtype.Date
+	ScheduleRuleID  pgtype.UUID
+	OriginLocalDate pgtype.Date
+	Version         int64
+	MovedAt         pgtype.Timestamptz
+	SupersededAt    pgtype.Timestamptz
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	CancelledAt     pgtype.Timestamptz
+}
+
+func (q *Queries) CancelOwnedSession(ctx context.Context, arg CancelOwnedSessionParams) (CancelOwnedSessionRow, error) {
+	row := q.db.QueryRow(ctx, cancelOwnedSession, arg.TutorID, arg.SessionID, arg.CancelledAt)
+	var i CancelOwnedSessionRow
+	err := row.Scan(
+		&i.SessionID,
+		&i.ClassID,
+		&i.TutorID,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.LocalDate,
+		&i.ScheduleRuleID,
+		&i.OriginLocalDate,
+		&i.Version,
+		&i.MovedAt,
+		&i.SupersededAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CancelledAt,
+	)
+	return i, err
+}
+
 const closeRosterPeriod = `-- name: CloseRosterPeriod :exec
 UPDATE roster_periods
 SET effective_to = $4,
@@ -159,6 +218,53 @@ func (q *Queries) CompleteCommandReceipt(ctx context.Context, arg CompleteComman
 		&i.ContextSnapshot,
 		&i.ResponseSnapshot,
 		&i.ResponseStatus,
+	)
+	return i, err
+}
+
+const endScheduleRule = `-- name: EndScheduleRule :one
+UPDATE schedule_rules
+SET valid_through = $4,
+    ended_at = $5,
+    updated_at = $5
+WHERE tutor_id = $1
+  AND class_id = $2
+  AND schedule_rule_id = $3
+  AND retired_at IS NULL
+RETURNING schedule_rule_id, tutor_id, class_id, revision, valid_from, valid_through,
+          time_zone, created_at, updated_at, replaced_at, ended_at, retired_at
+`
+
+type EndScheduleRuleParams struct {
+	TutorID        uuid.UUID
+	ClassID        uuid.UUID
+	ScheduleRuleID uuid.UUID
+	ValidThrough   pgtype.Date
+	EndedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) EndScheduleRule(ctx context.Context, arg EndScheduleRuleParams) (ScheduleRule, error) {
+	row := q.db.QueryRow(ctx, endScheduleRule,
+		arg.TutorID,
+		arg.ClassID,
+		arg.ScheduleRuleID,
+		arg.ValidThrough,
+		arg.EndedAt,
+	)
+	var i ScheduleRule
+	err := row.Scan(
+		&i.ScheduleRuleID,
+		&i.TutorID,
+		&i.ClassID,
+		&i.Revision,
+		&i.ValidFrom,
+		&i.ValidThrough,
+		&i.TimeZone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReplacedAt,
+		&i.EndedAt,
+		&i.RetiredAt,
 	)
 	return i, err
 }
@@ -267,6 +373,53 @@ func (q *Queries) FindOpenRosterPeriod(ctx context.Context, arg FindOpenRosterPe
 		&i.EffectiveFrom,
 		&i.TutorID,
 		&i.EffectiveTo,
+	)
+	return i, err
+}
+
+const findOwnedSessionConflict = `-- name: FindOwnedSessionConflict :one
+SELECT s.session_id, c.name AS class_name, s.starts_at, s.ends_at
+FROM sessions s
+JOIN classes c
+  ON c.tutor_id = s.tutor_id
+ AND c.class_id = s.class_id
+WHERE s.tutor_id = $1
+  AND s.session_id <> $2
+  AND s.cancelled_at IS NULL
+  AND s.superseded_at IS NULL
+  AND tstzrange(s.starts_at, s.ends_at, '[)')
+      && tstzrange($3::timestamptz, $4::timestamptz, '[)')
+ORDER BY s.starts_at, s.session_id
+LIMIT 1
+`
+
+type FindOwnedSessionConflictParams struct {
+	TutorID           uuid.UUID
+	ExcludedSessionID uuid.UUID
+	StartsAt          time.Time
+	EndsAt            time.Time
+}
+
+type FindOwnedSessionConflictRow struct {
+	SessionID uuid.UUID
+	ClassName string
+	StartsAt  time.Time
+	EndsAt    time.Time
+}
+
+func (q *Queries) FindOwnedSessionConflict(ctx context.Context, arg FindOwnedSessionConflictParams) (FindOwnedSessionConflictRow, error) {
+	row := q.db.QueryRow(ctx, findOwnedSessionConflict,
+		arg.TutorID,
+		arg.ExcludedSessionID,
+		arg.StartsAt,
+		arg.EndsAt,
+	)
+	var i FindOwnedSessionConflictRow
+	err := row.Scan(
+		&i.SessionID,
+		&i.ClassName,
+		&i.StartsAt,
+		&i.EndsAt,
 	)
 	return i, err
 }
@@ -577,6 +730,60 @@ func (q *Queries) GetOwnedSession(ctx context.Context, arg GetOwnedSessionParams
 	return i, err
 }
 
+const getOwnedSessionForUpdate = `-- name: GetOwnedSessionForUpdate :one
+SELECT session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+       schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+       created_at, updated_at, cancelled_at
+FROM sessions
+WHERE tutor_id = $1
+  AND session_id = $2
+FOR UPDATE
+`
+
+type GetOwnedSessionForUpdateParams struct {
+	TutorID   uuid.UUID
+	SessionID uuid.UUID
+}
+
+type GetOwnedSessionForUpdateRow struct {
+	SessionID       uuid.UUID
+	ClassID         uuid.UUID
+	TutorID         uuid.UUID
+	StartsAt        time.Time
+	EndsAt          time.Time
+	LocalDate       pgtype.Date
+	ScheduleRuleID  pgtype.UUID
+	OriginLocalDate pgtype.Date
+	Version         int64
+	MovedAt         pgtype.Timestamptz
+	SupersededAt    pgtype.Timestamptz
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	CancelledAt     pgtype.Timestamptz
+}
+
+func (q *Queries) GetOwnedSessionForUpdate(ctx context.Context, arg GetOwnedSessionForUpdateParams) (GetOwnedSessionForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getOwnedSessionForUpdate, arg.TutorID, arg.SessionID)
+	var i GetOwnedSessionForUpdateRow
+	err := row.Scan(
+		&i.SessionID,
+		&i.ClassID,
+		&i.TutorID,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.LocalDate,
+		&i.ScheduleRuleID,
+		&i.OriginLocalDate,
+		&i.Version,
+		&i.MovedAt,
+		&i.SupersededAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CancelledAt,
+	)
+	return i, err
+}
+
 const getOwnedStudent = `-- name: GetOwnedStudent :one
 SELECT student_id, tutor_id, name, phone, created_at, updated_at, removed_at
 FROM students
@@ -600,6 +807,44 @@ func (q *Queries) GetOwnedStudent(ctx context.Context, arg GetOwnedStudentParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RemovedAt,
+	)
+	return i, err
+}
+
+const getSessionSourceRule = `-- name: GetSessionSourceRule :one
+SELECT r.schedule_rule_id, r.tutor_id, r.class_id, r.revision, r.valid_from,
+       r.valid_through, r.time_zone, r.created_at, r.updated_at,
+       r.replaced_at, r.ended_at, r.retired_at
+FROM schedule_rules r
+JOIN sessions s
+  ON s.tutor_id = r.tutor_id
+ AND s.class_id = r.class_id
+ AND s.schedule_rule_id = r.schedule_rule_id
+WHERE s.tutor_id = $1
+  AND s.session_id = $2
+`
+
+type GetSessionSourceRuleParams struct {
+	TutorID   uuid.UUID
+	SessionID uuid.UUID
+}
+
+func (q *Queries) GetSessionSourceRule(ctx context.Context, arg GetSessionSourceRuleParams) (ScheduleRule, error) {
+	row := q.db.QueryRow(ctx, getSessionSourceRule, arg.TutorID, arg.SessionID)
+	var i ScheduleRule
+	err := row.Scan(
+		&i.ScheduleRuleID,
+		&i.TutorID,
+		&i.ClassID,
+		&i.Revision,
+		&i.ValidFrom,
+		&i.ValidThrough,
+		&i.TimeZone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReplacedAt,
+		&i.EndedAt,
+		&i.RetiredAt,
 	)
 	return i, err
 }
@@ -1185,6 +1430,204 @@ func (q *Queries) ListOwnedClassSessions(ctx context.Context, arg ListOwnedClass
 	return items, nil
 }
 
+const listOwnedScheduleRulesForUpdate = `-- name: ListOwnedScheduleRulesForUpdate :many
+SELECT schedule_rule_id, tutor_id, class_id, revision, valid_from, valid_through,
+       time_zone, created_at, updated_at, replaced_at, ended_at, retired_at
+FROM schedule_rules
+WHERE tutor_id = $1
+  AND class_id = $2
+ORDER BY revision DESC
+FOR UPDATE
+`
+
+type ListOwnedScheduleRulesForUpdateParams struct {
+	TutorID uuid.UUID
+	ClassID uuid.UUID
+}
+
+func (q *Queries) ListOwnedScheduleRulesForUpdate(ctx context.Context, arg ListOwnedScheduleRulesForUpdateParams) ([]ScheduleRule, error) {
+	rows, err := q.db.Query(ctx, listOwnedScheduleRulesForUpdate, arg.TutorID, arg.ClassID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ScheduleRule{}
+	for rows.Next() {
+		var i ScheduleRule
+		if err := rows.Scan(
+			&i.ScheduleRuleID,
+			&i.TutorID,
+			&i.ClassID,
+			&i.Revision,
+			&i.ValidFrom,
+			&i.ValidThrough,
+			&i.TimeZone,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ReplacedAt,
+			&i.EndedAt,
+			&i.RetiredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReplacedScheduleSessions = `-- name: ListReplacedScheduleSessions :many
+SELECT s.session_id, s.class_id, c.name AS class_name, c.color AS class_color,
+       c.archived_at, s.starts_at, s.ends_at, s.local_date, s.origin_local_date,
+       s.schedule_rule_id, r.time_zone AS source_time_zone, s.version,
+       s.moved_at, s.cancelled_at, s.superseded_at, s.updated_at
+FROM sessions s
+JOIN classes c
+  ON c.tutor_id = s.tutor_id
+ AND c.class_id = s.class_id
+LEFT JOIN schedule_rules r
+  ON r.tutor_id = s.tutor_id
+ AND r.class_id = s.class_id
+ AND r.schedule_rule_id = s.schedule_rule_id
+WHERE s.tutor_id = $1
+  AND s.origin_local_date >= $2
+  AND s.origin_local_date <= $3
+  AND s.superseded_at IS NOT NULL
+  AND (
+      NOT $4::boolean
+      OR s.class_id = ANY($5::uuid[])
+  )
+  AND (
+      NOT $6::boolean
+      OR (s.origin_local_date, s.session_id) >
+         ($7::date, $8::uuid)
+  )
+ORDER BY s.origin_local_date, s.session_id
+LIMIT $9
+`
+
+type ListReplacedScheduleSessionsParams struct {
+	TutorID          uuid.UUID
+	FromDate         pgtype.Date
+	ThroughDate      pgtype.Date
+	HasClassFilter   bool
+	ClassIds         []uuid.UUID
+	HasCursor        bool
+	CursorOriginDate pgtype.Date
+	CursorSessionID  uuid.UUID
+	PageSize         int32
+}
+
+type ListReplacedScheduleSessionsRow struct {
+	SessionID       uuid.UUID
+	ClassID         uuid.UUID
+	ClassName       string
+	ClassColor      string
+	ArchivedAt      pgtype.Timestamptz
+	StartsAt        time.Time
+	EndsAt          time.Time
+	LocalDate       pgtype.Date
+	OriginLocalDate pgtype.Date
+	ScheduleRuleID  pgtype.UUID
+	SourceTimeZone  pgtype.Text
+	Version         int64
+	MovedAt         pgtype.Timestamptz
+	CancelledAt     pgtype.Timestamptz
+	SupersededAt    pgtype.Timestamptz
+	UpdatedAt       time.Time
+}
+
+func (q *Queries) ListReplacedScheduleSessions(ctx context.Context, arg ListReplacedScheduleSessionsParams) ([]ListReplacedScheduleSessionsRow, error) {
+	rows, err := q.db.Query(ctx, listReplacedScheduleSessions,
+		arg.TutorID,
+		arg.FromDate,
+		arg.ThroughDate,
+		arg.HasClassFilter,
+		arg.ClassIds,
+		arg.HasCursor,
+		arg.CursorOriginDate,
+		arg.CursorSessionID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListReplacedScheduleSessionsRow{}
+	for rows.Next() {
+		var i ListReplacedScheduleSessionsRow
+		if err := rows.Scan(
+			&i.SessionID,
+			&i.ClassID,
+			&i.ClassName,
+			&i.ClassColor,
+			&i.ArchivedAt,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.LocalDate,
+			&i.OriginLocalDate,
+			&i.ScheduleRuleID,
+			&i.SourceTimeZone,
+			&i.Version,
+			&i.MovedAt,
+			&i.CancelledAt,
+			&i.SupersededAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRetainedScheduleExceptions = `-- name: ListRetainedScheduleExceptions :many
+SELECT session_id, origin_local_date
+FROM sessions
+WHERE tutor_id = $1
+  AND class_id = $2
+  AND origin_local_date >= $3
+  AND superseded_at IS NULL
+  AND (moved_at IS NOT NULL OR cancelled_at IS NOT NULL)
+ORDER BY origin_local_date, session_id
+`
+
+type ListRetainedScheduleExceptionsParams struct {
+	TutorID         uuid.UUID
+	ClassID         uuid.UUID
+	OriginLocalDate pgtype.Date
+}
+
+type ListRetainedScheduleExceptionsRow struct {
+	SessionID       uuid.UUID
+	OriginLocalDate pgtype.Date
+}
+
+func (q *Queries) ListRetainedScheduleExceptions(ctx context.Context, arg ListRetainedScheduleExceptionsParams) ([]ListRetainedScheduleExceptionsRow, error) {
+	rows, err := q.db.Query(ctx, listRetainedScheduleExceptions, arg.TutorID, arg.ClassID, arg.OriginLocalDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRetainedScheduleExceptionsRow{}
+	for rows.Next() {
+		var i ListRetainedScheduleExceptionsRow
+		if err := rows.Scan(&i.SessionID, &i.OriginLocalDate); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRosterPeriods = `-- name: ListRosterPeriods :many
 SELECT class_id, student_id, effective_from, tutor_id, effective_to
 FROM roster_periods
@@ -1282,22 +1725,40 @@ const listScheduleRules = `-- name: ListScheduleRules :many
 SELECT schedule_rule_id, class_id, revision, valid_from, valid_through, time_zone,
        replaced_at, ended_at, retired_at
 FROM schedule_rules
-WHERE tutor_id = $1
-  AND valid_from <= $2
-  AND valid_through >= $3
+WHERE schedule_rules.tutor_id = $1
   AND (
-      NOT $4::boolean
-      OR class_id = ANY($5::uuid[])
+      NOT $2::boolean
+      OR schedule_rules.class_id = ANY($3::uuid[])
   )
-ORDER BY class_id, revision
+  AND (
+      (schedule_rules.valid_from <= $4
+       AND schedule_rules.valid_through >= $5)
+      OR schedule_rules.revision = (
+          SELECT max(latest.revision)
+          FROM schedule_rules latest
+          WHERE latest.tutor_id = schedule_rules.tutor_id
+            AND latest.class_id = schedule_rules.class_id
+      )
+      OR schedule_rules.schedule_rule_id IN (
+          SELECT session_rule.schedule_rule_id
+          FROM sessions session_rule
+          WHERE session_rule.tutor_id = schedule_rules.tutor_id
+            AND session_rule.schedule_rule_id IS NOT NULL
+            AND (
+                session_rule.origin_local_date BETWEEN $5 AND $4
+                OR session_rule.local_date BETWEEN $5 AND $4
+            )
+      )
+  )
+ORDER BY schedule_rules.class_id, schedule_rules.revision
 `
 
 type ListScheduleRulesParams struct {
 	TutorID        uuid.UUID
-	ThroughDate    pgtype.Date
-	FromDate       pgtype.Date
 	HasClassFilter bool
 	ClassIds       []uuid.UUID
+	ThroughDate    pgtype.Date
+	FromDate       pgtype.Date
 }
 
 type ListScheduleRulesRow struct {
@@ -1315,10 +1776,10 @@ type ListScheduleRulesRow struct {
 func (q *Queries) ListScheduleRules(ctx context.Context, arg ListScheduleRulesParams) ([]ListScheduleRulesRow, error) {
 	rows, err := q.db.Query(ctx, listScheduleRules,
 		arg.TutorID,
-		arg.ThroughDate,
-		arg.FromDate,
 		arg.HasClassFilter,
 		arg.ClassIds,
+		arg.ThroughDate,
+		arg.FromDate,
 	)
 	if err != nil {
 		return nil, err
@@ -1658,6 +2119,78 @@ func (q *Queries) LockOwnedClass(ctx context.Context, arg LockOwnedClassParams) 
 	return i, err
 }
 
+const moveOwnedSession = `-- name: MoveOwnedSession :one
+UPDATE sessions
+SET starts_at = $3,
+    ends_at = $4,
+    local_date = $5,
+    moved_at = $6,
+    version = version + 1,
+    updated_at = $6
+WHERE tutor_id = $1
+  AND session_id = $2
+  AND cancelled_at IS NULL
+  AND superseded_at IS NULL
+RETURNING session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+          schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+          created_at, updated_at, cancelled_at
+`
+
+type MoveOwnedSessionParams struct {
+	TutorID   uuid.UUID
+	SessionID uuid.UUID
+	StartsAt  time.Time
+	EndsAt    time.Time
+	LocalDate pgtype.Date
+	MovedAt   pgtype.Timestamptz
+}
+
+type MoveOwnedSessionRow struct {
+	SessionID       uuid.UUID
+	ClassID         uuid.UUID
+	TutorID         uuid.UUID
+	StartsAt        time.Time
+	EndsAt          time.Time
+	LocalDate       pgtype.Date
+	ScheduleRuleID  pgtype.UUID
+	OriginLocalDate pgtype.Date
+	Version         int64
+	MovedAt         pgtype.Timestamptz
+	SupersededAt    pgtype.Timestamptz
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	CancelledAt     pgtype.Timestamptz
+}
+
+func (q *Queries) MoveOwnedSession(ctx context.Context, arg MoveOwnedSessionParams) (MoveOwnedSessionRow, error) {
+	row := q.db.QueryRow(ctx, moveOwnedSession,
+		arg.TutorID,
+		arg.SessionID,
+		arg.StartsAt,
+		arg.EndsAt,
+		arg.LocalDate,
+		arg.MovedAt,
+	)
+	var i MoveOwnedSessionRow
+	err := row.Scan(
+		&i.SessionID,
+		&i.ClassID,
+		&i.TutorID,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.LocalDate,
+		&i.ScheduleRuleID,
+		&i.OriginLocalDate,
+		&i.Version,
+		&i.MovedAt,
+		&i.SupersededAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CancelledAt,
+	)
+	return i, err
+}
+
 const openRosterPeriod = `-- name: OpenRosterPeriod :exec
 INSERT INTO roster_periods (class_id, student_id, effective_from, tutor_id)
 VALUES ($1, $2, $3, $4)
@@ -1681,6 +2214,156 @@ func (q *Queries) OpenRosterPeriod(ctx context.Context, arg OpenRosterPeriodPara
 		arg.TutorID,
 	)
 	return err
+}
+
+const replaceScheduleRule = `-- name: ReplaceScheduleRule :one
+UPDATE schedule_rules
+SET valid_through = $4,
+    replaced_at = $5,
+    updated_at = $5
+WHERE tutor_id = $1
+  AND class_id = $2
+  AND schedule_rule_id = $3
+  AND retired_at IS NULL
+RETURNING schedule_rule_id, tutor_id, class_id, revision, valid_from, valid_through,
+          time_zone, created_at, updated_at, replaced_at, ended_at, retired_at
+`
+
+type ReplaceScheduleRuleParams struct {
+	TutorID        uuid.UUID
+	ClassID        uuid.UUID
+	ScheduleRuleID uuid.UUID
+	ValidThrough   pgtype.Date
+	ReplacedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) ReplaceScheduleRule(ctx context.Context, arg ReplaceScheduleRuleParams) (ScheduleRule, error) {
+	row := q.db.QueryRow(ctx, replaceScheduleRule,
+		arg.TutorID,
+		arg.ClassID,
+		arg.ScheduleRuleID,
+		arg.ValidThrough,
+		arg.ReplacedAt,
+	)
+	var i ScheduleRule
+	err := row.Scan(
+		&i.ScheduleRuleID,
+		&i.TutorID,
+		&i.ClassID,
+		&i.Revision,
+		&i.ValidFrom,
+		&i.ValidThrough,
+		&i.TimeZone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReplacedAt,
+		&i.EndedAt,
+		&i.RetiredAt,
+	)
+	return i, err
+}
+
+const restoreOwnedSession = `-- name: RestoreOwnedSession :one
+UPDATE sessions
+SET cancelled_at = NULL,
+    version = version + 1,
+    updated_at = $3
+WHERE tutor_id = $1
+  AND session_id = $2
+  AND cancelled_at IS NOT NULL
+  AND superseded_at IS NULL
+RETURNING session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+          schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+          created_at, updated_at, cancelled_at
+`
+
+type RestoreOwnedSessionParams struct {
+	TutorID   uuid.UUID
+	SessionID uuid.UUID
+	UpdatedAt time.Time
+}
+
+type RestoreOwnedSessionRow struct {
+	SessionID       uuid.UUID
+	ClassID         uuid.UUID
+	TutorID         uuid.UUID
+	StartsAt        time.Time
+	EndsAt          time.Time
+	LocalDate       pgtype.Date
+	ScheduleRuleID  pgtype.UUID
+	OriginLocalDate pgtype.Date
+	Version         int64
+	MovedAt         pgtype.Timestamptz
+	SupersededAt    pgtype.Timestamptz
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	CancelledAt     pgtype.Timestamptz
+}
+
+func (q *Queries) RestoreOwnedSession(ctx context.Context, arg RestoreOwnedSessionParams) (RestoreOwnedSessionRow, error) {
+	row := q.db.QueryRow(ctx, restoreOwnedSession, arg.TutorID, arg.SessionID, arg.UpdatedAt)
+	var i RestoreOwnedSessionRow
+	err := row.Scan(
+		&i.SessionID,
+		&i.ClassID,
+		&i.TutorID,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.LocalDate,
+		&i.ScheduleRuleID,
+		&i.OriginLocalDate,
+		&i.Version,
+		&i.MovedAt,
+		&i.SupersededAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CancelledAt,
+	)
+	return i, err
+}
+
+const retireScheduleRule = `-- name: RetireScheduleRule :one
+UPDATE schedule_rules
+SET retired_at = $4,
+    updated_at = $4
+WHERE tutor_id = $1
+  AND class_id = $2
+  AND schedule_rule_id = $3
+  AND retired_at IS NULL
+RETURNING schedule_rule_id, tutor_id, class_id, revision, valid_from, valid_through,
+          time_zone, created_at, updated_at, replaced_at, ended_at, retired_at
+`
+
+type RetireScheduleRuleParams struct {
+	TutorID        uuid.UUID
+	ClassID        uuid.UUID
+	ScheduleRuleID uuid.UUID
+	RetiredAt      pgtype.Timestamptz
+}
+
+func (q *Queries) RetireScheduleRule(ctx context.Context, arg RetireScheduleRuleParams) (ScheduleRule, error) {
+	row := q.db.QueryRow(ctx, retireScheduleRule,
+		arg.TutorID,
+		arg.ClassID,
+		arg.ScheduleRuleID,
+		arg.RetiredAt,
+	)
+	var i ScheduleRule
+	err := row.Scan(
+		&i.ScheduleRuleID,
+		&i.TutorID,
+		&i.ClassID,
+		&i.Revision,
+		&i.ValidFrom,
+		&i.ValidThrough,
+		&i.TimeZone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ReplacedAt,
+		&i.EndedAt,
+		&i.RetiredAt,
+	)
+	return i, err
 }
 
 const setClassScheduleRevision = `-- name: SetClassScheduleRevision :one
@@ -1736,6 +2419,88 @@ func (q *Queries) SetClassScheduleRevision(ctx context.Context, arg SetClassSche
 		&i.ArchivedAt,
 	)
 	return i, err
+}
+
+const supersedeUntouchedScheduleSessions = `-- name: SupersedeUntouchedScheduleSessions :many
+UPDATE sessions
+SET superseded_at = $1,
+    version = version + 1,
+    updated_at = $1
+WHERE tutor_id = $2
+  AND class_id = $3
+  AND schedule_rule_id IS NOT NULL
+  AND origin_local_date >= $4
+  AND starts_at >= $1
+  AND moved_at IS NULL
+  AND cancelled_at IS NULL
+  AND superseded_at IS NULL
+RETURNING session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+          schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+          created_at, updated_at, cancelled_at
+`
+
+type SupersedeUntouchedScheduleSessionsParams struct {
+	CommandTime  pgtype.Timestamptz
+	TutorID      uuid.UUID
+	ClassID      uuid.UUID
+	AffectedFrom pgtype.Date
+}
+
+type SupersedeUntouchedScheduleSessionsRow struct {
+	SessionID       uuid.UUID
+	ClassID         uuid.UUID
+	TutorID         uuid.UUID
+	StartsAt        time.Time
+	EndsAt          time.Time
+	LocalDate       pgtype.Date
+	ScheduleRuleID  pgtype.UUID
+	OriginLocalDate pgtype.Date
+	Version         int64
+	MovedAt         pgtype.Timestamptz
+	SupersededAt    pgtype.Timestamptz
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	CancelledAt     pgtype.Timestamptz
+}
+
+func (q *Queries) SupersedeUntouchedScheduleSessions(ctx context.Context, arg SupersedeUntouchedScheduleSessionsParams) ([]SupersedeUntouchedScheduleSessionsRow, error) {
+	rows, err := q.db.Query(ctx, supersedeUntouchedScheduleSessions,
+		arg.CommandTime,
+		arg.TutorID,
+		arg.ClassID,
+		arg.AffectedFrom,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SupersedeUntouchedScheduleSessionsRow{}
+	for rows.Next() {
+		var i SupersedeUntouchedScheduleSessionsRow
+		if err := rows.Scan(
+			&i.SessionID,
+			&i.ClassID,
+			&i.TutorID,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.LocalDate,
+			&i.ScheduleRuleID,
+			&i.OriginLocalDate,
+			&i.Version,
+			&i.MovedAt,
+			&i.SupersededAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CancelledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const upsertAttendance = `-- name: UpsertAttendance :one

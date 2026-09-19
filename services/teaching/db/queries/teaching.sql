@@ -145,6 +145,27 @@ FROM sessions
 WHERE tutor_id = $1
   AND session_id = $2;
 
+-- name: GetOwnedSessionForUpdate :one
+SELECT session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+       schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+       created_at, updated_at, cancelled_at
+FROM sessions
+WHERE tutor_id = $1
+  AND session_id = $2
+FOR UPDATE;
+
+-- name: GetSessionSourceRule :one
+SELECT r.schedule_rule_id, r.tutor_id, r.class_id, r.revision, r.valid_from,
+       r.valid_through, r.time_zone, r.created_at, r.updated_at,
+       r.replaced_at, r.ended_at, r.retired_at
+FROM schedule_rules r
+JOIN sessions s
+  ON s.tutor_id = r.tutor_id
+ AND s.class_id = r.class_id
+ AND s.schedule_rule_id = r.schedule_rule_id
+WHERE s.tutor_id = $1
+  AND s.session_id = $2;
+
 -- name: GetOwnedStudent :one
 SELECT student_id, tutor_id, name, phone, created_at, updated_at, removed_at
 FROM students
@@ -239,6 +260,134 @@ WHERE tutor_id = $1
 ORDER BY revision DESC
 LIMIT 1;
 
+-- name: ListOwnedScheduleRulesForUpdate :many
+SELECT schedule_rule_id, tutor_id, class_id, revision, valid_from, valid_through,
+       time_zone, created_at, updated_at, replaced_at, ended_at, retired_at
+FROM schedule_rules
+WHERE tutor_id = $1
+  AND class_id = $2
+ORDER BY revision DESC
+FOR UPDATE;
+
+-- name: RetireScheduleRule :one
+UPDATE schedule_rules
+SET retired_at = $4,
+    updated_at = $4
+WHERE tutor_id = $1
+  AND class_id = $2
+  AND schedule_rule_id = $3
+  AND retired_at IS NULL
+RETURNING schedule_rule_id, tutor_id, class_id, revision, valid_from, valid_through,
+          time_zone, created_at, updated_at, replaced_at, ended_at, retired_at;
+
+-- name: ReplaceScheduleRule :one
+UPDATE schedule_rules
+SET valid_through = $4,
+    replaced_at = $5,
+    updated_at = $5
+WHERE tutor_id = $1
+  AND class_id = $2
+  AND schedule_rule_id = $3
+  AND retired_at IS NULL
+RETURNING schedule_rule_id, tutor_id, class_id, revision, valid_from, valid_through,
+          time_zone, created_at, updated_at, replaced_at, ended_at, retired_at;
+
+-- name: EndScheduleRule :one
+UPDATE schedule_rules
+SET valid_through = $4,
+    ended_at = $5,
+    updated_at = $5
+WHERE tutor_id = $1
+  AND class_id = $2
+  AND schedule_rule_id = $3
+  AND retired_at IS NULL
+RETURNING schedule_rule_id, tutor_id, class_id, revision, valid_from, valid_through,
+          time_zone, created_at, updated_at, replaced_at, ended_at, retired_at;
+
+-- name: ListRetainedScheduleExceptions :many
+SELECT session_id, origin_local_date
+FROM sessions
+WHERE tutor_id = $1
+  AND class_id = $2
+  AND origin_local_date >= $3
+  AND superseded_at IS NULL
+  AND (moved_at IS NOT NULL OR cancelled_at IS NOT NULL)
+ORDER BY origin_local_date, session_id;
+
+-- name: SupersedeUntouchedScheduleSessions :many
+UPDATE sessions
+SET superseded_at = sqlc.arg(command_time),
+    version = version + 1,
+    updated_at = sqlc.arg(command_time)
+WHERE tutor_id = sqlc.arg(tutor_id)
+  AND class_id = sqlc.arg(class_id)
+  AND schedule_rule_id IS NOT NULL
+  AND origin_local_date >= sqlc.arg(affected_from)
+  AND starts_at >= sqlc.arg(command_time)
+  AND moved_at IS NULL
+  AND cancelled_at IS NULL
+  AND superseded_at IS NULL
+RETURNING session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+          schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+          created_at, updated_at, cancelled_at;
+
+-- name: MoveOwnedSession :one
+UPDATE sessions
+SET starts_at = $3,
+    ends_at = $4,
+    local_date = $5,
+    moved_at = $6,
+    version = version + 1,
+    updated_at = $6
+WHERE tutor_id = $1
+  AND session_id = $2
+  AND cancelled_at IS NULL
+  AND superseded_at IS NULL
+RETURNING session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+          schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+          created_at, updated_at, cancelled_at;
+
+-- name: CancelOwnedSession :one
+UPDATE sessions
+SET cancelled_at = $3,
+    version = version + 1,
+    updated_at = $3
+WHERE tutor_id = $1
+  AND session_id = $2
+  AND cancelled_at IS NULL
+  AND superseded_at IS NULL
+RETURNING session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+          schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+          created_at, updated_at, cancelled_at;
+
+-- name: RestoreOwnedSession :one
+UPDATE sessions
+SET cancelled_at = NULL,
+    version = version + 1,
+    updated_at = $3
+WHERE tutor_id = $1
+  AND session_id = $2
+  AND cancelled_at IS NOT NULL
+  AND superseded_at IS NULL
+RETURNING session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+          schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+          created_at, updated_at, cancelled_at;
+
+-- name: FindOwnedSessionConflict :one
+SELECT s.session_id, c.name AS class_name, s.starts_at, s.ends_at
+FROM sessions s
+JOIN classes c
+  ON c.tutor_id = s.tutor_id
+ AND c.class_id = s.class_id
+WHERE s.tutor_id = sqlc.arg(tutor_id)
+  AND s.session_id <> sqlc.arg(excluded_session_id)
+  AND s.cancelled_at IS NULL
+  AND s.superseded_at IS NULL
+  AND tstzrange(s.starts_at, s.ends_at, '[)')
+      && tstzrange(sqlc.arg(starts_at)::timestamptz, sqlc.arg(ends_at)::timestamptz, '[)')
+ORDER BY s.starts_at, s.session_id
+LIMIT 1;
+
 -- name: ListScheduleClasses :many
 SELECT class_id, name, color, schedule_revision, archived_at
 FROM classes
@@ -250,14 +399,32 @@ ORDER BY name, class_id;
 SELECT schedule_rule_id, class_id, revision, valid_from, valid_through, time_zone,
        replaced_at, ended_at, retired_at
 FROM schedule_rules
-WHERE tutor_id = sqlc.arg(tutor_id)
-  AND valid_from <= sqlc.arg(through_date)
-  AND valid_through >= sqlc.arg(from_date)
+WHERE schedule_rules.tutor_id = sqlc.arg(tutor_id)
   AND (
       NOT sqlc.arg(has_class_filter)::boolean
-      OR class_id = ANY(sqlc.arg(class_ids)::uuid[])
+      OR schedule_rules.class_id = ANY(sqlc.arg(class_ids)::uuid[])
   )
-ORDER BY class_id, revision;
+  AND (
+      (schedule_rules.valid_from <= sqlc.arg(through_date)
+       AND schedule_rules.valid_through >= sqlc.arg(from_date))
+      OR schedule_rules.revision = (
+          SELECT max(latest.revision)
+          FROM schedule_rules latest
+          WHERE latest.tutor_id = schedule_rules.tutor_id
+            AND latest.class_id = schedule_rules.class_id
+      )
+      OR schedule_rules.schedule_rule_id IN (
+          SELECT session_rule.schedule_rule_id
+          FROM sessions session_rule
+          WHERE session_rule.tutor_id = schedule_rules.tutor_id
+            AND session_rule.schedule_rule_id IS NOT NULL
+            AND (
+                session_rule.origin_local_date BETWEEN sqlc.arg(from_date) AND sqlc.arg(through_date)
+                OR session_rule.local_date BETWEEN sqlc.arg(from_date) AND sqlc.arg(through_date)
+            )
+      )
+  )
+ORDER BY schedule_rules.class_id, schedule_rules.revision;
 
 -- name: ListScheduleSlots :many
 SELECT schedule_rule_id, weekday,
@@ -290,6 +457,35 @@ WHERE s.tutor_id = sqlc.arg(tutor_id)
       OR s.class_id = ANY(sqlc.arg(class_ids)::uuid[])
   )
 ORDER BY s.starts_at, s.session_id;
+
+-- name: ListReplacedScheduleSessions :many
+SELECT s.session_id, s.class_id, c.name AS class_name, c.color AS class_color,
+       c.archived_at, s.starts_at, s.ends_at, s.local_date, s.origin_local_date,
+       s.schedule_rule_id, r.time_zone AS source_time_zone, s.version,
+       s.moved_at, s.cancelled_at, s.superseded_at, s.updated_at
+FROM sessions s
+JOIN classes c
+  ON c.tutor_id = s.tutor_id
+ AND c.class_id = s.class_id
+LEFT JOIN schedule_rules r
+  ON r.tutor_id = s.tutor_id
+ AND r.class_id = s.class_id
+ AND r.schedule_rule_id = s.schedule_rule_id
+WHERE s.tutor_id = sqlc.arg(tutor_id)
+  AND s.origin_local_date >= sqlc.arg(from_date)
+  AND s.origin_local_date <= sqlc.arg(through_date)
+  AND s.superseded_at IS NOT NULL
+  AND (
+      NOT sqlc.arg(has_class_filter)::boolean
+      OR s.class_id = ANY(sqlc.arg(class_ids)::uuid[])
+  )
+  AND (
+      NOT sqlc.arg(has_cursor)::boolean
+      OR (s.origin_local_date, s.session_id) >
+         (sqlc.arg(cursor_origin_date)::date, sqlc.arg(cursor_session_id)::uuid)
+  )
+ORDER BY s.origin_local_date, s.session_id
+LIMIT sqlc.arg(page_size);
 
 -- ListSessionConflicts is the read only upgrade report. Each conflicting pair
 -- appears once in stable tutor, time, and identifier order.

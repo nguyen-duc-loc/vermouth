@@ -84,6 +84,11 @@ func (h *Handler) PutSchedule(
 	if found || replayErr != nil {
 		return result, status, replayErr
 	}
+	if input.ExpectedRevision > 0 {
+		return h.replaceSchedule(
+			ctx, tutorID, classID, timezone, idempotencyKey, input, requestHash[:],
+		)
+	}
 	commandTime := h.now().UTC()
 	location, err := time.LoadLocation(timezone)
 	if err != nil {
@@ -146,7 +151,7 @@ func (h *Handler) PutSchedule(
 		return PutScheduleResult{}, 0, fmt.Errorf("claim put schedule receipt: %w", err)
 	}
 	if classRow.ScheduleRevision != input.ExpectedRevision || classRow.ScheduleRevision != 0 {
-		return PutScheduleResult{}, 0, ErrConflict
+		return PutScheduleResult{}, 0, staleScheduleError(classID, classRow.ScheduleRevision, nil)
 	}
 	nextRevision := classRow.ScheduleRevision + 1
 	_, err = queries.InsertScheduleRule(ctx, sqlcgen.InsertScheduleRuleParams{
@@ -198,7 +203,10 @@ func (h *Handler) PutSchedule(
 		})
 		if insertErr != nil {
 			if constraintConflict(insertErr) {
-				return PutScheduleResult{}, 0, ErrConflict
+				h.rollback(ctx, tx)
+				return PutScheduleResult{}, 0, h.committedOverlapError(
+					ctx, tutorID, uuid.Nil, occurrence.startsAt, occurrence.endsAt, timezone,
+				)
 			}
 			return PutScheduleResult{}, 0, fmt.Errorf("insert scheduled session: %w", insertErr)
 		}

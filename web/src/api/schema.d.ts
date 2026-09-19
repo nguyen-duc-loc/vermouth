@@ -191,6 +191,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/classes/{class_id}/schedule/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** End the latest retained weekly schedule */
+        post: operations["endClassSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Move one active session */
+        post: operations["moveSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel one active session */
+        post: operations["cancelSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore one tutor cancelled session */
+        post: operations["restoreSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/schedule": {
         parameters: {
             query?: never;
@@ -304,6 +372,9 @@ export interface components {
                 code: string;
                 message: string;
                 request_id: string;
+                details?: {
+                    [key: string]: unknown;
+                };
             };
         };
         Health: {
@@ -423,6 +494,61 @@ export interface components {
             superseded_count: number;
             preserved_count: number;
         };
+        EndScheduleRequest: {
+            /** Format: int64 */
+            expected_revision: number;
+            /** Format: date */
+            last_date: string;
+        };
+        EndScheduleResponse: {
+            class: components["schemas"]["Class"];
+            rule: components["schemas"]["ScheduleRuleSummary"];
+            superseded_count: number;
+            preserved_count: number;
+        };
+        SessionVersionRequest: {
+            /** Format: int64 */
+            expected_version: number;
+        };
+        MoveSessionRequest: {
+            /** Format: int64 */
+            expected_version: number;
+            /** Format: date */
+            local_date: string;
+            start_time: components["schemas"]["LocalTime"];
+            end_time: components["schemas"]["LocalTime"];
+        };
+        CanonicalSession: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            class_id: string;
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            /** Format: date */
+            local_date: string;
+            /** Format: date */
+            origin_local_date: string;
+            /** Format: uuid */
+            schedule_rule_id: string | null;
+            source_time_zone: string | null;
+            display_time_zone: string;
+            start_utc_offset: string;
+            end_utc_offset: string;
+            /** Format: int64 */
+            version: number;
+            state: components["schemas"]["ScheduleSessionState"];
+            /** Format: date-time */
+            moved_at: string | null;
+            /** Format: date-time */
+            cancelled_at: string | null;
+            /** Format: date-time */
+            superseded_at: string | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
         /** @enum {string} */
         ScheduleRuleState: "planned" | "active" | "completed" | "replaced" | "ended" | "retired";
         ScheduleRuleSummary: {
@@ -504,6 +630,7 @@ export interface components {
             classes: components["schemas"]["ScheduleClass"][];
             rules: components["schemas"]["ScheduleRuleSummary"][];
             sessions: components["schemas"]["ScheduleSession"][];
+            replaced_history: components["schemas"]["ScheduleSession"][];
             next_history_cursor: string | null;
         };
         CreateStudentRequest: {
@@ -993,6 +1120,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description A replacement rule was created or the original response was replayed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PutScheduleResponse"];
+                };
+            };
             /** @description The first retained schedule rule and concrete sessions */
             201: {
                 headers: {
@@ -1008,12 +1144,145 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    endClassSchedule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                class_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EndScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description The schedule was ended or the original response was replayed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EndScheduleResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    moveSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description The moved canonical session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalSession"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    cancelSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description The cancelled canonical session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalSession"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    restoreSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description The restored canonical session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalSession"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     getSchedule: {
         parameters: {
             query: {
                 from: string;
                 through: string;
                 class_id?: string[];
+                include_replaced?: boolean;
+                history_limit?: number;
+                history_cursor?: string;
             };
             header?: never;
             path?: never;

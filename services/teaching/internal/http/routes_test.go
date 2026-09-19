@@ -116,7 +116,7 @@ func TestWriteHandlerError_MapsDomainOutcomesWithoutLeakingDetails(t *testing.T)
 		{"validation", &handler.ValidationError{Field: "name", Message: "is required"}, stdhttp.StatusBadRequest, "invalid_input"},
 		{"missing owned resource", handler.ErrNotFound, stdhttp.StatusNotFound, "not_found"},
 		{"state conflict", handler.ErrConflict, stdhttp.StatusConflict, "conflict"},
-		{"idempotency conflict", handler.ErrIdempotencyConflict, stdhttp.StatusConflict, "conflict"},
+		{"idempotency conflict", handler.ErrIdempotencyConflict, stdhttp.StatusConflict, "idempotency_conflict"},
 		{"internal failure", errSensitiveRouteFailure, stdhttp.StatusInternalServerError, "internal"},
 	}
 

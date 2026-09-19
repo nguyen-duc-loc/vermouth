@@ -17,6 +17,15 @@ var ErrConflict = errors.New("teaching state conflict")
 // ErrIdempotencyConflict reports a command key reused for different validated input.
 var ErrIdempotencyConflict = errors.New("idempotency key names different input")
 
+// ConflictError carries one stable conflict code and only owned recovery data.
+type ConflictError struct {
+	Code    string
+	Message string
+	Details any
+}
+
+func (e *ConflictError) Error() string { return e.Message }
+
 // ValidationError identifies one caller controlled field that failed its
 // confirmed contract.
 type ValidationError struct {
@@ -78,6 +87,28 @@ type Session struct {
 	StartsAt  time.Time `json:"starts_at"`
 	EndsAt    time.Time `json:"ends_at"`
 	LocalDate string    `json:"local_date"`
+}
+
+// CanonicalSession is one owned session after a mutation, including its
+// optimistic version and rule origin.
+type CanonicalSession struct {
+	SessionID       uuid.UUID  `json:"session_id"`
+	ClassID         uuid.UUID  `json:"class_id"`
+	StartsAt        time.Time  `json:"starts_at"`
+	EndsAt          time.Time  `json:"ends_at"`
+	LocalDate       string     `json:"local_date"`
+	OriginLocalDate string     `json:"origin_local_date"`
+	ScheduleRuleID  *uuid.UUID `json:"schedule_rule_id"`
+	SourceTimeZone  *string    `json:"source_time_zone"`
+	DisplayTimeZone string     `json:"display_time_zone"`
+	StartUTCOffset  string     `json:"start_utc_offset"`
+	EndUTCOffset    string     `json:"end_utc_offset"`
+	Version         int64      `json:"version"`
+	State           string     `json:"state"`
+	MovedAt         *time.Time `json:"moved_at"`
+	CancelledAt     *time.Time `json:"cancelled_at"`
+	SupersededAt    *time.Time `json:"superseded_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 // CreateClassResult keeps the first session beside the aggregate that created
@@ -149,6 +180,7 @@ type Schedule struct {
 	Classes           []ScheduleClass       `json:"classes"`
 	Rules             []ScheduleRuleSummary `json:"rules"`
 	Sessions          []ScheduleSession     `json:"sessions"`
+	ReplacedHistory   []ScheduleSession     `json:"replaced_history"`
 	NextHistoryCursor *string               `json:"next_history_cursor"`
 }
 

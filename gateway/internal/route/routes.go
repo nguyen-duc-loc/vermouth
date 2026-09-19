@@ -88,6 +88,10 @@ func Mux(deps Deps) http.Handler {
 
 	authenticated.HandleFunc("POST /api/classes", proxyCreateClass(deps))
 	authenticated.HandleFunc("PUT /api/classes/{class_id}/schedule", proxyPutSchedule(deps))
+	authenticated.HandleFunc("POST /api/classes/{class_id}/schedule/end", proxyEndSchedule(deps))
+	authenticated.HandleFunc("POST /api/sessions/{session_id}/move", proxyMoveSession(deps))
+	authenticated.HandleFunc("POST /api/sessions/{session_id}/cancel", proxyCancelSession(deps))
+	authenticated.HandleFunc("POST /api/sessions/{session_id}/restore", proxyRestoreSession(deps))
 	authenticated.HandleFunc("POST /api/students", proxyCreateStudent(deps))
 	authenticated.HandleFunc("POST /api/classes/{class_id}/roster", proxyJoinRoster(deps))
 	authenticated.HandleFunc(
@@ -101,6 +105,72 @@ func Mux(deps Deps) http.Handler {
 	mux.Handle("/api/", auth.Middleware(deps.Verifier, deps.Logger, authenticated))
 
 	return vermouth.RequestIDMiddleware(deps.Logger, mux)
+}
+
+func proxyEndSchedule(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		classID, err := uuid.Parse(r.PathValue("class_id"))
+		if err != nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "class_id must be a UUID")
+			return
+		}
+		var input apitypes.EndScheduleRequest
+		if !decodeJSONBody(w, r, &input) {
+			return
+		}
+		proxyTeachingCommand(deps, w, r, "/classes/"+classID.String()+"/schedule/end", input)
+	}
+}
+
+func proxyMoveSession(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID, err := uuid.Parse(r.PathValue("session_id"))
+		if err != nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "session_id must be a UUID")
+			return
+		}
+		var input apitypes.MoveSessionRequest
+		if !decodeJSONBody(w, r, &input) {
+			return
+		}
+		proxyTeachingCommand(deps, w, r, "/sessions/"+sessionID.String()+"/move", input)
+	}
+}
+
+func proxyCancelSession(deps Deps) http.HandlerFunc {
+	return proxySessionVersionCommand(deps, "cancel")
+}
+
+func proxyRestoreSession(deps Deps) http.HandlerFunc {
+	return proxySessionVersionCommand(deps, "restore")
+}
+
+func proxySessionVersionCommand(deps Deps, action string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID, err := uuid.Parse(r.PathValue("session_id"))
+		if err != nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "session_id must be a UUID")
+			return
+		}
+		var input apitypes.SessionVersionRequest
+		if !decodeJSONBody(w, r, &input) {
+			return
+		}
+		proxyTeachingCommand(deps, w, r, "/sessions/"+sessionID.String()+"/"+action, input)
+	}
+}
+
+func proxyTeachingCommand(deps Deps, w http.ResponseWriter, r *http.Request, path string, input any) {
+	response, err := deps.Client.CallWithHeaders(
+		r.Context(), http.MethodPost, deps.Client.Upstreams().Teaching, path,
+		vermouth.BearerToken(r),
+		http.Header{idempotencyHeader: []string{r.Header.Get(idempotencyHeader)}}, input,
+	)
+	if err != nil {
+		upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)
+		return
+	}
+	passThrough(r.Context(), deps.Logger, w, response)
 }
 
 func proxyPutSchedule(deps Deps) http.HandlerFunc {

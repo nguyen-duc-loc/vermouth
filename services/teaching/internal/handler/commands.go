@@ -73,6 +73,12 @@ type sessionScheduledFields struct {
 	LocalDate string    `json:"local_date"`
 }
 
+type sessionCancelledFields struct {
+	SessionID uuid.UUID `json:"session_id"`
+	ClassID   uuid.UUID `json:"class_id"`
+	TutorID   uuid.UUID `json:"tutor_id"`
+}
+
 type studentRegisteredFields struct {
 	StudentID uuid.UUID `json:"student_id"`
 	TutorID   uuid.UUID `json:"tutor_id"`
@@ -275,7 +281,10 @@ func (h *Handler) CreateClass(
 		})
 		if insertErr != nil {
 			if constraintConflict(insertErr) {
-				return CreateClassResult{}, false, ErrConflict
+				h.rollback(ctx, tx)
+				return CreateClassResult{}, false, h.committedOverlapError(
+					ctx, tutorID, uuid.Nil, occurrence.startsAt, occurrence.endsAt, timezone,
+				)
 			}
 			return CreateClassResult{}, false, fmt.Errorf("insert class session: %w", insertErr)
 		}
