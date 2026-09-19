@@ -180,6 +180,11 @@ export function TeachingSetupSheet({
           },
           draft.classKey,
         )
+        if (!result.first_session) {
+          throw new Error(
+            'Teaching created the class without its requested first session. Try again.',
+          )
+        }
         const next: TeachingDraft = {
           ...draft,
           step: 'student',

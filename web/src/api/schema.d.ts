@@ -174,6 +174,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one bounded tutor calendar window */
+        get: operations["getSchedule"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/students": {
         parameters: {
             query?: never;
@@ -315,12 +332,26 @@ export interface components {
             start_time: components["schemas"]["LocalTime"];
             end_time: components["schemas"]["LocalTime"];
         };
+        WeeklyScheduleSlotInput: {
+            weekday: number;
+            start_time: components["schemas"]["LocalTime"];
+            end_time: components["schemas"]["LocalTime"];
+        };
+        WeeklyScheduleInput: {
+            /** Format: date */
+            valid_from: string;
+            /** Format: date */
+            valid_through: string;
+            slots: components["schemas"]["WeeklyScheduleSlotInput"][];
+        };
+        /** @description Exactly one of first_session or schedule is required. */
         CreateClassRequest: {
             name: string;
             color?: components["schemas"]["ClassColor"] | null;
             /** Format: int64 */
             rate_amount: number;
-            first_session: components["schemas"]["FirstSessionInput"];
+            first_session?: components["schemas"]["FirstSessionInput"];
+            schedule?: components["schemas"]["WeeklyScheduleInput"];
         };
         Class: {
             /** Format: uuid */
@@ -333,6 +364,8 @@ export interface components {
             currency: "VND";
             /** Format: date */
             rate_effective_from: string;
+            /** Format: int64 */
+            schedule_revision: number;
         };
         TeachingSession: {
             /** Format: uuid */
@@ -348,7 +381,94 @@ export interface components {
         };
         CreateClassResponse: {
             class: components["schemas"]["Class"];
-            first_session: components["schemas"]["TeachingSession"];
+            first_session: components["schemas"]["TeachingSession"] | null;
+            rule: components["schemas"]["ScheduleRuleSummary"] | null;
+            candidate_count: number;
+            created_count: number;
+            adopted_count: number;
+        };
+        /** @enum {string} */
+        ScheduleRuleState: "planned" | "active" | "completed" | "replaced" | "ended" | "retired";
+        ScheduleRuleSummary: {
+            /** Format: uuid */
+            schedule_rule_id: string;
+            /** Format: uuid */
+            class_id: string;
+            /** Format: int64 */
+            revision: number;
+            /** Format: date */
+            valid_from: string;
+            /** Format: date */
+            valid_through: string;
+            time_zone: string;
+            state: components["schemas"]["ScheduleRuleState"];
+            slots: components["schemas"]["WeeklyScheduleSlotInput"][];
+            /** Format: date-time */
+            replaced_at: string | null;
+            /** Format: date-time */
+            ended_at: string | null;
+            /** Format: date-time */
+            retired_at: string | null;
+        };
+        ScheduleClass: {
+            /** Format: uuid */
+            class_id: string;
+            name: string;
+            color: components["schemas"]["ClassColor"];
+            /** Format: int64 */
+            schedule_revision: number;
+        };
+        /** @enum {string} */
+        ScheduleSessionState: "active" | "cancelled" | "replaced";
+        ScheduleSession: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            class_id: string;
+            class_name: string;
+            class_color: components["schemas"]["ClassColor"];
+            class_archived: boolean;
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            /** Format: date */
+            display_date: string;
+            display_start: components["schemas"]["LocalTime"];
+            display_end: components["schemas"]["LocalTime"];
+            start_utc_offset: string;
+            end_utc_offset: string;
+            /** Format: date */
+            local_date: string;
+            /** Format: date */
+            origin_local_date: string;
+            /** Format: uuid */
+            schedule_rule_id: string | null;
+            source_time_zone: string | null;
+            /** Format: int64 */
+            version: number;
+            state: components["schemas"]["ScheduleSessionState"];
+            /** Format: date-time */
+            moved_at: string | null;
+            /** Format: date-time */
+            cancelled_at: string | null;
+            /** Format: date-time */
+            superseded_at: string | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        Schedule: {
+            /** Format: uuid */
+            tutor_id: string;
+            request_time_zone: string;
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            through: string;
+            classes: components["schemas"]["ScheduleClass"][];
+            rules: components["schemas"]["ScheduleRuleSummary"][];
+            sessions: components["schemas"]["ScheduleSession"][];
+            next_history_cursor: string | null;
         };
         CreateStudentRequest: {
             name: string;
@@ -817,6 +937,32 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthenticated"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    getSchedule: {
+        parameters: {
+            query: {
+                from: string;
+                through: string;
+                class_id?: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The owned classes, rules, and concrete sessions in the display window */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Schedule"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
         };
     };
     createStudent: {

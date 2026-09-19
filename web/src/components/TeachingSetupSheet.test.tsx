@@ -20,6 +20,7 @@ const classResult = {
     rate_amount: 250_000,
     currency: 'VND' as const,
     rate_effective_from: '2026-08-30',
+    schedule_revision: 0,
   },
   first_session: {
     session_id: 'session-1',
@@ -28,6 +29,10 @@ const classResult = {
     ends_at: '2026-08-30T04:00:00Z',
     local_date: '2026-08-30',
   },
+  rule: null,
+  candidate_count: 1,
+  created_count: 1,
+  adopted_count: 0,
 }
 
 function sheetProps(overrides: Partial<TeachingSetupSheetProps> = {}): TeachingSetupSheetProps {

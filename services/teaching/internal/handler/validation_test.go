@@ -13,6 +13,10 @@ import (
 
 var errValidationTest = errors.New("validation test failure")
 
+func validationTestNow() time.Time {
+	return time.Date(2026, time.August, 30, 2, 0, 0, 0, time.UTC)
+}
+
 func validClassInput() CreateClassInput {
 	return CreateClassInput{
 		Name:       " Maths 9A ",
@@ -33,13 +37,13 @@ func TestValidateClassInput_AcceptsTrimmedNamesRateBoundariesAndLocalTime(t *tes
 		input := validClassInput()
 		input.RateAmount = rate
 
-		validated, err := validateClassInput(input, "Asia/Ho_Chi_Minh")
+		validated, err := validateClassInput(input, "Asia/Ho_Chi_Minh", validationTestNow())
 
 		require.NoError(t, err)
 		require.Equal(t, "Maths 9A", validated.name)
 		require.Equal(t, rate, validated.rateAmount)
-		require.Equal(t, time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC), validated.startsAt)
-		require.Equal(t, time.Date(2026, time.August, 30, 4, 0, 0, 0, time.UTC), validated.endsAt)
+		require.Equal(t, time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC), validated.first.startsAt)
+		require.Equal(t, time.Date(2026, time.August, 30, 4, 0, 0, 0, time.UTC), validated.first.endsAt)
 	}
 }
 
@@ -70,7 +74,7 @@ func TestValidateClassInput_RejectsInvalidCallerValues(t *testing.T) {
 			input := validClassInput()
 			test.change(&input)
 
-			_, err := validateClassInput(input, "Asia/Ho_Chi_Minh")
+			_, err := validateClassInput(input, "Asia/Ho_Chi_Minh", validationTestNow())
 
 			var validation *ValidationError
 			require.ErrorAs(t, err, &validation)
@@ -101,7 +105,7 @@ func TestValidateClassInput_RejectsMissingAndRepeatedClockReadings(t *testing.T)
 			input.FirstSession.StartTime = test.startTime
 			input.FirstSession.EndTime = "04:00"
 
-			_, err := validateClassInput(input, "America/New_York")
+			_, err := validateClassInput(input, "America/New_York", validationTestNow())
 
 			var validation *ValidationError
 			require.ErrorAs(t, err, &validation)
@@ -158,13 +162,13 @@ func TestValidateStudentInput_NormalizesOnlyTheDocumentedFields(t *testing.T) {
 func TestCommandHashes_NameTheValidatedCommandAndTimezone(t *testing.T) {
 	t.Parallel()
 
-	first, err := validateClassInput(validClassInput(), "Asia/Ho_Chi_Minh")
+	first, err := validateClassInput(validClassInput(), "Asia/Ho_Chi_Minh", validationTestNow())
 	require.NoError(t, err)
 	sameInput := validClassInput()
 	sameInput.Name = "Maths 9A"
-	same, err := validateClassInput(sameInput, "Asia/Ho_Chi_Minh")
+	same, err := validateClassInput(sameInput, "Asia/Ho_Chi_Minh", validationTestNow())
 	require.NoError(t, err)
-	otherTimezone, err := validateClassInput(validClassInput(), "UTC")
+	otherTimezone, err := validateClassInput(validClassInput(), "UTC", validationTestNow())
 	require.NoError(t, err)
 
 	firstHash, err := classRequestHash(first)

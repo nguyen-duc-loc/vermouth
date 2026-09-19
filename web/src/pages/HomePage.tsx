@@ -54,7 +54,10 @@ const appearanceText: AppearancePanelText = {
   },
 }
 
-const destinations: readonly AppDestination[] = [{ href: '/', label: 'Home', icon: Home }]
+const destinations: readonly AppDestination[] = [
+  { href: '/', label: 'Home', icon: Home },
+  { href: '/schedule', label: 'Schedule', icon: CalendarDays },
+]
 
 /** Opens the tutor's local day with setup, attendance, and isolated projection progress. */
 export function HomePage() {

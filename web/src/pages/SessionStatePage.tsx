@@ -8,6 +8,9 @@ import { Button } from '../components/ui/button'
 import { Card, CardContent, CardHeader } from '../components/ui/card'
 
 const HomePage = lazy(() => import('./HomePage').then((module) => ({ default: module.HomePage })))
+const SchedulePage = lazy(() =>
+  import('./SchedulePage').then((module) => ({ default: module.SchedulePage })),
+)
 
 /** Keeps protected content behind the current session state. */
 export function ProtectedHomePage() {
@@ -30,6 +33,29 @@ export function ProtectedHomePage() {
     return (
       <Suspense fallback={<OpeningHomePage />}>
         <HomePage />
+      </Suspense>
+    )
+  }
+  return null
+}
+
+/** Keeps the calendar behind the same verified session boundary as home. */
+export function ProtectedSchedulePage() {
+  const session = useSession()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (session.status === 'anonymous') {
+      void navigate({ to: '/signin', search: { redirect: '/schedule' } })
+    }
+  }, [navigate, session.status])
+
+  if (session.status === 'checking') return <CheckingSession />
+  if (session.status === 'unavailable') return <UnavailableSession message={session.message} />
+  if (session.status === 'authenticated') {
+    return (
+      <Suspense fallback={<OpeningHomePage />}>
+        <SchedulePage />
       </Suspense>
     )
   }

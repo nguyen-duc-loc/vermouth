@@ -79,7 +79,7 @@ function home(overrides: Partial<HomeData> = {}): HomeData {
     },
     request_time_zone: 'Asia/Ho_Chi_Minh',
     local_date: '2026-08-30',
-    next_local_midnight_at: '2026-08-30T17:00:00Z',
+    next_local_midnight_at: new Date(Date.now() + 86_400_000).toISOString(),
     setup_defaults: {
       local_date: '2026-08-30',
       start_time: '10:00',

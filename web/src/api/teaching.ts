@@ -17,7 +17,10 @@ export type JoinRosterInput = components['schemas']['JoinRosterRequest']
 export type MarkAttendanceInput = components['schemas']['MarkAttendanceRequest']
 export type RosterPeriod = components['schemas']['RosterPeriod']
 export type SetupDefaults = components['schemas']['SetupDefaults']
+export type Schedule = components['schemas']['Schedule']
+export type ScheduleSession = components['schemas']['ScheduleSession']
 export type Student = components['schemas']['Student']
+export type Tutor = components['schemas']['Tutor']
 
 function errorMessage(error: unknown, fallback: string) {
   const shaped = error as ApiError | undefined
@@ -43,6 +46,36 @@ export async function readBillingProjection(signal?: AbortSignal): Promise<HomeB
   if (error || !data) {
     throw new Error(errorMessage(error, 'the gateway could not read billing progress'))
   }
+  return data
+}
+
+export async function readTutor(signal?: AbortSignal): Promise<Tutor> {
+  const { data, error } = await withProtectedRetry(() =>
+    api.GET('/api/me', { headers: authHeaders(), signal }),
+  )
+  if (error || !data) throw new Error(errorMessage(error, 'the gateway could not read the tutor'))
+  return data
+}
+
+export async function readSchedule(
+  input: { from: string; through: string; classIds: string[] },
+  signal?: AbortSignal,
+): Promise<Schedule> {
+  const { data, error } = await withProtectedRetry(() =>
+    api.GET('/api/schedule', {
+      headers: authHeaders(),
+      params: {
+        query: {
+          from: input.from,
+          through: input.through,
+          class_id: input.classIds.length > 0 ? input.classIds : undefined,
+        },
+      },
+      signal,
+    }),
+  )
+  if (error || !data)
+    throw new Error(errorMessage(error, 'the gateway could not read the schedule'))
   return data
 }
 

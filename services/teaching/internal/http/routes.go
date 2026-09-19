@@ -34,6 +34,7 @@ func Mux(deps Deps) http.Handler {
 	mux.HandleFunc("POST /classes/{class_id}/roster", joinRoster(deps))
 	mux.HandleFunc("PUT /sessions/{session_id}/attendance/{student_id}", markAttendance(deps))
 	mux.HandleFunc("GET /home", readHome(deps))
+	mux.HandleFunc("GET /schedule", readSchedule(deps))
 	return vermouth.RequestIDMiddleware(deps.Logger, mux)
 }
 
@@ -173,6 +174,46 @@ func readHome(deps Deps) http.HandlerFunc {
 		)
 		if err != nil {
 			writeHandlerError(deps, w, r, "Read home", err)
+			return
+		}
+		vermouth.WriteJSON(r.Context(), deps.Logger, w, http.StatusOK, result)
+	}
+}
+
+func readSchedule(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := verifiedClaims(deps, w, r)
+		if !ok {
+			return
+		}
+		classValues := r.URL.Query()["class_id"]
+		classIDs := make([]uuid.UUID, 0, len(classValues))
+		seen := make(map[uuid.UUID]struct{}, len(classValues))
+		for _, value := range classValues {
+			classID, err := uuid.Parse(value)
+			if err != nil {
+				vermouth.WriteError(
+					r.Context(), w, http.StatusBadRequest, "invalid_input",
+					"each class_id must be a UUID",
+				)
+				return
+			}
+			if _, exists := seen[classID]; exists {
+				continue
+			}
+			seen[classID] = struct{}{}
+			classIDs = append(classIDs, classID)
+		}
+		result, err := deps.Handler.ReadSchedule(
+			r.Context(),
+			claims.TutorID,
+			claims.Timezone,
+			r.URL.Query().Get("from"),
+			r.URL.Query().Get("through"),
+			classIDs,
+		)
+		if err != nil {
+			writeHandlerError(deps, w, r, "Read schedule", err)
 			return
 		}
 		vermouth.WriteJSON(r.Context(), deps.Logger, w, http.StatusOK, result)

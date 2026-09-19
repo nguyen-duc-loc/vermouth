@@ -29,16 +29,16 @@ func (e AttendanceState) Valid() bool {
 
 // Defines values for BillingProjectionState.
 const (
-	Active  BillingProjectionState = "active"
-	Waiting BillingProjectionState = "waiting"
+	BillingProjectionStateActive  BillingProjectionState = "active"
+	BillingProjectionStateWaiting BillingProjectionState = "waiting"
 )
 
 // Valid indicates whether the value is a known member of the BillingProjectionState enum.
 func (e BillingProjectionState) Valid() bool {
 	switch e {
-	case Active:
+	case BillingProjectionStateActive:
 		return true
-	case Waiting:
+	case BillingProjectionStateWaiting:
 		return true
 	default:
 		return false
@@ -87,6 +87,57 @@ func (e ClassColor) Valid() bool {
 	case Violet:
 		return true
 	case Yellow:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScheduleRuleState.
+const (
+	ScheduleRuleStateActive    ScheduleRuleState = "active"
+	ScheduleRuleStateCompleted ScheduleRuleState = "completed"
+	ScheduleRuleStateEnded     ScheduleRuleState = "ended"
+	ScheduleRuleStatePlanned   ScheduleRuleState = "planned"
+	ScheduleRuleStateReplaced  ScheduleRuleState = "replaced"
+	ScheduleRuleStateRetired   ScheduleRuleState = "retired"
+)
+
+// Valid indicates whether the value is a known member of the ScheduleRuleState enum.
+func (e ScheduleRuleState) Valid() bool {
+	switch e {
+	case ScheduleRuleStateActive:
+		return true
+	case ScheduleRuleStateCompleted:
+		return true
+	case ScheduleRuleStateEnded:
+		return true
+	case ScheduleRuleStatePlanned:
+		return true
+	case ScheduleRuleStateReplaced:
+		return true
+	case ScheduleRuleStateRetired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScheduleSessionState.
+const (
+	ScheduleSessionStateActive    ScheduleSessionState = "active"
+	ScheduleSessionStateCancelled ScheduleSessionState = "cancelled"
+	ScheduleSessionStateReplaced  ScheduleSessionState = "replaced"
+)
+
+// Valid indicates whether the value is a known member of the ScheduleSessionState enum.
+func (e ScheduleSessionState) Valid() bool {
+	switch e {
+	case ScheduleSessionStateActive:
+		return true
+	case ScheduleSessionStateCancelled:
+		return true
+	case ScheduleSessionStateReplaced:
 		return true
 	default:
 		return false
@@ -162,6 +213,7 @@ type Class struct {
 	Name              string             `json:"name"`
 	RateAmount        int64              `json:"rate_amount"`
 	RateEffectiveFrom openapi_types.Date `json:"rate_effective_from"`
+	ScheduleRevision  int64              `json:"schedule_revision"`
 }
 
 // ClassCurrency defines model for Class.Currency.
@@ -170,18 +222,23 @@ type ClassCurrency string
 // ClassColor defines model for ClassColor.
 type ClassColor string
 
-// CreateClassRequest defines model for CreateClassRequest.
+// CreateClassRequest Exactly one of first_session or schedule is required.
 type CreateClassRequest struct {
-	Color        *ClassColor       `json:"color,omitempty"`
-	FirstSession FirstSessionInput `json:"first_session"`
-	Name         string            `json:"name"`
-	RateAmount   int64             `json:"rate_amount"`
+	Color        *ClassColor          `json:"color,omitempty"`
+	FirstSession *FirstSessionInput   `json:"first_session,omitempty"`
+	Name         string               `json:"name"`
+	RateAmount   int64                `json:"rate_amount"`
+	Schedule     *WeeklyScheduleInput `json:"schedule,omitempty"`
 }
 
 // CreateClassResponse defines model for CreateClassResponse.
 type CreateClassResponse struct {
-	Class        Class           `json:"class"`
-	FirstSession TeachingSession `json:"first_session"`
+	AdoptedCount   int                  `json:"adopted_count"`
+	CandidateCount int                  `json:"candidate_count"`
+	Class          Class                `json:"class"`
+	CreatedCount   int                  `json:"created_count"`
+	FirstSession   *TeachingSession     `json:"first_session"`
+	Rule           *ScheduleRuleSummary `json:"rule"`
 }
 
 // CreateStudentRequest defines model for CreateStudentRequest.
@@ -284,6 +341,77 @@ type RosterPeriod struct {
 	StudentId     openapi_types.UUID  `json:"student_id"`
 }
 
+// Schedule defines model for Schedule.
+type Schedule struct {
+	Classes           []ScheduleClass       `json:"classes"`
+	From              openapi_types.Date    `json:"from"`
+	NextHistoryCursor *string               `json:"next_history_cursor"`
+	RequestTimeZone   string                `json:"request_time_zone"`
+	Rules             []ScheduleRuleSummary `json:"rules"`
+	Sessions          []ScheduleSession     `json:"sessions"`
+	Through           openapi_types.Date    `json:"through"`
+	TutorId           openapi_types.UUID    `json:"tutor_id"`
+}
+
+// ScheduleClass defines model for ScheduleClass.
+type ScheduleClass struct {
+	ClassId          openapi_types.UUID `json:"class_id"`
+	Color            ClassColor         `json:"color"`
+	Name             string             `json:"name"`
+	ScheduleRevision int64              `json:"schedule_revision"`
+}
+
+// ScheduleRuleState defines model for ScheduleRuleState.
+type ScheduleRuleState string
+
+// ScheduleRuleSummary defines model for ScheduleRuleSummary.
+type ScheduleRuleSummary struct {
+	ClassId        openapi_types.UUID        `json:"class_id"`
+	EndedAt        *time.Time                `json:"ended_at"`
+	ReplacedAt     *time.Time                `json:"replaced_at"`
+	RetiredAt      *time.Time                `json:"retired_at"`
+	Revision       int64                     `json:"revision"`
+	ScheduleRuleId openapi_types.UUID        `json:"schedule_rule_id"`
+	Slots          []WeeklyScheduleSlotInput `json:"slots"`
+	State          ScheduleRuleState         `json:"state"`
+	TimeZone       string                    `json:"time_zone"`
+	ValidFrom      openapi_types.Date        `json:"valid_from"`
+	ValidThrough   openapi_types.Date        `json:"valid_through"`
+}
+
+// ScheduleSession defines model for ScheduleSession.
+type ScheduleSession struct {
+	CancelledAt   *time.Time         `json:"cancelled_at"`
+	ClassArchived bool               `json:"class_archived"`
+	ClassColor    ClassColor         `json:"class_color"`
+	ClassId       openapi_types.UUID `json:"class_id"`
+	ClassName     string             `json:"class_name"`
+	DisplayDate   openapi_types.Date `json:"display_date"`
+
+	// DisplayEnd Examples: 17:30
+	DisplayEnd LocalTime `json:"display_end"`
+
+	// DisplayStart Examples: 17:30
+	DisplayStart    LocalTime            `json:"display_start"`
+	EndUtcOffset    string               `json:"end_utc_offset"`
+	EndsAt          time.Time            `json:"ends_at"`
+	LocalDate       openapi_types.Date   `json:"local_date"`
+	MovedAt         *time.Time           `json:"moved_at"`
+	OriginLocalDate openapi_types.Date   `json:"origin_local_date"`
+	ScheduleRuleId  *openapi_types.UUID  `json:"schedule_rule_id"`
+	SessionId       openapi_types.UUID   `json:"session_id"`
+	SourceTimeZone  *string              `json:"source_time_zone"`
+	StartUtcOffset  string               `json:"start_utc_offset"`
+	StartsAt        time.Time            `json:"starts_at"`
+	State           ScheduleSessionState `json:"state"`
+	SupersededAt    *time.Time           `json:"superseded_at"`
+	UpdatedAt       time.Time            `json:"updated_at"`
+	Version         int64                `json:"version"`
+}
+
+// ScheduleSessionState defines model for ScheduleSessionState.
+type ScheduleSessionState string
+
 // Session What the browser holds after a refresh: an access token in memory only,
 // and when it stops being valid. The refresh token itself is never in a
 // body, only in the HttpOnly cookie beside it (spec 0004).
@@ -340,6 +468,23 @@ type Tutor struct {
 
 // TutorLanguage defines model for Tutor.Language.
 type TutorLanguage string
+
+// WeeklyScheduleInput defines model for WeeklyScheduleInput.
+type WeeklyScheduleInput struct {
+	Slots        []WeeklyScheduleSlotInput `json:"slots"`
+	ValidFrom    openapi_types.Date        `json:"valid_from"`
+	ValidThrough openapi_types.Date        `json:"valid_through"`
+}
+
+// WeeklyScheduleSlotInput defines model for WeeklyScheduleSlotInput.
+type WeeklyScheduleSlotInput struct {
+	// EndTime Examples: 17:30
+	EndTime LocalTime `json:"end_time"`
+
+	// StartTime Examples: 17:30
+	StartTime LocalTime `json:"start_time"`
+	Weekday   int       `json:"weekday"`
+}
 
 // ClassId defines model for ClassId.
 type ClassId = openapi_types.UUID
@@ -432,6 +577,13 @@ type CreateClassParams struct {
 type GetHomeParams struct {
 	// Cursor Opaque cursor bound to the current tutor local date.
 	Cursor *HomeCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// GetScheduleParams defines parameters for GetSchedule.
+type GetScheduleParams struct {
+	From    openapi_types.Date    `form:"from" json:"from"`
+	Through openapi_types.Date    `form:"through" json:"through"`
+	ClassId *[]openapi_types.UUID `form:"class_id,omitempty" json:"class_id,omitempty"`
 }
 
 // CreateStudentParams defines parameters for CreateStudent.

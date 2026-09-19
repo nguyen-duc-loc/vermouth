@@ -23,7 +23,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 7 | Tutor sign in & identity | Slice 1 | done |
 | 8 | Core teaching loop | Slice 1 | done |
 | 9 | Tracing, central logs & error alerts | Slice 2 | planned |
-| 10 | Recurring sessions & exceptions | Slice 3 | planned |
+| 10 | Recurring sessions & exceptions | Slice 3 | in-progress |
 | 11 | Student records & class rosters | Slice 3 | planned |
 | 12 | Tutor profile & bank details | Slice 4 | planned |
 | 13 | Tuition rate & monthly calculation | Slice 4 | planned |
@@ -141,10 +141,20 @@ Follow one request from the gateway through every service it touches, including 
 
 ## Slice 3: Real schedules
 
-### 10. Recurring sessions & exceptions · needs a decision
+### 10. Recurring sessions & exceptions · in-progress
 A class repeats weekly (for example every Monday and Thursday) and generates its sessions, and a single session can be cancelled or moved without disturbing the rest. The rule versus the exception is a genuinely tricky model, and attendance and billing both read it.
 **Done when:** a tutor can define a repeating schedule with an end, see the generated sessions, cancel one session, and move one session to another time, with the change touching only that session and the invoice count reflecting it.
-- [ ] Design it (spec): `$architect recurring sessions & exceptions`
+spec [0010](../specs/0010-recurring-sessions-exceptions/index.md)
+code in `services/teaching/`, `services/notifications/`, `gateway/`, `api/openapi.yaml`, and `web/src/`
+- [x] Design it (spec): `$architect recurring sessions & exceptions`
+- [ ] Build it: `$develop recurring sessions & exceptions`
+  - [x] Prove one weekly occurrence through the guarded overlap constraints, teaching model, existing events, both projections, gateway contract, and one accessible calendar card · AC-1, AC-2, AC-8, AC-9, AC-10, AC-12, AC-13, AC-16, AC-17
+  - [ ] Complete seven day rules, stored time zones, active standalone adoption, exact command counts, revisions, durable retries, and existing class scheduling · AC-1, AC-3, AC-9, AC-10, AC-11
+  - [ ] Add future replacement, early ending, preserved exceptions, session actions, and detailed conflict recovery · AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-11, AC-13, AC-16
+  - [ ] Build the Monday first Day, Week, and Month calendar with class filters, schedule management, phone agenda, bounded history, and accessible states · AC-12, AC-14, AC-15
+  - [ ] Close the thread with migration evidence, concurrent overlap, clock transition, replay, tenant, contract, and browser checks · AC-1 to AC-17
+- [ ] Verify it: `$check verify recurring sessions & exceptions`
+- [ ] Test it: `$test recurring sessions & exceptions`
 
 ### 11. Student records & class rosters
 Manage students properly (name and phone number for now) and put them into classes, with a student able to sit in more than one class. Thickens the student strand that slice 1 ran narrowly.

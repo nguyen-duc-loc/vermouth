@@ -13,7 +13,7 @@ import {
   type SignInErrorCode,
   sessionCoordinator,
 } from './api/session'
-import { ProtectedHomePage } from './pages/SessionStatePage'
+import { ProtectedHomePage, ProtectedSchedulePage } from './pages/SessionStatePage'
 import { SignInPage } from './pages/SignInPage'
 
 type RouterContext = {
@@ -63,6 +63,21 @@ const threadRoute = createRoute({
   },
 })
 
+const scheduleRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/schedule',
+  component: ProtectedSchedulePage,
+  beforeLoad: async ({ context, location }) => {
+    const session = await context.session.ensure()
+    if (session.status === 'anonymous') {
+      throw redirect({
+        to: '/signin',
+        search: { redirect: cleanRedirect(location.href) },
+      })
+    }
+  },
+})
+
 function routeTree() {
   if (import.meta.env.DEV) {
     const DesignSystemPage = lazy(() =>
@@ -87,10 +102,10 @@ function routeTree() {
       ),
     })
 
-    return rootRoute.addChildren([threadRoute, signInRoute, designSystemRoute])
+    return rootRoute.addChildren([threadRoute, scheduleRoute, signInRoute, designSystemRoute])
   }
 
-  return rootRoute.addChildren([threadRoute, signInRoute])
+  return rootRoute.addChildren([threadRoute, scheduleRoute, signInRoute])
 }
 
 export const router = createRouter({

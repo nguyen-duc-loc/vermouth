@@ -93,6 +93,7 @@ func Mux(deps Deps) http.Handler {
 	)
 	authenticated.HandleFunc("GET /api/home", readHome(deps))
 	authenticated.HandleFunc("GET /api/home/billing-projection", readHomeBillingProjection(deps))
+	authenticated.HandleFunc("GET /api/schedule", readSchedule(deps))
 
 	mux.Handle("/api/", auth.Middleware(deps.Verifier, deps.Logger, authenticated))
 
@@ -229,6 +230,28 @@ func readHomeBillingProjection(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		status := deps.Client.HomeBillingProjection(r.Context(), vermouth.BearerToken(r))
 		vermouth.WriteJSON(r.Context(), deps.Logger, w, http.StatusOK, status)
+	}
+}
+
+func readSchedule(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := "/schedule"
+		if r.URL.RawQuery != "" {
+			path += "?" + r.URL.RawQuery
+		}
+		response, err := deps.Client.Call(
+			r.Context(),
+			http.MethodGet,
+			deps.Client.Upstreams().Teaching,
+			path,
+			vermouth.BearerToken(r),
+			nil,
+		)
+		if err != nil {
+			upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)
+			return
+		}
+		passThrough(r.Context(), deps.Logger, w, response)
 	}
 }
 

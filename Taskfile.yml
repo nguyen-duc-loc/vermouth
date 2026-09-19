@@ -168,6 +168,11 @@ tasks:
         url=$(printenv "$(echo $svc | tr '[:lower:]' '[:upper:]')_DATABASE_URL")
         goose -dir services/$svc/db/migrations postgres "$url" down
 
+  schedule:conflicts:
+    desc: Report active teaching session overlaps in stable JSON without writing
+    cmds:
+      - go run ./services/teaching/cmd/scheduleconflicts
+
   # -------------------------------------------------------------- generation
 
   generate:

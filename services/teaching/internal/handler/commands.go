@@ -93,10 +93,11 @@ type attendanceMarkedFields struct {
 	MarkedAt  time.Time `json:"marked_at"`
 }
 
-// CreateClass commits the class, first session, receipt, and two outbox facts
-// together. The bool is true only for the request that created them.
+// CreateClass commits the class, optional weekly rule, concrete sessions,
+// receipt, and outbox facts together. The bool is true only for the request
+// that created them.
 //
-//nolint:funlen // Keeping the aggregate writes and both outbox facts together makes the transaction boundary auditable.
+//nolint:funlen,gocognit,maintidx // One linear function keeps the receipt, aggregate, generated rows, events, and commit auditable as one transaction.
 func (h *Handler) CreateClass(
 	ctx context.Context,
 	tutorID uuid.UUID,
@@ -108,7 +109,8 @@ func (h *Handler) CreateClass(
 	if err != nil {
 		return CreateClassResult{}, false, err
 	}
-	validated, err := validateClassInput(input, timezone)
+	commandTime := h.now().UTC()
+	validated, err := validateClassInput(input, timezone, commandTime)
 	if err != nil {
 		return CreateClassResult{}, false, err
 	}
@@ -120,9 +122,26 @@ func (h *Handler) CreateClass(
 	if err != nil {
 		return CreateClassResult{}, false, fmt.Errorf("generate class id: %w", err)
 	}
-	sessionID, err := uuid.NewV7()
-	if err != nil {
-		return CreateClassResult{}, false, fmt.Errorf("generate session id: %w", err)
+	occurrences := make([]validatedOccurrence, 0, 1)
+	if validated.first != nil {
+		occurrences = append(occurrences, *validated.first)
+	} else {
+		occurrences = append(occurrences, validated.schedule.occurrences...)
+	}
+	sessionIDs := make([]uuid.UUID, 0, len(occurrences))
+	for range occurrences {
+		sessionID, sessionErr := uuid.NewV7()
+		if sessionErr != nil {
+			return CreateClassResult{}, false, fmt.Errorf("generate session id: %w", sessionErr)
+		}
+		sessionIDs = append(sessionIDs, sessionID)
+	}
+	var scheduleRuleID uuid.UUID
+	if validated.schedule != nil {
+		scheduleRuleID, err = uuid.NewV7()
+		if err != nil {
+			return CreateClassResult{}, false, fmt.Errorf("generate schedule rule id: %w", err)
+		}
 	}
 	color := suggestedClassColor(classID.String())
 	if validated.color != nil {
@@ -142,7 +161,7 @@ func (h *Handler) CreateClass(
 		IdempotencyKey:    idempotencyKey,
 		RequestHash:       requestHash[:],
 		PrimaryResourceID: classID,
-		RelatedResourceID: pgtype.UUID{Bytes: sessionID, Valid: true},
+		RelatedResourceID: pgtype.UUID{Bytes: sessionIDs[0], Valid: true},
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		h.rollback(ctx, tx)
@@ -152,6 +171,12 @@ func (h *Handler) CreateClass(
 		return CreateClassResult{}, false, fmt.Errorf("claim create class receipt: %w", err)
 	}
 
+	rateEffectiveFrom := occurrences[0].localDate
+	scheduleRevision := int64(0)
+	if validated.schedule != nil {
+		rateEffectiveFrom = validated.schedule.validFrom
+		scheduleRevision = 1
+	}
 	classRow, err := queries.InsertClass(ctx, sqlcgen.InsertClassParams{
 		ClassID:           classID,
 		TutorID:           tutorID,
@@ -159,61 +184,128 @@ func (h *Handler) CreateClass(
 		Color:             color,
 		RateAmount:        validated.rateAmount,
 		Currency:          currencyVND,
-		RateEffectiveFrom: pgtype.Date{Time: validated.localDate, Valid: true},
+		RateEffectiveFrom: pgtype.Date{Time: rateEffectiveFrom, Valid: true},
+		ScheduleRevision:  scheduleRevision,
 	})
 	if err != nil {
 		return CreateClassResult{}, false, fmt.Errorf("insert class: %w", err)
 	}
-	sessionRow, err := queries.InsertSession(ctx, sqlcgen.InsertSessionParams{
-		SessionID: sessionID,
-		ClassID:   classID,
-		TutorID:   tutorID,
-		StartsAt:  validated.startsAt,
-		EndsAt:    validated.endsAt,
-		LocalDate: pgtype.Date{Time: validated.localDate, Valid: true},
-	})
-	if err != nil {
-		return CreateClassResult{}, false, fmt.Errorf("insert first session: %w", err)
+	var rule *ScheduleRuleSummary
+	if validated.schedule != nil {
+		_, err = queries.InsertScheduleRule(ctx, sqlcgen.InsertScheduleRuleParams{
+			ScheduleRuleID: scheduleRuleID,
+			TutorID:        tutorID,
+			ClassID:        classID,
+			Revision:       scheduleRevision,
+			ValidFrom:      pgtype.Date{Time: validated.schedule.validFrom, Valid: true},
+			ValidThrough:   pgtype.Date{Time: validated.schedule.validThrough, Valid: true},
+			TimeZone:       validated.timezone,
+		})
+		if err != nil {
+			return CreateClassResult{}, false, fmt.Errorf("insert schedule rule: %w", err)
+		}
+		_, err = queries.InsertScheduleSlot(ctx, sqlcgen.InsertScheduleSlotParams{
+			ScheduleRuleID: scheduleRuleID,
+			TutorID:        tutorID,
+			Weekday:        validated.schedule.slot.Weekday,
+			StartTime:      validated.schedule.slot.StartTime,
+			EndTime:        validated.schedule.slot.EndTime,
+		})
+		if err != nil {
+			return CreateClassResult{}, false, fmt.Errorf("insert schedule slot: %w", err)
+		}
+		rule = &ScheduleRuleSummary{
+			ScheduleRuleID: scheduleRuleID, ClassID: classID, Revision: scheduleRevision,
+			ValidFrom:    validated.schedule.validFrom.Format(dateLayout),
+			ValidThrough: validated.schedule.validThrough.Format(dateLayout),
+			TimeZone:     validated.timezone,
+			State: ruleState(
+				validated.schedule.validFrom,
+				validated.schedule.validThrough,
+				validated.timezone,
+				nil,
+				nil,
+				nil,
+				commandTime,
+			),
+			Slots: []WeeklyScheduleSlotInput{validated.schedule.slot},
+		}
 	}
-	date := validated.localDate.Format(dateLayout)
 	err = h.writeEvent(ctx, tx, teachingEvent{
 		name:    vermouth.EventClassCreated,
 		tutorID: tutorID,
 		key:     vermouth.Key{Kind: vermouth.KeyClassID, Value: classID},
 		fields: classCreatedFields{
 			ClassID: classID, TutorID: tutorID, Name: validated.name,
-			RateAmount: validated.rateAmount, Currency: currencyVND, RateEffectiveFrom: date,
+			RateAmount: validated.rateAmount, Currency: currencyVND,
+			RateEffectiveFrom: rateEffectiveFrom.Format(dateLayout),
 		},
 	})
 	if err != nil {
 		return CreateClassResult{}, false, err
 	}
-	err = h.writeEvent(ctx, tx, teachingEvent{
-		name:    vermouth.EventSessionScheduled,
-		tutorID: tutorID,
-		key:     vermouth.Key{Kind: vermouth.KeySessionID, Value: sessionID},
-		fields: sessionScheduledFields{
-			SessionID: sessionID, ClassID: classID, TutorID: tutorID,
-			StartsAt: validated.startsAt, EndsAt: validated.endsAt, LocalDate: date,
-		},
-	})
-	if err != nil {
-		return CreateClassResult{}, false, err
+	inserted := make([]sqlcgen.InsertSessionRow, 0, len(occurrences))
+	for index, occurrence := range occurrences {
+		ruleID := pgtype.UUID{}
+		if validated.schedule != nil {
+			ruleID = pgtype.UUID{Bytes: scheduleRuleID, Valid: true}
+		}
+		row, insertErr := queries.InsertSession(ctx, sqlcgen.InsertSessionParams{
+			SessionID: sessionIDs[index], ClassID: classID, TutorID: tutorID,
+			StartsAt: occurrence.startsAt, EndsAt: occurrence.endsAt,
+			LocalDate:       pgtype.Date{Time: occurrence.localDate, Valid: true},
+			ScheduleRuleID:  ruleID,
+			OriginLocalDate: pgtype.Date{Time: occurrence.localDate, Valid: true},
+		})
+		if insertErr != nil {
+			if constraintConflict(insertErr) {
+				return CreateClassResult{}, false, ErrConflict
+			}
+			return CreateClassResult{}, false, fmt.Errorf("insert class session: %w", insertErr)
+		}
+		inserted = append(inserted, row)
+		date := occurrence.localDate.Format(dateLayout)
+		writeErr := h.writeEvent(ctx, tx, teachingEvent{
+			name: vermouth.EventSessionScheduled, tutorID: tutorID,
+			key: vermouth.Key{Kind: vermouth.KeySessionID, Value: sessionIDs[index]},
+			fields: sessionScheduledFields{
+				SessionID: sessionIDs[index], ClassID: classID, TutorID: tutorID,
+				StartsAt: occurrence.startsAt, EndsAt: occurrence.endsAt, LocalDate: date,
+			},
+		})
+		if writeErr != nil {
+			return CreateClassResult{}, false, writeErr
+		}
 	}
 	err = tx.Commit(ctx)
 	if err != nil {
 		return CreateClassResult{}, false, fmt.Errorf("commit create class: %w", err)
 	}
-	return CreateClassResult{
+	result := CreateClassResult{
 		Class: Class{
 			ClassID: classRow.ClassID, Name: classRow.Name, Color: classRow.Color,
 			RateAmount: classRow.RateAmount, Currency: classRow.Currency,
 			RateEffectiveFrom: classRow.RateEffectiveFrom.Time.Format(dateLayout),
+			ScheduleRevision:  classRow.ScheduleRevision,
 		},
-		FirstSession: sessionFromRow(sessionRow),
-	}, true, nil
+		Rule: rule, CandidateCount: len(occurrences), CreatedCount: len(inserted),
+	}
+	if validated.first != nil {
+		first := sessionFromValues(
+			inserted[0].SessionID,
+			inserted[0].ClassID,
+			inserted[0].StartsAt,
+			inserted[0].EndsAt,
+			inserted[0].LocalDate.Time,
+		)
+		result.FirstSession = &first
+	} else {
+		result.FirstSession = firstUpcomingInserted(inserted, commandTime)
+	}
+	return result, true, nil
 }
 
+//nolint:funlen // Rebuilding the legacy and recurring response together keeps one replay contract visible.
 func (h *Handler) replayClass(
 	ctx context.Context,
 	tutorID uuid.UUID,
@@ -230,30 +322,57 @@ func (h *Handler) replayClass(
 	if !bytes.Equal(receipt.RequestHash, requestHash) {
 		return CreateClassResult{}, false, ErrIdempotencyConflict
 	}
-	if !receipt.RelatedResourceID.Valid {
-		return CreateClassResult{}, false, errClassReceiptMissingSession
-	}
 	classRow, err := queries.GetOwnedClass(ctx, sqlcgen.GetOwnedClassParams{
 		TutorID: tutorID, ClassID: receipt.PrimaryResourceID,
 	})
 	if err != nil {
 		return CreateClassResult{}, false, fmt.Errorf("recover class receipt resource: %w", err)
 	}
-	sessionID := uuid.UUID(receipt.RelatedResourceID.Bytes)
-	sessionRow, err := queries.GetOwnedSession(ctx, sqlcgen.GetOwnedSessionParams{
-		TutorID: tutorID, SessionID: sessionID,
+	sessions, err := queries.ListOwnedClassSessions(ctx, sqlcgen.ListOwnedClassSessionsParams{
+		TutorID: tutorID, ClassID: receipt.PrimaryResourceID,
 	})
 	if err != nil {
-		return CreateClassResult{}, false, fmt.Errorf("recover class session receipt resource: %w", err)
+		return CreateClassResult{}, false, fmt.Errorf("recover class sessions: %w", err)
 	}
-	return CreateClassResult{
+	if len(sessions) == 0 || !receipt.RelatedResourceID.Valid {
+		return CreateClassResult{}, false, errClassReceiptMissingSession
+	}
+	result := CreateClassResult{
 		Class: Class{
 			ClassID: classRow.ClassID, Name: classRow.Name, Color: classRow.Color,
 			RateAmount: classRow.RateAmount, Currency: classRow.Currency,
 			RateEffectiveFrom: classRow.RateEffectiveFrom.Time.Format(dateLayout),
+			ScheduleRevision:  classRow.ScheduleRevision,
 		},
-		FirstSession: sessionFromStored(sessionRow),
-	}, false, nil
+		CandidateCount: len(sessions), CreatedCount: len(sessions),
+	}
+	ruleRow, ruleErr := queries.GetOwnedLatestScheduleRule(ctx, sqlcgen.GetOwnedLatestScheduleRuleParams{
+		TutorID: tutorID, ClassID: receipt.PrimaryResourceID,
+	})
+	if ruleErr == nil {
+		slots, slotErr := queries.ListScheduleSlots(ctx, sqlcgen.ListScheduleSlotsParams{
+			TutorID: tutorID, ScheduleRuleIds: []uuid.UUID{ruleRow.ScheduleRuleID},
+		})
+		if slotErr != nil {
+			return CreateClassResult{}, false, fmt.Errorf("recover schedule slots: %w", slotErr)
+		}
+		result.Rule = scheduleRuleSummary(ruleRow, slots, h.now().UTC())
+	} else if !errors.Is(ruleErr, pgx.ErrNoRows) {
+		return CreateClassResult{}, false, fmt.Errorf("recover class schedule rule: %w", ruleErr)
+	}
+	if result.Rule == nil {
+		first := sessionFromValues(
+			sessions[0].SessionID,
+			sessions[0].ClassID,
+			sessions[0].StartsAt,
+			sessions[0].EndsAt,
+			sessions[0].LocalDate.Time,
+		)
+		result.FirstSession = &first
+	} else {
+		result.FirstSession = firstUpcomingStored(sessions, h.now().UTC())
+	}
+	return result, false, nil
 }
 
 // CreateStudent commits the student, receipt, and phone free event together.
@@ -534,21 +653,83 @@ func ownedReadError(action string, err error) error {
 
 func constraintConflict(err error) bool {
 	pgError, ok := errors.AsType[*pgconn.PgError](err)
-	return ok && pgError.Code == "23505"
+	return ok && (pgError.Code == "23505" || pgError.Code == "23P01")
 }
 
-func sessionFromRow(row sqlcgen.Session) Session {
-	return sessionFromStored(row)
-}
-
-func sessionFromStored(row sqlcgen.Session) Session {
-	return Session{
-		SessionID: row.SessionID,
-		ClassID:   row.ClassID,
-		StartsAt:  row.StartsAt,
-		EndsAt:    row.EndsAt,
-		LocalDate: row.LocalDate.Time.Format(dateLayout),
+func firstUpcomingInserted(rows []sqlcgen.InsertSessionRow, commandTime time.Time) *Session {
+	for index := range rows {
+		row := &rows[index]
+		if !row.StartsAt.Before(commandTime) {
+			result := sessionFromValues(
+				row.SessionID, row.ClassID, row.StartsAt, row.EndsAt, row.LocalDate.Time,
+			)
+			return &result
+		}
 	}
+	return nil
+}
+
+func firstUpcomingStored(rows []sqlcgen.ListOwnedClassSessionsRow, commandTime time.Time) *Session {
+	for index := range rows {
+		row := &rows[index]
+		if !row.StartsAt.Before(commandTime) && !row.CancelledAt.Valid && !row.SupersededAt.Valid {
+			result := sessionFromValues(
+				row.SessionID, row.ClassID, row.StartsAt, row.EndsAt, row.LocalDate.Time,
+			)
+			return &result
+		}
+	}
+	return nil
+}
+
+func sessionFromValues(
+	sessionID uuid.UUID,
+	classID uuid.UUID,
+	startsAt time.Time,
+	endsAt time.Time,
+	localDate time.Time,
+) Session {
+	return Session{
+		SessionID: sessionID,
+		ClassID:   classID,
+		StartsAt:  startsAt,
+		EndsAt:    endsAt,
+		LocalDate: localDate.Format(dateLayout),
+	}
+}
+
+func scheduleRuleSummary(
+	rule sqlcgen.ScheduleRule,
+	slots []sqlcgen.ListScheduleSlotsRow,
+	commandTime time.Time,
+) *ScheduleRuleSummary {
+	result := &ScheduleRuleSummary{
+		ScheduleRuleID: rule.ScheduleRuleID,
+		ClassID:        rule.ClassID,
+		Revision:       rule.Revision,
+		ValidFrom:      rule.ValidFrom.Time.Format(dateLayout),
+		ValidThrough:   rule.ValidThrough.Time.Format(dateLayout),
+		TimeZone:       rule.TimeZone,
+		State: ruleState(
+			rule.ValidFrom.Time,
+			rule.ValidThrough.Time,
+			rule.TimeZone,
+			timestampPointer(rule.ReplacedAt),
+			timestampPointer(rule.EndedAt),
+			timestampPointer(rule.RetiredAt),
+			commandTime,
+		),
+		ReplacedAt: timestampPointer(rule.ReplacedAt),
+		EndedAt:    timestampPointer(rule.EndedAt),
+		RetiredAt:  timestampPointer(rule.RetiredAt),
+		Slots:      make([]WeeklyScheduleSlotInput, 0, len(slots)),
+	}
+	for _, slot := range slots {
+		result.Slots = append(result.Slots, WeeklyScheduleSlotInput{
+			Weekday: slot.Weekday, StartTime: slot.StartTime, EndTime: slot.EndTime,
+		})
+	}
+	return result
 }
 
 func textPointer(value pgtype.Text) *string {

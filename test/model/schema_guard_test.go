@@ -363,8 +363,8 @@ func TestCompletenessGateIsGenerated(t *testing.T) {
 }
 
 // TestOneOwningTablePerEntity is AC-1 read against the live schema: exactly the
-// tables spec 0003 places in each service, no more and no fewer, so a second home
-// for an entity cannot appear unnoticed.
+// tables the accepted model specs place in each service, no more and no fewer,
+// so a second home for an entity cannot appear unnoticed.
 func TestOneOwningTablePerEntity(t *testing.T) {
 	t.Parallel()
 	expected := map[string][]string{
@@ -372,10 +372,12 @@ func TestOneOwningTablePerEntity(t *testing.T) {
 		// Google account link, the in flight sign in, the locked session family,
 		// and its hashed refresh tokens. None is a second home for an entity.
 		"identity": {"tutors", "tutor_identities", "login_attempts", "auth_sessions", "refresh_tokens"},
-		// command_receipts belongs to spec 0009's create retry contract. It owns
-		// command identity, not a second copy of a domain entity.
+		// command_receipts belongs to spec 0009's create retry contract. The rule
+		// and slot tables belong to spec 0010. All three are teaching truth, not a
+		// second copy of another service's entity.
 		"teaching": {
 			"students", "classes", "sessions", "roster_periods", "attendance", "command_receipts",
+			"schedule_rules", "schedule_slots",
 		},
 		"billing": {
 			"students", "classes", "sessions", "attendance", "roster_periods", "class_rates",
@@ -395,7 +397,7 @@ func TestOneOwningTablePerEntity(t *testing.T) {
 			require.True(t, live[table], "%s is missing its %s table (AC-1)", service, table)
 			delete(live, table)
 		}
-		require.Empty(t, live, "%s holds tables spec 0003 does not place there (AC-1)", service)
+		require.Empty(t, live, "%s holds tables no accepted model spec places there (AC-1)", service)
 	}
 }
 
