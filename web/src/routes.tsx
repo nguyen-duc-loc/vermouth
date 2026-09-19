@@ -63,10 +63,24 @@ const threadRoute = createRoute({
   },
 })
 
+type ScheduleSearch = {
+  view?: 'day' | 'week' | 'month'
+  date?: string
+  classes: string[]
+}
+
 const scheduleRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/schedule',
   component: ProtectedSchedulePage,
+  validateSearch: (search: Record<string, unknown>): ScheduleSearch => ({
+    view:
+      search.view === 'day' || search.view === 'week' || search.view === 'month'
+        ? search.view
+        : undefined,
+    date: validCalendarDate(search.date) ? search.date : undefined,
+    classes: cleanClassSearch(search.classes),
+  }),
   beforeLoad: async ({ context, location }) => {
     const session = await context.session.ensure()
     if (session.status === 'anonymous') {
@@ -77,6 +91,16 @@ const scheduleRoute = createRoute({
     }
   },
 })
+
+function validCalendarDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  return !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime())
+}
+
+function cleanClassSearch(value: unknown): string[] {
+  const values = Array.isArray(value) ? value : typeof value === 'string' ? [value] : []
+  return [...new Set(values.filter((item): item is string => typeof item === 'string'))].sort()
+}
 
 function routeTree() {
   if (import.meta.env.DEV) {
