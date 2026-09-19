@@ -595,23 +595,23 @@ event pipe, public contract, and browser before the recurrence engine grows wide
    duration checks, stored rule zones, immutable retry snapshots, class revision locking, and first
    schedule creation for an existing class, satisfies **AC-1**, **AC-3**, **AC-9**, **AC-10**,
    **AC-11**.
-3. [ ] Add future schedule replacement and explicit end schedule commands. Close rule versions, preserve
+3. [x] Add future schedule replacement and explicit end schedule commands. Close rule versions, preserve
    all retained explicit exceptions, handle future retirement and allowed gaps, suppress regenerated
    origin dates, mark untouched sessions as replaced, publish one cancelled fact per replaced session
    atomically, and return typed stale and schedule state details, satisfies **AC-4**, **AC-5**,
    **AC-11**, **AC-16**.
-4. [ ] Add move, cancel, and restore commands with expected state guards, canonical responses, existing
+4. [x] Add move, cancel, and restore commands with expected state guards, canonical responses, existing
    class then session lock ordering, version increments, event publication, projection reactivation
    on scheduled upsert, detailed owned conflicts, attendance plus invoice correction behavior, and
    `task schedule:conflicts`, satisfies **AC-6**, **AC-7**, **AC-8**, **AC-9**, **AC-11**,
    **AC-13**, **AC-16**.
-5. [ ] Build the complete Schedule page from existing design tokens and primitives. Add URL backed Day,
+5. [x] Build the complete Schedule page from existing design tokens and primitives. Add URL backed Day,
    Week, and Month views, the compact month picker, class filters, Add and Manage schedule entry
    points, confirmation and mutation sheets, provisional previews plus committed summaries, tutor and
    zone aware cache identity, class wide invalidation, cursor paged replaced history, phone agenda,
    and all accessible loading, empty, error, conflict, and announcement states, satisfies **AC-12**,
    **AC-14**, **AC-15**.
-6. [ ] Extend `task thread` through recurrence and one exception, add real Postgres and Redpanda tests for
+6. [x] Extend `task thread` through recurrence and one exception, add real Postgres and Redpanda tests for
    concurrent overlaps, rule changes, retries, time transitions, projection replay, and tenant
    isolation, then regenerate and commit every typed artifact and pass repository checks, satisfies
    **AC-1** through **AC-17**.

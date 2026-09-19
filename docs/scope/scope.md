@@ -147,12 +147,12 @@ A class repeats weekly (for example every Monday and Thursday) and generates its
 spec [0010](../specs/0010-recurring-sessions-exceptions/index.md)
 code in `services/teaching/`, `services/notifications/`, `gateway/`, `api/openapi.yaml`, and `web/src/`
 - [x] Design it (spec): `$architect recurring sessions & exceptions`
-- [ ] Build it: `$develop recurring sessions & exceptions`
+- [x] Build it: `$develop recurring sessions & exceptions`
   - [x] Prove one weekly occurrence through the guarded overlap constraints, teaching model, existing events, both projections, gateway contract, and one accessible calendar card · AC-1, AC-2, AC-8, AC-9, AC-10, AC-12, AC-13, AC-16, AC-17
   - [x] Complete seven day rules, stored time zones, active standalone adoption, exact command counts, revisions, durable retries, and existing class scheduling · AC-1, AC-3, AC-9, AC-10, AC-11
-  - [ ] Add future replacement, early ending, preserved exceptions, session actions, and detailed conflict recovery · AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-11, AC-13, AC-16
-  - [ ] Build the Monday first Day, Week, and Month calendar with class filters, schedule management, phone agenda, bounded history, and accessible states · AC-12, AC-14, AC-15
-  - [ ] Close the thread with migration evidence, concurrent overlap, clock transition, replay, tenant, contract, and browser checks · AC-1 to AC-17
+  - [x] Add future replacement, early ending, preserved exceptions, session actions, and detailed conflict recovery · AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-11, AC-13, AC-16
+  - [x] Build the Monday first Day, Week, and Month calendar with class filters, schedule management, phone agenda, bounded history, and accessible states · AC-12, AC-14, AC-15
+  - [x] Close the thread with migration evidence, concurrent overlap, clock transition, replay, tenant, contract, and browser checks · AC-1 to AC-17
 - [ ] Verify it: `$check verify recurring sessions & exceptions`
 - [ ] Test it: `$test recurring sessions & exceptions`
 

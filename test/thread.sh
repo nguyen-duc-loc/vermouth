@@ -71,6 +71,41 @@ CLASS_REPLAY=$(curl -fsS -X POST "$GATEWAY/api/classes" \
 test "$(printf '%s' "$CLASS_REPLAY" | jq -er '.class.class_id')" = "$CLASS_ID"
 test "$(printf '%s' "$CLASS_REPLAY" | jq -er '.first_session.session_id')" = "$SESSION_ID"
 
+printf 'Adopting the first session into a seven day weekly rule\n'
+SCHEDULE_KEY="thread-schedule-$TUTOR"
+SCHEDULE_BODY=$(jq -n --arg date "$LOCAL_DATE" \
+  '{expected_revision:0,effective_from:$date,valid_through:$date,slots:[
+    {weekday:1,start_time:"10:00",end_time:"11:00"},
+    {weekday:2,start_time:"10:00",end_time:"11:00"},
+    {weekday:3,start_time:"10:00",end_time:"11:00"},
+    {weekday:4,start_time:"10:00",end_time:"11:00"},
+    {weekday:5,start_time:"10:00",end_time:"11:00"},
+    {weekday:6,start_time:"10:00",end_time:"11:00"},
+    {weekday:7,start_time:"10:00",end_time:"11:00"}
+  ]}')
+SCHEDULE_RESULT=$(curl -fsS -X PUT "$GATEWAY/api/classes/$CLASS_ID/schedule" \
+  -H "$AUTH" -H 'Content-Type: application/json' -H "Idempotency-Key: $SCHEDULE_KEY" \
+  --data "$SCHEDULE_BODY")
+test "$(printf '%s' "$SCHEDULE_RESULT" | jq -er '.candidate_count')" = 1
+test "$(printf '%s' "$SCHEDULE_RESULT" | jq -er '.adopted_count')" = 1
+
+printf 'Moving, cancelling, and restoring the recurring occurrence\n'
+MOVE_BODY=$(jq -n --arg date "$LOCAL_DATE" \
+  '{expected_version:2,local_date:$date,start_time:"11:00",end_time:"12:00"}')
+MOVE_RESULT=$(curl -fsS -X POST "$GATEWAY/api/sessions/$SESSION_ID/move" \
+  -H "$AUTH" -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: thread-move-$TUTOR" --data "$MOVE_BODY")
+test "$(printf '%s' "$MOVE_RESULT" | jq -er '.version')" = 3
+test "$(printf '%s' "$MOVE_RESULT" | jq -er '.state')" = active
+CANCEL_RESULT=$(curl -fsS -X POST "$GATEWAY/api/sessions/$SESSION_ID/cancel" \
+  -H "$AUTH" -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: thread-cancel-$TUTOR" --data '{"expected_version":3}')
+test "$(printf '%s' "$CANCEL_RESULT" | jq -er '.state')" = cancelled
+RESTORE_RESULT=$(curl -fsS -X POST "$GATEWAY/api/sessions/$SESSION_ID/restore" \
+  -H "$AUTH" -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: thread-restore-$TUTOR" --data '{"expected_version":4}')
+test "$(printf '%s' "$RESTORE_RESULT" | jq -er '.state')" = active
+
 printf 'Creating one student and replaying the safe command\n'
 STUDENT_BODY=$(jq -n --arg name "Thread student $TUTOR" '{name:$name,phone:null}')
 STUDENT_RESULT=$(curl -fsS -X POST "$GATEWAY/api/students" \

@@ -43,7 +43,7 @@ func TestThreadRetriesATemporaryGatewayFailure(t *testing.T) {
 	require.NoErrorf(t, result.err, "stdout: %s\nstderr: %s", result.stdout, result.stderr)
 	count, err := os.ReadFile(fixture.count)
 	require.NoError(t, err)
-	require.Equal(t, "9", strings.TrimSpace(string(count)))
+	require.Equal(t, "13", strings.TrimSpace(string(count)))
 }
 
 // covers: AC-6, AC-13
@@ -131,6 +131,18 @@ printf '%s\n' "$count" >"$CURL_COUNT"
 if [ "$count" -le "${CURL_FAILURES:-0}" ]; then exit 7; fi
 calls=" $* "
 case "$calls" in
+  *"/schedule"*)
+    printf '%s\n' '{"class":{"class_id":"class-1","schedule_revision":1},"candidate_count":1,"created_count":0,"adopted_count":1,"superseded_count":0,"preserved_count":0}'
+    ;;
+  *"/sessions/session-1/move"*)
+    printf '%s\n' '{"session_id":"session-1","version":3,"state":"active"}'
+    ;;
+  *"/sessions/session-1/cancel"*)
+    printf '%s\n' '{"session_id":"session-1","version":4,"state":"cancelled"}'
+    ;;
+  *"/sessions/session-1/restore"*)
+    printf '%s\n' '{"session_id":"session-1","version":5,"state":"active"}'
+    ;;
   *"/roster"*)
     printf '%s\n' '{"class_id":"class-1","student_id":"student-1","effective_from":"2026-08-30","effective_to":null}'
     ;;
@@ -172,6 +184,10 @@ func assertThreadCalls(t *testing.T, path, tokenTask, gateway string) {
 	require.Contains(t, calls, "<"+gateway+"/api/classes>")
 	require.Contains(t, calls, "<"+gateway+"/api/students>")
 	require.Contains(t, calls, "<"+gateway+"/api/classes/class-1/roster>")
+	require.Contains(t, calls, "<"+gateway+"/api/classes/class-1/schedule>")
+	require.Contains(t, calls, "<"+gateway+"/api/sessions/session-1/move>")
+	require.Contains(t, calls, "<"+gateway+"/api/sessions/session-1/cancel>")
+	require.Contains(t, calls, "<"+gateway+"/api/sessions/session-1/restore>")
 	require.Contains(t, calls, "<"+gateway+"/api/sessions/session-1/attendance/student-1>")
 	require.Contains(t, calls, "<-H> <Authorization: Bearer ")
 }
