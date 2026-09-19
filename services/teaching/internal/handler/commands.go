@@ -3,9 +3,11 @@ package handler
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -109,12 +111,16 @@ func (h *Handler) CreateClass(
 	if err != nil {
 		return CreateClassResult{}, false, err
 	}
-	commandTime := h.now().UTC()
-	validated, err := validateClassInput(input, timezone, commandTime)
+	requestHash, err := classRequestHash(input)
 	if err != nil {
 		return CreateClassResult{}, false, err
 	}
-	requestHash, err := classRequestHash(validated)
+	replayed, found, replayErr := h.replayClassSnapshot(ctx, tutorID, idempotencyKey, requestHash[:])
+	if found || replayErr != nil {
+		return replayed, false, replayErr
+	}
+	commandTime := h.now().UTC()
+	validated, err := validateClassInput(input, timezone, commandTime)
 	if err != nil {
 		return CreateClassResult{}, false, err
 	}
@@ -154,6 +160,12 @@ func (h *Handler) CreateClass(
 	}
 	defer h.rollback(ctx, tx)
 	queries := store.Queries(tx)
+	contextSnapshot, err := jsonSnapshot(commandContext{
+		CommandTime: commandTime, GoverningTimeZone: timezone, RequestDisplayTimeZone: timezone,
+	})
+	if err != nil {
+		return CreateClassResult{}, false, err
+	}
 
 	_, err = queries.InsertCommandReceipt(ctx, sqlcgen.InsertCommandReceiptParams{
 		TutorID:           tutorID,
@@ -162,6 +174,7 @@ func (h *Handler) CreateClass(
 		RequestHash:       requestHash[:],
 		PrimaryResourceID: classID,
 		RelatedResourceID: pgtype.UUID{Bytes: sessionIDs[0], Valid: true},
+		ContextSnapshot:   contextSnapshot,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		h.rollback(ctx, tx)
@@ -204,15 +217,17 @@ func (h *Handler) CreateClass(
 		if err != nil {
 			return CreateClassResult{}, false, fmt.Errorf("insert schedule rule: %w", err)
 		}
-		_, err = queries.InsertScheduleSlot(ctx, sqlcgen.InsertScheduleSlotParams{
-			ScheduleRuleID: scheduleRuleID,
-			TutorID:        tutorID,
-			Weekday:        validated.schedule.slot.Weekday,
-			StartTime:      validated.schedule.slot.StartTime,
-			EndTime:        validated.schedule.slot.EndTime,
-		})
-		if err != nil {
-			return CreateClassResult{}, false, fmt.Errorf("insert schedule slot: %w", err)
+		for _, slot := range validated.schedule.slots {
+			_, err = queries.InsertScheduleSlot(ctx, sqlcgen.InsertScheduleSlotParams{
+				ScheduleRuleID: scheduleRuleID,
+				TutorID:        tutorID,
+				Weekday:        slot.Weekday,
+				StartTime:      slot.StartTime,
+				EndTime:        slot.EndTime,
+			})
+			if err != nil {
+				return CreateClassResult{}, false, fmt.Errorf("insert schedule slot: %w", err)
+			}
 		}
 		rule = &ScheduleRuleSummary{
 			ScheduleRuleID: scheduleRuleID, ClassID: classID, Revision: scheduleRevision,
@@ -228,7 +243,7 @@ func (h *Handler) CreateClass(
 				nil,
 				commandTime,
 			),
-			Slots: []WeeklyScheduleSlotInput{validated.schedule.slot},
+			Slots: validated.schedule.slots,
 		}
 	}
 	err = h.writeEvent(ctx, tx, teachingEvent{
@@ -245,7 +260,8 @@ func (h *Handler) CreateClass(
 		return CreateClassResult{}, false, err
 	}
 	inserted := make([]sqlcgen.InsertSessionRow, 0, len(occurrences))
-	for index, occurrence := range occurrences {
+	for index := range occurrences {
+		occurrence := &occurrences[index]
 		ruleID := pgtype.UUID{}
 		if validated.schedule != nil {
 			ruleID = pgtype.UUID{Bytes: scheduleRuleID, Valid: true}
@@ -255,7 +271,7 @@ func (h *Handler) CreateClass(
 			StartsAt: occurrence.startsAt, EndsAt: occurrence.endsAt,
 			LocalDate:       pgtype.Date{Time: occurrence.localDate, Valid: true},
 			ScheduleRuleID:  ruleID,
-			OriginLocalDate: pgtype.Date{Time: occurrence.localDate, Valid: true},
+			OriginLocalDate: pgtype.Date{Time: occurrence.originLocalDate, Valid: true},
 		})
 		if insertErr != nil {
 			if constraintConflict(insertErr) {
@@ -277,10 +293,6 @@ func (h *Handler) CreateClass(
 			return CreateClassResult{}, false, writeErr
 		}
 	}
-	err = tx.Commit(ctx)
-	if err != nil {
-		return CreateClassResult{}, false, fmt.Errorf("commit create class: %w", err)
-	}
 	result := CreateClassResult{
 		Class: Class{
 			ClassID: classRow.ClassID, Name: classRow.Name, Color: classRow.Color,
@@ -301,6 +313,51 @@ func (h *Handler) CreateClass(
 		result.FirstSession = &first
 	} else {
 		result.FirstSession = firstUpcomingInserted(inserted, commandTime)
+	}
+	responseSnapshot, err := jsonSnapshot(result)
+	if err != nil {
+		return CreateClassResult{}, false, err
+	}
+	_, err = queries.CompleteCommandReceipt(ctx, sqlcgen.CompleteCommandReceiptParams{
+		TutorID: tutorID, Operation: operationCreateClass, IdempotencyKey: idempotencyKey,
+		ResponseSnapshot: responseSnapshot, ResponseStatus: pgtype.Int4{Int32: http.StatusCreated, Valid: true},
+	})
+	if err != nil {
+		return CreateClassResult{}, false, fmt.Errorf("complete create class receipt: %w", err)
+	}
+	err = tx.Commit(ctx)
+	if err != nil {
+		return CreateClassResult{}, false, fmt.Errorf("commit create class: %w", err)
+	}
+	return result, true, nil
+}
+
+func (h *Handler) replayClassSnapshot(
+	ctx context.Context,
+	tutorID uuid.UUID,
+	idempotencyKey string,
+	requestHash []byte,
+) (CreateClassResult, bool, error) {
+	receipt, err := store.Queries(h.pool).GetCommandReceipt(ctx, sqlcgen.GetCommandReceiptParams{
+		TutorID: tutorID, Operation: operationCreateClass, IdempotencyKey: idempotencyKey,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return CreateClassResult{}, false, nil
+	}
+	if err != nil {
+		return CreateClassResult{}, false, fmt.Errorf("read create class receipt: %w", err)
+	}
+	if !bytes.Equal(receipt.RequestHash, requestHash) {
+		return CreateClassResult{}, true, ErrIdempotencyConflict
+	}
+	if len(receipt.ResponseSnapshot) == 0 {
+		result, _, replayErr := h.replayClass(ctx, tutorID, idempotencyKey, requestHash)
+		return result, true, replayErr
+	}
+	var result CreateClassResult
+	err = json.Unmarshal(receipt.ResponseSnapshot, &result)
+	if err != nil {
+		return CreateClassResult{}, true, fmt.Errorf("decode create class receipt response: %w", err)
 	}
 	return result, true, nil
 }

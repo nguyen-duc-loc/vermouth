@@ -11,18 +11,22 @@ import (
 )
 
 type Querier interface {
+	AdoptStandaloneSession(ctx context.Context, arg AdoptStandaloneSessionParams) (AdoptStandaloneSessionRow, error)
 	// CloseRosterPeriod closes the one open row for the pair, which the partial
 	// unique index makes well defined: teaching.roster.left carries no
 	// effective_from, so the open row is the only possible target. A second left for
 	// the same pair updates nothing.
 	CloseRosterPeriod(ctx context.Context, arg CloseRosterPeriodParams) error
+	CompleteCommandReceipt(ctx context.Context, arg CompleteCommandReceiptParams) (CommandReceipt, error)
+	FindAdoptableStandaloneSession(ctx context.Context, arg FindAdoptableStandaloneSessionParams) (FindAdoptableStandaloneSessionRow, error)
 	FindOpenRosterPeriod(ctx context.Context, arg FindOpenRosterPeriodParams) (FindOpenRosterPeriodRow, error)
 	GetAttendance(ctx context.Context, arg GetAttendanceParams) (Attendance, error)
 	// Locking the owned session serialises corrections, including the first mark
 	// where no attendance row exists yet. The roster flag uses the same inclusive
 	// coverage predicate as every home and billing read.
 	GetAttendanceWriteContext(ctx context.Context, arg GetAttendanceWriteContextParams) (GetAttendanceWriteContextRow, error)
-	GetCommandReceipt(ctx context.Context, arg GetCommandReceiptParams) (GetCommandReceiptRow, error)
+	GetCommandReceipt(ctx context.Context, arg GetCommandReceiptParams) (CommandReceipt, error)
+	GetFirstUpcomingClassSession(ctx context.Context, arg GetFirstUpcomingClassSessionParams) (GetFirstUpcomingClassSessionRow, error)
 	GetOwnedClass(ctx context.Context, arg GetOwnedClassParams) (GetOwnedClassRow, error)
 	GetOwnedLatestScheduleRule(ctx context.Context, arg GetOwnedLatestScheduleRuleParams) (ScheduleRule, error)
 	GetOwnedSession(ctx context.Context, arg GetOwnedSessionParams) (GetOwnedSessionRow, error)
@@ -30,7 +34,7 @@ type Querier interface {
 	InsertClass(ctx context.Context, arg InsertClassParams) (InsertClassRow, error)
 	// The receipt is claimed before its business rows are inserted. A concurrent
 	// loser receives no row, rolls back, then reads the committed winner.
-	InsertCommandReceipt(ctx context.Context, arg InsertCommandReceiptParams) (InsertCommandReceiptRow, error)
+	InsertCommandReceipt(ctx context.Context, arg InsertCommandReceiptParams) (CommandReceipt, error)
 	InsertRosterPeriod(ctx context.Context, arg InsertRosterPeriodParams) (RosterPeriod, error)
 	InsertScheduleRule(ctx context.Context, arg InsertScheduleRuleParams) (ScheduleRule, error)
 	InsertScheduleSlot(ctx context.Context, arg InsertScheduleSlotParams) (InsertScheduleSlotRow, error)
@@ -63,9 +67,11 @@ type Querier interface {
 	// is a date this service computed in their timezone and stored, so reading it
 	// back needs no timezone arithmetic here.
 	ListSessionsForLocalDate(ctx context.Context, arg ListSessionsForLocalDateParams) ([]ListSessionsForLocalDateRow, error)
+	LockOwnedClass(ctx context.Context, arg LockOwnedClassParams) (LockOwnedClassRow, error)
 	// OpenRosterPeriod starts a membership. Joining a class the student is already
 	// in on the same day changes nothing, which is what makes a repeated join safe.
 	OpenRosterPeriod(ctx context.Context, arg OpenRosterPeriodParams) error
+	SetClassScheduleRevision(ctx context.Context, arg SetClassScheduleRevisionParams) (SetClassScheduleRevisionRow, error)
 	// UpsertAttendance keeps at most one row per session and student, so a
 	// correction updates it in place rather than adding a second opinion, and a
 	// redelivered mark lands on the same row (INV-6).

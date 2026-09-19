@@ -83,16 +83,31 @@ ORDER BY starts_at, session_id;
 -- name: InsertCommandReceipt :one
 INSERT INTO command_receipts (
     tutor_id, operation, idempotency_key, request_hash,
-    primary_resource_id, related_resource_id
+    primary_resource_id, related_resource_id, context_snapshot
 )
-VALUES ($1, $2, $3, $4, $5, $6)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (tutor_id, operation, idempotency_key) DO NOTHING
 RETURNING tutor_id, operation, idempotency_key, request_hash,
-          primary_resource_id, related_resource_id, created_at;
+          primary_resource_id, related_resource_id, created_at,
+          context_snapshot, response_snapshot, response_status;
+
+-- name: CompleteCommandReceipt :one
+UPDATE command_receipts
+SET response_snapshot = $4,
+    response_status = $5
+WHERE tutor_id = $1
+  AND operation = $2
+  AND idempotency_key = $3
+  AND response_snapshot IS NULL
+  AND response_status IS NULL
+RETURNING tutor_id, operation, idempotency_key, request_hash,
+          primary_resource_id, related_resource_id, created_at,
+          context_snapshot, response_snapshot, response_status;
 
 -- name: GetCommandReceipt :one
 SELECT tutor_id, operation, idempotency_key, request_hash,
-       primary_resource_id, related_resource_id, created_at
+       primary_resource_id, related_resource_id, created_at,
+       context_snapshot, response_snapshot, response_status
 FROM command_receipts
 WHERE tutor_id = $1
   AND operation = $2
@@ -104,6 +119,23 @@ SELECT class_id, tutor_id, name, color, rate_amount, currency,
 FROM classes
 WHERE tutor_id = $1
   AND class_id = $2;
+
+-- name: LockOwnedClass :one
+SELECT class_id, tutor_id, name, color, rate_amount, currency,
+       rate_effective_from, schedule_revision, created_at, updated_at, archived_at
+FROM classes
+WHERE tutor_id = $1
+  AND class_id = $2
+FOR UPDATE;
+
+-- name: SetClassScheduleRevision :one
+UPDATE classes
+SET schedule_revision = $3,
+    updated_at = $4
+WHERE tutor_id = $1
+  AND class_id = $2
+RETURNING class_id, tutor_id, name, color, rate_amount, currency,
+          rate_effective_from, schedule_revision, created_at, updated_at, archived_at;
 
 -- name: GetOwnedSession :one
 SELECT session_id, class_id, tutor_id, starts_at, ends_at, local_date,
@@ -149,6 +181,54 @@ FROM sessions
 WHERE tutor_id = $1
   AND class_id = $2
 ORDER BY starts_at, session_id;
+
+-- name: FindAdoptableStandaloneSession :one
+SELECT session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+       schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+       created_at, updated_at, cancelled_at
+FROM sessions
+WHERE tutor_id = sqlc.arg(tutor_id)
+  AND class_id = sqlc.arg(class_id)
+  AND schedule_rule_id IS NULL
+  AND starts_at = sqlc.arg(starts_at)
+  AND ends_at = sqlc.arg(ends_at)
+  AND local_date = sqlc.arg(local_date)
+  AND moved_at IS NULL
+  AND cancelled_at IS NULL
+  AND superseded_at IS NULL
+ORDER BY session_id
+LIMIT 1
+FOR UPDATE;
+
+-- name: AdoptStandaloneSession :one
+UPDATE sessions
+SET schedule_rule_id = sqlc.arg(schedule_rule_id),
+    origin_local_date = sqlc.arg(origin_local_date),
+    version = version + 1,
+    updated_at = sqlc.arg(updated_at)
+WHERE tutor_id = sqlc.arg(tutor_id)
+  AND class_id = sqlc.arg(class_id)
+  AND session_id = sqlc.arg(session_id)
+  AND schedule_rule_id IS NULL
+  AND moved_at IS NULL
+  AND cancelled_at IS NULL
+  AND superseded_at IS NULL
+RETURNING session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+          schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+          created_at, updated_at, cancelled_at;
+
+-- name: GetFirstUpcomingClassSession :one
+SELECT session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+       schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+       created_at, updated_at, cancelled_at
+FROM sessions
+WHERE tutor_id = sqlc.arg(tutor_id)
+  AND class_id = sqlc.arg(class_id)
+  AND starts_at >= sqlc.arg(command_time)
+  AND cancelled_at IS NULL
+  AND superseded_at IS NULL
+ORDER BY starts_at, session_id
+LIMIT 1;
 
 -- name: GetOwnedLatestScheduleRule :one
 SELECT schedule_rule_id, tutor_id, class_id, revision, valid_from, valid_through,

@@ -326,6 +326,26 @@ type MarkAttendanceRequest struct {
 	State AttendanceState `json:"state"`
 }
 
+// PutScheduleRequest defines model for PutScheduleRequest.
+type PutScheduleRequest struct {
+	EffectiveFrom    openapi_types.Date        `json:"effective_from"`
+	ExpectedRevision int64                     `json:"expected_revision"`
+	Slots            []WeeklyScheduleSlotInput `json:"slots"`
+	ValidThrough     openapi_types.Date        `json:"valid_through"`
+}
+
+// PutScheduleResponse defines model for PutScheduleResponse.
+type PutScheduleResponse struct {
+	AdoptedCount    int                 `json:"adopted_count"`
+	CandidateCount  int                 `json:"candidate_count"`
+	Class           Class               `json:"class"`
+	CreatedCount    int                 `json:"created_count"`
+	FirstSession    *TeachingSession    `json:"first_session"`
+	PreservedCount  int                 `json:"preserved_count"`
+	Rule            ScheduleRuleSummary `json:"rule"`
+	SupersededCount int                 `json:"superseded_count"`
+}
+
 // Readiness defines model for Readiness.
 type Readiness struct {
 	Checks  *map[string]string `json:"checks,omitempty"`
@@ -573,6 +593,12 @@ type CreateClassParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// PutClassScheduleParams defines parameters for PutClassSchedule.
+type PutClassScheduleParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // GetHomeParams defines parameters for GetHome.
 type GetHomeParams struct {
 	// Cursor Opaque cursor bound to the current tutor local date.
@@ -597,6 +623,9 @@ type CreateClassJSONRequestBody = CreateClassRequest
 
 // JoinRosterJSONRequestBody defines body for JoinRoster for application/json ContentType.
 type JoinRosterJSONRequestBody = JoinRosterRequest
+
+// PutClassScheduleJSONRequestBody defines body for PutClassSchedule for application/json ContentType.
+type PutClassScheduleJSONRequestBody = PutScheduleRequest
 
 // MarkAttendanceJSONRequestBody defines body for MarkAttendance for application/json ContentType.
 type MarkAttendanceJSONRequestBody = MarkAttendanceRequest

@@ -13,6 +13,79 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adoptStandaloneSession = `-- name: AdoptStandaloneSession :one
+UPDATE sessions
+SET schedule_rule_id = $1,
+    origin_local_date = $2,
+    version = version + 1,
+    updated_at = $3
+WHERE tutor_id = $4
+  AND class_id = $5
+  AND session_id = $6
+  AND schedule_rule_id IS NULL
+  AND moved_at IS NULL
+  AND cancelled_at IS NULL
+  AND superseded_at IS NULL
+RETURNING session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+          schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+          created_at, updated_at, cancelled_at
+`
+
+type AdoptStandaloneSessionParams struct {
+	ScheduleRuleID  pgtype.UUID
+	OriginLocalDate pgtype.Date
+	UpdatedAt       time.Time
+	TutorID         uuid.UUID
+	ClassID         uuid.UUID
+	SessionID       uuid.UUID
+}
+
+type AdoptStandaloneSessionRow struct {
+	SessionID       uuid.UUID
+	ClassID         uuid.UUID
+	TutorID         uuid.UUID
+	StartsAt        time.Time
+	EndsAt          time.Time
+	LocalDate       pgtype.Date
+	ScheduleRuleID  pgtype.UUID
+	OriginLocalDate pgtype.Date
+	Version         int64
+	MovedAt         pgtype.Timestamptz
+	SupersededAt    pgtype.Timestamptz
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	CancelledAt     pgtype.Timestamptz
+}
+
+func (q *Queries) AdoptStandaloneSession(ctx context.Context, arg AdoptStandaloneSessionParams) (AdoptStandaloneSessionRow, error) {
+	row := q.db.QueryRow(ctx, adoptStandaloneSession,
+		arg.ScheduleRuleID,
+		arg.OriginLocalDate,
+		arg.UpdatedAt,
+		arg.TutorID,
+		arg.ClassID,
+		arg.SessionID,
+	)
+	var i AdoptStandaloneSessionRow
+	err := row.Scan(
+		&i.SessionID,
+		&i.ClassID,
+		&i.TutorID,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.LocalDate,
+		&i.ScheduleRuleID,
+		&i.OriginLocalDate,
+		&i.Version,
+		&i.MovedAt,
+		&i.SupersededAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CancelledAt,
+	)
+	return i, err
+}
+
 const closeRosterPeriod = `-- name: CloseRosterPeriod :exec
 UPDATE roster_periods
 SET effective_to = $4,
@@ -42,6 +115,124 @@ func (q *Queries) CloseRosterPeriod(ctx context.Context, arg CloseRosterPeriodPa
 		arg.EffectiveTo,
 	)
 	return err
+}
+
+const completeCommandReceipt = `-- name: CompleteCommandReceipt :one
+UPDATE command_receipts
+SET response_snapshot = $4,
+    response_status = $5
+WHERE tutor_id = $1
+  AND operation = $2
+  AND idempotency_key = $3
+  AND response_snapshot IS NULL
+  AND response_status IS NULL
+RETURNING tutor_id, operation, idempotency_key, request_hash,
+          primary_resource_id, related_resource_id, created_at,
+          context_snapshot, response_snapshot, response_status
+`
+
+type CompleteCommandReceiptParams struct {
+	TutorID          uuid.UUID
+	Operation        string
+	IdempotencyKey   string
+	ResponseSnapshot []byte
+	ResponseStatus   pgtype.Int4
+}
+
+func (q *Queries) CompleteCommandReceipt(ctx context.Context, arg CompleteCommandReceiptParams) (CommandReceipt, error) {
+	row := q.db.QueryRow(ctx, completeCommandReceipt,
+		arg.TutorID,
+		arg.Operation,
+		arg.IdempotencyKey,
+		arg.ResponseSnapshot,
+		arg.ResponseStatus,
+	)
+	var i CommandReceipt
+	err := row.Scan(
+		&i.TutorID,
+		&i.Operation,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.PrimaryResourceID,
+		&i.RelatedResourceID,
+		&i.CreatedAt,
+		&i.ContextSnapshot,
+		&i.ResponseSnapshot,
+		&i.ResponseStatus,
+	)
+	return i, err
+}
+
+const findAdoptableStandaloneSession = `-- name: FindAdoptableStandaloneSession :one
+SELECT session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+       schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+       created_at, updated_at, cancelled_at
+FROM sessions
+WHERE tutor_id = $1
+  AND class_id = $2
+  AND schedule_rule_id IS NULL
+  AND starts_at = $3
+  AND ends_at = $4
+  AND local_date = $5
+  AND moved_at IS NULL
+  AND cancelled_at IS NULL
+  AND superseded_at IS NULL
+ORDER BY session_id
+LIMIT 1
+FOR UPDATE
+`
+
+type FindAdoptableStandaloneSessionParams struct {
+	TutorID   uuid.UUID
+	ClassID   uuid.UUID
+	StartsAt  time.Time
+	EndsAt    time.Time
+	LocalDate pgtype.Date
+}
+
+type FindAdoptableStandaloneSessionRow struct {
+	SessionID       uuid.UUID
+	ClassID         uuid.UUID
+	TutorID         uuid.UUID
+	StartsAt        time.Time
+	EndsAt          time.Time
+	LocalDate       pgtype.Date
+	ScheduleRuleID  pgtype.UUID
+	OriginLocalDate pgtype.Date
+	Version         int64
+	MovedAt         pgtype.Timestamptz
+	SupersededAt    pgtype.Timestamptz
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	CancelledAt     pgtype.Timestamptz
+}
+
+func (q *Queries) FindAdoptableStandaloneSession(ctx context.Context, arg FindAdoptableStandaloneSessionParams) (FindAdoptableStandaloneSessionRow, error) {
+	row := q.db.QueryRow(ctx, findAdoptableStandaloneSession,
+		arg.TutorID,
+		arg.ClassID,
+		arg.StartsAt,
+		arg.EndsAt,
+		arg.LocalDate,
+	)
+	var i FindAdoptableStandaloneSessionRow
+	err := row.Scan(
+		&i.SessionID,
+		&i.ClassID,
+		&i.TutorID,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.LocalDate,
+		&i.ScheduleRuleID,
+		&i.OriginLocalDate,
+		&i.Version,
+		&i.MovedAt,
+		&i.SupersededAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CancelledAt,
+	)
+	return i, err
 }
 
 const findOpenRosterPeriod = `-- name: FindOpenRosterPeriod :one
@@ -161,7 +352,8 @@ func (q *Queries) GetAttendanceWriteContext(ctx context.Context, arg GetAttendan
 
 const getCommandReceipt = `-- name: GetCommandReceipt :one
 SELECT tutor_id, operation, idempotency_key, request_hash,
-       primary_resource_id, related_resource_id, created_at
+       primary_resource_id, related_resource_id, created_at,
+       context_snapshot, response_snapshot, response_status
 FROM command_receipts
 WHERE tutor_id = $1
   AND operation = $2
@@ -174,19 +366,9 @@ type GetCommandReceiptParams struct {
 	IdempotencyKey string
 }
 
-type GetCommandReceiptRow struct {
-	TutorID           uuid.UUID
-	Operation         string
-	IdempotencyKey    string
-	RequestHash       []byte
-	PrimaryResourceID uuid.UUID
-	RelatedResourceID pgtype.UUID
-	CreatedAt         time.Time
-}
-
-func (q *Queries) GetCommandReceipt(ctx context.Context, arg GetCommandReceiptParams) (GetCommandReceiptRow, error) {
+func (q *Queries) GetCommandReceipt(ctx context.Context, arg GetCommandReceiptParams) (CommandReceipt, error) {
 	row := q.db.QueryRow(ctx, getCommandReceipt, arg.TutorID, arg.Operation, arg.IdempotencyKey)
-	var i GetCommandReceiptRow
+	var i CommandReceipt
 	err := row.Scan(
 		&i.TutorID,
 		&i.Operation,
@@ -195,6 +377,68 @@ func (q *Queries) GetCommandReceipt(ctx context.Context, arg GetCommandReceiptPa
 		&i.PrimaryResourceID,
 		&i.RelatedResourceID,
 		&i.CreatedAt,
+		&i.ContextSnapshot,
+		&i.ResponseSnapshot,
+		&i.ResponseStatus,
+	)
+	return i, err
+}
+
+const getFirstUpcomingClassSession = `-- name: GetFirstUpcomingClassSession :one
+SELECT session_id, class_id, tutor_id, starts_at, ends_at, local_date,
+       schedule_rule_id, origin_local_date, version, moved_at, superseded_at,
+       created_at, updated_at, cancelled_at
+FROM sessions
+WHERE tutor_id = $1
+  AND class_id = $2
+  AND starts_at >= $3
+  AND cancelled_at IS NULL
+  AND superseded_at IS NULL
+ORDER BY starts_at, session_id
+LIMIT 1
+`
+
+type GetFirstUpcomingClassSessionParams struct {
+	TutorID     uuid.UUID
+	ClassID     uuid.UUID
+	CommandTime time.Time
+}
+
+type GetFirstUpcomingClassSessionRow struct {
+	SessionID       uuid.UUID
+	ClassID         uuid.UUID
+	TutorID         uuid.UUID
+	StartsAt        time.Time
+	EndsAt          time.Time
+	LocalDate       pgtype.Date
+	ScheduleRuleID  pgtype.UUID
+	OriginLocalDate pgtype.Date
+	Version         int64
+	MovedAt         pgtype.Timestamptz
+	SupersededAt    pgtype.Timestamptz
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	CancelledAt     pgtype.Timestamptz
+}
+
+func (q *Queries) GetFirstUpcomingClassSession(ctx context.Context, arg GetFirstUpcomingClassSessionParams) (GetFirstUpcomingClassSessionRow, error) {
+	row := q.db.QueryRow(ctx, getFirstUpcomingClassSession, arg.TutorID, arg.ClassID, arg.CommandTime)
+	var i GetFirstUpcomingClassSessionRow
+	err := row.Scan(
+		&i.SessionID,
+		&i.ClassID,
+		&i.TutorID,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.LocalDate,
+		&i.ScheduleRuleID,
+		&i.OriginLocalDate,
+		&i.Version,
+		&i.MovedAt,
+		&i.SupersededAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CancelledAt,
 	)
 	return i, err
 }
@@ -428,12 +672,13 @@ func (q *Queries) InsertClass(ctx context.Context, arg InsertClassParams) (Inser
 const insertCommandReceipt = `-- name: InsertCommandReceipt :one
 INSERT INTO command_receipts (
     tutor_id, operation, idempotency_key, request_hash,
-    primary_resource_id, related_resource_id
+    primary_resource_id, related_resource_id, context_snapshot
 )
-VALUES ($1, $2, $3, $4, $5, $6)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (tutor_id, operation, idempotency_key) DO NOTHING
 RETURNING tutor_id, operation, idempotency_key, request_hash,
-          primary_resource_id, related_resource_id, created_at
+          primary_resource_id, related_resource_id, created_at,
+          context_snapshot, response_snapshot, response_status
 `
 
 type InsertCommandReceiptParams struct {
@@ -443,21 +688,12 @@ type InsertCommandReceiptParams struct {
 	RequestHash       []byte
 	PrimaryResourceID uuid.UUID
 	RelatedResourceID pgtype.UUID
-}
-
-type InsertCommandReceiptRow struct {
-	TutorID           uuid.UUID
-	Operation         string
-	IdempotencyKey    string
-	RequestHash       []byte
-	PrimaryResourceID uuid.UUID
-	RelatedResourceID pgtype.UUID
-	CreatedAt         time.Time
+	ContextSnapshot   []byte
 }
 
 // The receipt is claimed before its business rows are inserted. A concurrent
 // loser receives no row, rolls back, then reads the committed winner.
-func (q *Queries) InsertCommandReceipt(ctx context.Context, arg InsertCommandReceiptParams) (InsertCommandReceiptRow, error) {
+func (q *Queries) InsertCommandReceipt(ctx context.Context, arg InsertCommandReceiptParams) (CommandReceipt, error) {
 	row := q.db.QueryRow(ctx, insertCommandReceipt,
 		arg.TutorID,
 		arg.Operation,
@@ -465,8 +701,9 @@ func (q *Queries) InsertCommandReceipt(ctx context.Context, arg InsertCommandRec
 		arg.RequestHash,
 		arg.PrimaryResourceID,
 		arg.RelatedResourceID,
+		arg.ContextSnapshot,
 	)
-	var i InsertCommandReceiptRow
+	var i CommandReceipt
 	err := row.Scan(
 		&i.TutorID,
 		&i.Operation,
@@ -475,6 +712,9 @@ func (q *Queries) InsertCommandReceipt(ctx context.Context, arg InsertCommandRec
 		&i.PrimaryResourceID,
 		&i.RelatedResourceID,
 		&i.CreatedAt,
+		&i.ContextSnapshot,
+		&i.ResponseSnapshot,
+		&i.ResponseStatus,
 	)
 	return i, err
 }
@@ -1371,6 +1611,53 @@ func (q *Queries) ListSessionsForLocalDate(ctx context.Context, arg ListSessions
 	return items, nil
 }
 
+const lockOwnedClass = `-- name: LockOwnedClass :one
+SELECT class_id, tutor_id, name, color, rate_amount, currency,
+       rate_effective_from, schedule_revision, created_at, updated_at, archived_at
+FROM classes
+WHERE tutor_id = $1
+  AND class_id = $2
+FOR UPDATE
+`
+
+type LockOwnedClassParams struct {
+	TutorID uuid.UUID
+	ClassID uuid.UUID
+}
+
+type LockOwnedClassRow struct {
+	ClassID           uuid.UUID
+	TutorID           uuid.UUID
+	Name              string
+	Color             string
+	RateAmount        int64
+	Currency          string
+	RateEffectiveFrom pgtype.Date
+	ScheduleRevision  int64
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	ArchivedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) LockOwnedClass(ctx context.Context, arg LockOwnedClassParams) (LockOwnedClassRow, error) {
+	row := q.db.QueryRow(ctx, lockOwnedClass, arg.TutorID, arg.ClassID)
+	var i LockOwnedClassRow
+	err := row.Scan(
+		&i.ClassID,
+		&i.TutorID,
+		&i.Name,
+		&i.Color,
+		&i.RateAmount,
+		&i.Currency,
+		&i.RateEffectiveFrom,
+		&i.ScheduleRevision,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const openRosterPeriod = `-- name: OpenRosterPeriod :exec
 INSERT INTO roster_periods (class_id, student_id, effective_from, tutor_id)
 VALUES ($1, $2, $3, $4)
@@ -1394,6 +1681,61 @@ func (q *Queries) OpenRosterPeriod(ctx context.Context, arg OpenRosterPeriodPara
 		arg.TutorID,
 	)
 	return err
+}
+
+const setClassScheduleRevision = `-- name: SetClassScheduleRevision :one
+UPDATE classes
+SET schedule_revision = $3,
+    updated_at = $4
+WHERE tutor_id = $1
+  AND class_id = $2
+RETURNING class_id, tutor_id, name, color, rate_amount, currency,
+          rate_effective_from, schedule_revision, created_at, updated_at, archived_at
+`
+
+type SetClassScheduleRevisionParams struct {
+	TutorID          uuid.UUID
+	ClassID          uuid.UUID
+	ScheduleRevision int64
+	UpdatedAt        time.Time
+}
+
+type SetClassScheduleRevisionRow struct {
+	ClassID           uuid.UUID
+	TutorID           uuid.UUID
+	Name              string
+	Color             string
+	RateAmount        int64
+	Currency          string
+	RateEffectiveFrom pgtype.Date
+	ScheduleRevision  int64
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	ArchivedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) SetClassScheduleRevision(ctx context.Context, arg SetClassScheduleRevisionParams) (SetClassScheduleRevisionRow, error) {
+	row := q.db.QueryRow(ctx, setClassScheduleRevision,
+		arg.TutorID,
+		arg.ClassID,
+		arg.ScheduleRevision,
+		arg.UpdatedAt,
+	)
+	var i SetClassScheduleRevisionRow
+	err := row.Scan(
+		&i.ClassID,
+		&i.TutorID,
+		&i.Name,
+		&i.Color,
+		&i.RateAmount,
+		&i.Currency,
+		&i.RateEffectiveFrom,
+		&i.ScheduleRevision,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
 }
 
 const upsertAttendance = `-- name: UpsertAttendance :one

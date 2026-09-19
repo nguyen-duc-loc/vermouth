@@ -320,6 +320,40 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /api/classes/{class_id}/schedule:
+    put:
+      operationId: putClassSchedule
+      summary: Create the first weekly schedule for an existing class
+      parameters:
+        - name: class_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PutScheduleRequest"
+      responses:
+        "201":
+          description: The first retained schedule rule and concrete sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PutScheduleResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/schedule:
     get:
       operationId: getSchedule
@@ -807,6 +841,56 @@ components:
           type: integer
           minimum: 0
         adopted_count:
+          type: integer
+          minimum: 0
+
+    PutScheduleRequest:
+      type: object
+      required: [expected_revision, effective_from, valid_through, slots]
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 0
+        effective_from:
+          type: string
+          format: date
+        valid_through:
+          type: string
+          format: date
+        slots:
+          type: array
+          minItems: 1
+          maxItems: 7
+          items:
+            $ref: "#/components/schemas/WeeklyScheduleSlotInput"
+
+    PutScheduleResponse:
+      type: object
+      required:
+        [class, rule, first_session, candidate_count, created_count, adopted_count, superseded_count, preserved_count]
+      properties:
+        class:
+          $ref: "#/components/schemas/Class"
+        rule:
+          $ref: "#/components/schemas/ScheduleRuleSummary"
+        first_session:
+          oneOf:
+            - $ref: "#/components/schemas/TeachingSession"
+            - type: "null"
+        candidate_count:
+          type: integer
+          minimum: 0
+        created_count:
+          type: integer
+          minimum: 0
+        adopted_count:
+          type: integer
+          minimum: 0
+        superseded_count:
+          type: integer
+          minimum: 0
+        preserved_count:
           type: integer
           minimum: 0
 

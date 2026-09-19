@@ -30,12 +30,44 @@ func Mux(deps Deps) http.Handler {
 	mux := http.NewServeMux()
 	deps.Health.Mount(mux)
 	mux.HandleFunc("POST /classes", createClass(deps))
+	mux.HandleFunc("PUT /classes/{class_id}/schedule", putSchedule(deps))
 	mux.HandleFunc("POST /students", createStudent(deps))
 	mux.HandleFunc("POST /classes/{class_id}/roster", joinRoster(deps))
 	mux.HandleFunc("PUT /sessions/{session_id}/attendance/{student_id}", markAttendance(deps))
 	mux.HandleFunc("GET /home", readHome(deps))
 	mux.HandleFunc("GET /schedule", readSchedule(deps))
 	return vermouth.RequestIDMiddleware(deps.Logger, mux)
+}
+
+func putSchedule(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := verifiedClaims(deps, w, r)
+		if !ok {
+			return
+		}
+		classID, err := uuid.Parse(r.PathValue("class_id"))
+		if err != nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "class_id must be a UUID")
+			return
+		}
+		var input handler.PutScheduleInput
+		if !decodeJSON(w, r, &input) {
+			return
+		}
+		result, status, err := deps.Handler.PutSchedule(
+			r.Context(),
+			claims.TutorID,
+			classID,
+			claims.Timezone,
+			r.Header.Get("Idempotency-Key"),
+			input,
+		)
+		if err != nil {
+			writeHandlerError(deps, w, r, "Put schedule", err)
+			return
+		}
+		vermouth.WriteJSON(r.Context(), deps.Logger, w, status, result)
+	}
 }
 
 func createClass(deps Deps) http.HandlerFunc {

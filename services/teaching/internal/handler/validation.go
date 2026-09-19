@@ -22,7 +22,7 @@ const (
 	offsetScanHours           = 48
 	offsetSampleStep          = 30 * time.Minute
 	maxRuleYears              = 2
-	weeklyOccurrencesCapacity = 106
+	weeklyOccurrencesCapacity = 732
 	daysPerWeek               = 7
 )
 
@@ -45,17 +45,18 @@ type validatedClass struct {
 }
 
 type validatedOccurrence struct {
-	localDate time.Time
-	startTime string
-	endTime   string
-	startsAt  time.Time
-	endsAt    time.Time
+	localDate       time.Time
+	originLocalDate time.Time
+	startTime       string
+	endTime         string
+	startsAt        time.Time
+	endsAt          time.Time
 }
 
 type validatedSchedule struct {
 	validFrom    time.Time
 	validThrough time.Time
-	slot         WeeklyScheduleSlotInput
+	slots        []WeeklyScheduleSlotInput
 	occurrences  []validatedOccurrence
 }
 
@@ -156,11 +157,12 @@ func validateOccurrence(
 		}
 	}
 	return validatedOccurrence{
-		localDate: localDate,
-		startTime: input.StartTime,
-		endTime:   input.EndTime,
-		startsAt:  startsAt.UTC(),
-		endsAt:    endsAt.UTC(),
+		localDate:       localDate,
+		originLocalDate: localDate,
+		startTime:       input.StartTime,
+		endTime:         input.EndTime,
+		startsAt:        startsAt.UTC(),
+		endsAt:          endsAt.UTC(),
 	}, nil
 }
 
@@ -183,38 +185,18 @@ func validateWeeklySchedule(
 			Field: "schedule.valid_from", Message: "must be no more than 30 local dates before today",
 		}
 	}
-	if validThrough.Before(validFrom) || validThrough.After(validFrom.AddDate(maxRuleYears, 0, 0)) {
+	if validThrough.Before(validFrom) || validThrough.After(clampedYearDate(validFrom, maxRuleYears)) {
 		return validatedSchedule{}, &ValidationError{
 			Field: "schedule.valid_through", Message: "must be on or after valid_from and no more than two years later",
 		}
 	}
-	if len(input.Slots) != 1 {
-		return validatedSchedule{}, &ValidationError{
-			Field: "schedule.slots", Message: "must contain exactly one weekday in this tracer slice",
-		}
+	slots, err := validateAndSortWeeklySlots(input.Slots)
+	if err != nil {
+		return validatedSchedule{}, err
 	}
-	slot := input.Slots[0]
-	if slot.Weekday < 1 || slot.Weekday > 7 {
-		return validatedSchedule{}, &ValidationError{
-			Field: "schedule.slots[0].weekday", Message: "must be an ISO weekday from 1 through 7",
-		}
-	}
-	occurrences := make([]validatedOccurrence, 0, weeklyOccurrencesCapacity)
-	for day := validFrom; !day.After(validThrough); day = day.AddDate(0, 0, 1) {
-		if int(day.Weekday()) != int(slot.Weekday%daysPerWeek) {
-			continue
-		}
-		occurrence, occurrenceErr := validateOccurrence(
-			"schedule.slots[0]",
-			FirstSessionInput{
-				LocalDate: day.Format(dateLayout), StartTime: slot.StartTime, EndTime: slot.EndTime,
-			},
-			location,
-		)
-		if occurrenceErr != nil {
-			return validatedSchedule{}, occurrenceErr
-		}
-		occurrences = append(occurrences, occurrence)
+	occurrences, err := expandWeeklyOccurrences(validFrom, validThrough, slots, location)
+	if err != nil {
+		return validatedSchedule{}, err
 	}
 	if len(occurrences) == 0 {
 		return validatedSchedule{}, &ValidationError{
@@ -222,8 +204,156 @@ func validateWeeklySchedule(
 		}
 	}
 	return validatedSchedule{
-		validFrom: validFrom, validThrough: validThrough, slot: slot, occurrences: occurrences,
+		validFrom: validFrom, validThrough: validThrough, slots: slots, occurrences: occurrences,
 	}, nil
+}
+
+func validateAndSortWeeklySlots(input []WeeklyScheduleSlotInput) ([]WeeklyScheduleSlotInput, error) {
+	if len(input) < 1 || len(input) > daysPerWeek {
+		return nil, &ValidationError{
+			Field: "schedule.slots", Message: "must contain one through seven weekdays",
+		}
+	}
+	slots := slices.Clone(input)
+	slices.SortFunc(slots, func(left, right WeeklyScheduleSlotInput) int {
+		return int(left.Weekday - right.Weekday)
+	})
+	for index, slot := range slots {
+		field := fmt.Sprintf("schedule.slots[%d]", index)
+		if slot.Weekday < 1 || slot.Weekday > 7 {
+			return nil, &ValidationError{
+				Field: field + ".weekday", Message: "must be an ISO weekday from 1 through 7",
+			}
+		}
+		if index > 0 && slots[index-1].Weekday == slot.Weekday {
+			return nil, &ValidationError{Field: field + ".weekday", Message: "must be unique"}
+		}
+		startClock, err := parseLocalTime(field+".start_time", slot.StartTime)
+		if err != nil {
+			return nil, err
+		}
+		endClock, err := parseLocalTime(field+".end_time", slot.EndTime)
+		if err != nil {
+			return nil, err
+		}
+		if !endClock.After(startClock) {
+			return nil, &ValidationError{
+				Field: field + ".end_time", Message: "must be later than start_time on the same local date",
+			}
+		}
+	}
+	return slots, nil
+}
+
+func expandWeeklyOccurrences(
+	validFrom time.Time,
+	validThrough time.Time,
+	slots []WeeklyScheduleSlotInput,
+	location *time.Location,
+) ([]validatedOccurrence, error) {
+	occurrences := make([]validatedOccurrence, 0, weeklyOccurrencesCapacity)
+	for day := validFrom; !day.After(validThrough); day = day.AddDate(0, 0, 1) {
+		for slotIndex, slot := range slots {
+			if int(day.Weekday()) != int(slot.Weekday%daysPerWeek) {
+				continue
+			}
+			occurrence, occurrenceErr := resolveWeeklyOccurrence(
+				fmt.Sprintf("schedule.slots[%d]", slotIndex),
+				day,
+				slot,
+				location,
+				validFrom,
+				validThrough,
+			)
+			if occurrenceErr != nil {
+				return nil, occurrenceErr
+			}
+			occurrences = append(occurrences, occurrence)
+		}
+	}
+	return occurrences, nil
+}
+
+func resolveWeeklyOccurrence(
+	prefix string,
+	originDate time.Time,
+	slot WeeklyScheduleSlotInput,
+	location *time.Location,
+	validFrom time.Time,
+	validThrough time.Time,
+) (validatedOccurrence, error) {
+	startsAt, err := resolveWeeklyLocal(prefix+".start_time", originDate, slot.StartTime, location)
+	if err != nil {
+		return validatedOccurrence{}, err
+	}
+	endsAt, err := resolveWeeklyLocal(prefix+".end_time", originDate, slot.EndTime, location)
+	if err != nil {
+		return validatedOccurrence{}, err
+	}
+	startDate := localCalendarDate(startsAt, location)
+	endDate := localCalendarDate(endsAt, location)
+	if !endsAt.After(startsAt) || !startDate.Equal(endDate) {
+		return validatedOccurrence{}, &ValidationError{
+			Field: prefix + ".end_time", Message: "resolves no later than start_time or leaves its local date",
+		}
+	}
+	if startDate.Before(validFrom) || startDate.After(validThrough) ||
+		endDate.Before(validFrom) || endDate.After(validThrough) {
+		return validatedOccurrence{}, &ValidationError{
+			Field: prefix, Message: "resolves outside the schedule date range",
+		}
+	}
+	return validatedOccurrence{
+		localDate:       startDate,
+		originLocalDate: originDate,
+		startTime:       slot.StartTime,
+		endTime:         slot.EndTime,
+		startsAt:        startsAt.UTC(),
+		endsAt:          endsAt.UTC(),
+	}, nil
+}
+
+func resolveWeeklyLocal(field string, date time.Time, clock string, location *time.Location) (time.Time, error) {
+	parsedClock, err := parseLocalTime(field, clock)
+	if err != nil {
+		return time.Time{}, err
+	}
+	candidates := localCandidates(
+		date.Year(), date.Month(), date.Day(), parsedClock.Hour(), parsedClock.Minute(), location,
+	)
+	if len(candidates) > 0 {
+		return candidates[0], nil
+	}
+	wall := time.Date(
+		date.Year(), date.Month(), date.Day(), parsedClock.Hour(), parsedClock.Minute(), 0, 0, time.UTC,
+	)
+	offsets := localOffsets(wall, location)
+	for _, before := range offsets {
+		for _, after := range offsets {
+			if after <= before {
+				continue
+			}
+			shifted := wall.Add(time.Duration(after-before) * time.Second)
+			shiftedCandidates := localCandidates(
+				shifted.Year(), shifted.Month(), shifted.Day(), shifted.Hour(), shifted.Minute(), location,
+			)
+			if len(shiftedCandidates) > 0 {
+				return shiftedCandidates[0], nil
+			}
+		}
+	}
+	return time.Time{}, &ValidationError{Field: field, Message: "cannot be resolved in the schedule timezone"}
+}
+
+func clampedYearDate(value time.Time, years int) time.Time {
+	year := value.Year() + years
+	day := value.Day()
+	lastDay := time.Date(year, value.Month(), 1, 0, 0, 0, 0, time.UTC).
+		AddDate(0, 1, -1).Day()
+	if day > lastDay {
+		day = lastDay
+	}
+	return time.Date(year, value.Month(), day, 0, 0, 0, 0, time.UTC)
 }
 
 func localCalendarDate(now time.Time, location *time.Location) time.Time {
@@ -334,14 +464,10 @@ func localCandidates(
 	location *time.Location,
 ) []time.Time {
 	wall := time.Date(year, month, day, hour, minute, 0, 0, time.UTC)
-	offsets := make(map[int]struct{})
-	for sample := wall.Add(-offsetScanHours * time.Hour); !sample.After(wall.Add(offsetScanHours * time.Hour)); sample = sample.Add(offsetSampleStep) {
-		_, offset := sample.In(location).Zone()
-		offsets[offset] = struct{}{}
-	}
+	offsets := localOffsets(wall, location)
 	candidates := make([]time.Time, 0, len(offsets))
 	seen := make(map[int64]struct{})
-	for offset := range offsets {
+	for _, offset := range offsets {
 		candidate := wall.Add(-time.Duration(offset) * time.Second)
 		local := candidate.In(location)
 		matches := local.Year() == year && local.Month() == month && local.Day() == day &&
@@ -359,7 +485,21 @@ func localCandidates(
 	return candidates
 }
 
-func classRequestHash(value validatedClass) ([sha256.Size]byte, error) {
+func localOffsets(wall time.Time, location *time.Location) []int {
+	unique := make(map[int]struct{})
+	for sample := wall.Add(-offsetScanHours * time.Hour); !sample.After(wall.Add(offsetScanHours * time.Hour)); sample = sample.Add(offsetSampleStep) {
+		_, offset := sample.In(location).Zone()
+		unique[offset] = struct{}{}
+	}
+	offsets := make([]int, 0, len(unique))
+	for offset := range unique {
+		offsets = append(offsets, offset)
+	}
+	slices.Sort(offsets)
+	return offsets
+}
+
+func classRequestHash(value CreateClassInput) ([sha256.Size]byte, error) {
 	type canonicalOccurrence struct {
 		LocalDate string `json:"local_date"`
 		StartTime string `json:"start_time"`
@@ -376,22 +516,27 @@ func classRequestHash(value validatedClass) ([sha256.Size]byte, error) {
 		RateAmount   int64                `json:"rate_amount"`
 		FirstSession *canonicalOccurrence `json:"first_session"`
 		Schedule     *canonicalSchedule   `json:"schedule"`
-		Timezone     string               `json:"timezone"`
 	}{
-		Name: value.name, Color: value.color, RateAmount: value.rateAmount, Timezone: value.timezone,
+		Name: strings.TrimSpace(value.Name), Color: value.Color, RateAmount: value.RateAmount,
 	}
-	if value.first != nil {
+	hasFirstSession := value.FirstSession.LocalDate != "" || value.FirstSession.StartTime != "" ||
+		value.FirstSession.EndTime != ""
+	if hasFirstSession {
 		canonical.FirstSession = &canonicalOccurrence{
-			LocalDate: value.first.localDate.Format(dateLayout),
-			StartTime: value.first.startTime,
-			EndTime:   value.first.endTime,
+			LocalDate: value.FirstSession.LocalDate,
+			StartTime: value.FirstSession.StartTime,
+			EndTime:   value.FirstSession.EndTime,
 		}
 	}
-	if value.schedule != nil {
+	if value.Schedule != nil {
+		slots := slices.Clone(value.Schedule.Slots)
+		slices.SortFunc(slots, func(left, right WeeklyScheduleSlotInput) int {
+			return int(left.Weekday - right.Weekday)
+		})
 		canonical.Schedule = &canonicalSchedule{
-			ValidFrom:    value.schedule.validFrom.Format(dateLayout),
-			ValidThrough: value.schedule.validThrough.Format(dateLayout),
-			Slots:        []WeeklyScheduleSlotInput{value.schedule.slot},
+			ValidFrom:    value.Schedule.ValidFrom,
+			ValidThrough: value.Schedule.ValidThrough,
+			Slots:        slots,
 		}
 	}
 	//nolint:errchkjson // This fixed struct contains only JSON primitive values, but the checked error keeps the boundary explicit.

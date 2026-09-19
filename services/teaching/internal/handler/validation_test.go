@@ -115,6 +115,84 @@ func TestValidateClassInput_RejectsMissingAndRepeatedClockReadings(t *testing.T)
 	}
 }
 
+// covers: AC-1, AC-10
+func TestValidateWeeklySchedule_AcceptsSevenSortedSlotsAndClampedTwoYearBound(t *testing.T) {
+	t.Parallel()
+
+	location, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	require.NoError(t, err)
+	slots := []WeeklyScheduleSlotInput{
+		{Weekday: 7, StartTime: "09:00", EndTime: "10:00"},
+		{Weekday: 1, StartTime: "17:30", EndTime: "19:00"},
+		{Weekday: 6, StartTime: "08:00", EndTime: "09:00"},
+		{Weekday: 2, StartTime: "17:30", EndTime: "19:00"},
+		{Weekday: 5, StartTime: "17:30", EndTime: "19:00"},
+		{Weekday: 3, StartTime: "17:30", EndTime: "19:00"},
+		{Weekday: 4, StartTime: "17:30", EndTime: "19:00"},
+	}
+	schedule, err := validateWeeklySchedule(WeeklyScheduleInput{
+		ValidFrom: "2024-02-29", ValidThrough: "2026-02-28", Slots: slots,
+	}, location, time.Date(2024, time.February, 29, 2, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	require.Len(t, schedule.slots, 7)
+	require.Equal(t, int16(1), schedule.slots[0].Weekday)
+	require.Equal(t, int16(7), schedule.slots[6].Weekday)
+	require.Len(t, schedule.occurrences, 731)
+
+	_, err = validateWeeklySchedule(WeeklyScheduleInput{
+		ValidFrom: "2024-02-29", ValidThrough: "2026-03-01", Slots: slots[:1],
+	}, location, time.Date(2024, time.February, 29, 2, 0, 0, 0, time.UTC))
+	var validation *ValidationError
+	require.ErrorAs(t, err, &validation)
+	require.Equal(t, "schedule.valid_through", validation.Field)
+}
+
+// covers: AC-1, AC-9
+func TestValidateWeeklySchedule_RejectsDuplicateWeekdays(t *testing.T) {
+	t.Parallel()
+
+	location, err := time.LoadLocation("UTC")
+	require.NoError(t, err)
+	_, err = validateWeeklySchedule(WeeklyScheduleInput{
+		ValidFrom:    "2026-08-30",
+		ValidThrough: "2026-09-06",
+		Slots: []WeeklyScheduleSlotInput{
+			{Weekday: 1, StartTime: "09:00", EndTime: "10:00"},
+			{Weekday: 1, StartTime: "11:00", EndTime: "12:00"},
+		},
+	}, location, validationTestNow())
+	var validation *ValidationError
+	require.ErrorAs(t, err, &validation)
+	require.Contains(t, validation.Field, "weekday")
+}
+
+// covers: AC-10
+func TestValidateWeeklySchedule_ResolvesGapForwardAndAmbiguityEarlier(t *testing.T) {
+	t.Parallel()
+
+	location, err := time.LoadLocation("America/New_York")
+	require.NoError(t, err)
+	spring, err := validateWeeklySchedule(WeeklyScheduleInput{
+		ValidFrom:    "2026-03-08",
+		ValidThrough: "2026-03-08",
+		Slots:        []WeeklyScheduleSlotInput{{Weekday: 7, StartTime: "02:00", EndTime: "03:30"}},
+	}, location, time.Date(2026, time.March, 8, 5, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	require.Len(t, spring.occurrences, 1)
+	require.Equal(t, time.Date(2026, time.March, 8, 7, 0, 0, 0, time.UTC), spring.occurrences[0].startsAt)
+	require.Equal(t, time.Date(2026, time.March, 8, 7, 30, 0, 0, time.UTC), spring.occurrences[0].endsAt)
+
+	autumn, err := validateWeeklySchedule(WeeklyScheduleInput{
+		ValidFrom:    "2026-11-01",
+		ValidThrough: "2026-11-01",
+		Slots:        []WeeklyScheduleSlotInput{{Weekday: 7, StartTime: "01:30", EndTime: "02:30"}},
+	}, location, time.Date(2026, time.November, 1, 4, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	require.Len(t, autumn.occurrences, 1)
+	require.Equal(t, time.Date(2026, time.November, 1, 5, 30, 0, 0, time.UTC), autumn.occurrences[0].startsAt)
+	require.Equal(t, time.Date(2026, time.November, 1, 7, 30, 0, 0, time.UTC), autumn.occurrences[0].endsAt)
+}
+
 // covers: AC-3, AC-11
 func TestKnownClassColor_AcceptsOnlyTheContractPalette(t *testing.T) {
 	t.Parallel()
@@ -159,27 +237,19 @@ func TestValidateStudentInput_NormalizesOnlyTheDocumentedFields(t *testing.T) {
 }
 
 // covers: AC-10
-func TestCommandHashes_NameTheValidatedCommandAndTimezone(t *testing.T) {
+func TestCommandHashes_NormalizeExplicitInputWithoutTokenTimezone(t *testing.T) {
 	t.Parallel()
 
-	first, err := validateClassInput(validClassInput(), "Asia/Ho_Chi_Minh", validationTestNow())
-	require.NoError(t, err)
+	first := validClassInput()
 	sameInput := validClassInput()
 	sameInput.Name = "Maths 9A"
-	same, err := validateClassInput(sameInput, "Asia/Ho_Chi_Minh", validationTestNow())
-	require.NoError(t, err)
-	otherTimezone, err := validateClassInput(validClassInput(), "UTC", validationTestNow())
-	require.NoError(t, err)
 
 	firstHash, err := classRequestHash(first)
 	require.NoError(t, err)
-	sameHash, err := classRequestHash(same)
-	require.NoError(t, err)
-	timezoneHash, err := classRequestHash(otherTimezone)
+	sameHash, err := classRequestHash(sameInput)
 	require.NoError(t, err)
 
 	require.Equal(t, firstHash, sameHash)
-	require.NotEqual(t, firstHash, timezoneHash)
 
 	emptyPhone := ""
 	studentWithEmpty, err := validateStudentInput(CreateStudentInput{Name: " Mai ", Phone: &emptyPhone})

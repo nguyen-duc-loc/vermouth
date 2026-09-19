@@ -25,6 +25,8 @@ const maxRequestBody = 1 << 20
 
 const refreshCookieName = "vermouth_refresh"
 
+const idempotencyHeader = "Idempotency-Key"
+
 // Deps is what the routes need. There is no database in here on purpose.
 type Deps struct {
 	Client        *aggregate.Client
@@ -85,6 +87,7 @@ func Mux(deps Deps) http.Handler {
 	})
 
 	authenticated.HandleFunc("POST /api/classes", proxyCreateClass(deps))
+	authenticated.HandleFunc("PUT /api/classes/{class_id}/schedule", proxyPutSchedule(deps))
 	authenticated.HandleFunc("POST /api/students", proxyCreateStudent(deps))
 	authenticated.HandleFunc("POST /api/classes/{class_id}/roster", proxyJoinRoster(deps))
 	authenticated.HandleFunc(
@@ -100,6 +103,34 @@ func Mux(deps Deps) http.Handler {
 	return vermouth.RequestIDMiddleware(deps.Logger, mux)
 }
 
+func proxyPutSchedule(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var input apitypes.PutScheduleRequest
+		if !decodeJSONBody(w, r, &input) {
+			return
+		}
+		classID, err := uuid.Parse(r.PathValue("class_id"))
+		if err != nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "class_id must be a UUID")
+			return
+		}
+		response, err := deps.Client.CallWithHeaders(
+			r.Context(),
+			http.MethodPut,
+			deps.Client.Upstreams().Teaching,
+			"/classes/"+classID.String()+"/schedule",
+			vermouth.BearerToken(r),
+			http.Header{idempotencyHeader: []string{r.Header.Get(idempotencyHeader)}},
+			input,
+		)
+		if err != nil {
+			upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)
+			return
+		}
+		passThrough(r.Context(), deps.Logger, w, response)
+	}
+}
+
 func proxyCreateClass(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var input apitypes.CreateClassRequest
@@ -112,7 +143,7 @@ func proxyCreateClass(deps Deps) http.HandlerFunc {
 			deps.Client.Upstreams().Teaching,
 			"/classes",
 			vermouth.BearerToken(r),
-			http.Header{"Idempotency-Key": []string{r.Header.Get("Idempotency-Key")}},
+			http.Header{idempotencyHeader: []string{r.Header.Get(idempotencyHeader)}},
 			input,
 		)
 		if err != nil {
@@ -135,7 +166,7 @@ func proxyCreateStudent(deps Deps) http.HandlerFunc {
 			deps.Client.Upstreams().Teaching,
 			"/students",
 			vermouth.BearerToken(r),
-			http.Header{"Idempotency-Key": []string{r.Header.Get("Idempotency-Key")}},
+			http.Header{idempotencyHeader: []string{r.Header.Get(idempotencyHeader)}},
 			input,
 		)
 		if err != nil {

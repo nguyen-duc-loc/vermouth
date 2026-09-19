@@ -50,6 +50,14 @@ func TestMux_ForwardsTeachingCommandsThroughTheirDeclaredBoundary(t *testing.T) 
 			wantIdempotencyKey: "class-command",
 		},
 		{
+			name:               "first schedule for existing class",
+			method:             http.MethodPut,
+			path:               "/api/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/schedule",
+			body:               `{"expected_revision":0,"effective_from":"2026-08-30","valid_through":"2026-09-06","slots":[{"weekday":7,"start_time":"10:00","end_time":"11:00"}]}`,
+			wantPath:           "/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/schedule",
+			wantIdempotencyKey: "schedule-command",
+		},
+		{
 			name:               "student",
 			method:             http.MethodPost,
 			path:               "/api/students",
@@ -138,6 +146,7 @@ func TestMux_RejectsMissingBearerOnEveryTeachingRoute(t *testing.T) {
 		path   string
 	}{
 		{http.MethodPost, "/api/classes"},
+		{http.MethodPut, "/api/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/schedule"},
 		{http.MethodPost, "/api/students"},
 		{http.MethodPost, "/api/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/roster"},
 		{http.MethodPut, "/api/sessions/018f8f7e-91b0-7cc4-bd8c-f4d9030ca423/attendance/018f8f7e-91b0-7cc4-bd8c-f4d9030ca422"},

@@ -37,10 +37,12 @@ func TestMux_RequiresAValidTokenOnEveryTeachingOperation(t *testing.T) {
 		path   string
 	}{
 		{stdhttp.MethodPost, "/classes"},
+		{stdhttp.MethodPut, "/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/schedule"},
 		{stdhttp.MethodPost, "/students"},
 		{stdhttp.MethodPost, "/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/roster"},
 		{stdhttp.MethodPut, "/sessions/018f8f7e-91b0-7cc4-bd8c-f4d9030ca423/attendance/018f8f7e-91b0-7cc4-bd8c-f4d9030ca422"},
 		{stdhttp.MethodGet, "/home"},
+		{stdhttp.MethodGet, "/schedule?from=2026-08-30&through=2026-09-05"},
 	}
 
 	for _, test := range tests {
@@ -77,6 +79,7 @@ func TestMux_RejectsInvalidTransportInputBeforeBusinessWork(t *testing.T) {
 		{"unknown class field", stdhttp.MethodPost, "/classes", `{"unknown":true}`},
 		{"two student values", stdhttp.MethodPost, "/students", `{"name":"Mai"}{"name":"Lan"}`},
 		{"invalid class id", stdhttp.MethodPost, "/classes/not-a-uuid/roster", `{}`},
+		{"invalid schedule class id", stdhttp.MethodPut, "/classes/not-a-uuid/schedule", `{}`},
 		{"invalid attendance ids", stdhttp.MethodPut, "/sessions/not-a-uuid/attendance/not-a-uuid", `{}`},
 	}
 

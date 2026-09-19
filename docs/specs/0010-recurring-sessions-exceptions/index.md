@@ -590,7 +590,7 @@ event pipe, public contract, and browser before the recurrence engine grows wide
    upsert, add the display zone 42 date schedule read, regenerate contracts, and render one
    accessible Week card through the gateway and web route, satisfies **AC-1**, **AC-2**, **AC-8**,
    **AC-9**, **AC-10**, **AC-12**, **AC-13**, **AC-16**, **AC-17**.
-2. [ ] Complete all seven independent weekday slots, two year bounds, active standalone adoption,
+2. [x] Complete all seven independent weekday slots, two year bounds, active standalone adoption,
    separate authoritative counts, forward gap and backward ambiguity handling, postresolution
    duration checks, stored rule zones, immutable retry snapshots, class revision locking, and first
    schedule creation for an existing class, satisfies **AC-1**, **AC-3**, **AC-9**, **AC-10**,

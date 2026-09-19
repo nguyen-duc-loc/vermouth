@@ -39,6 +39,8 @@ func cleanTeachingTutor(t *testing.T, pool *pgxpool.Pool, tutorID uuid.UUID) {
 			`DELETE FROM attendance WHERE tutor_id = $1`,
 			`DELETE FROM roster_periods WHERE tutor_id = $1`,
 			`DELETE FROM sessions WHERE tutor_id = $1`,
+			`DELETE FROM schedule_slots WHERE tutor_id = $1`,
+			`DELETE FROM schedule_rules WHERE tutor_id = $1`,
 			`DELETE FROM students WHERE tutor_id = $1`,
 			`DELETE FROM classes WHERE tutor_id = $1`,
 			`DELETE FROM command_receipts WHERE tutor_id = $1`,
@@ -47,6 +49,92 @@ func cleanTeachingTutor(t *testing.T, pool *pgxpool.Pool, tutorID uuid.UUID) {
 			require.NoError(t, err)
 		}
 	})
+}
+
+// covers: AC-1, AC-3, AC-9, AC-10, AC-11
+func TestPutSchedule_AdoptsExactStandaloneAndReplaysImmutableResponse(t *testing.T) {
+	t.Parallel()
+
+	pool := teachingTestPool(t)
+	tutorID := uuid.Must(uuid.NewV7())
+	cleanTeachingTutor(t, pool, tutorID)
+	commandTime := time.Date(2026, time.August, 30, 2, 0, 0, 0, time.UTC)
+	work := newTeachingHandler(t, pool, commandTime)
+	ctx := vermouth.WithRequestID(t.Context(), "request-put-schedule")
+	classResult, _, err := work.CreateClass(
+		ctx, tutorID, "Asia/Ho_Chi_Minh", "standalone-class", testClassInput(),
+	)
+	require.NoError(t, err)
+	standaloneID := classResult.FirstSession.SessionID
+	input := PutScheduleInput{
+		ExpectedRevision: 0,
+		EffectiveFrom:    "2026-08-30",
+		ValidThrough:     "2026-09-06",
+		Slots: []WeeklyScheduleSlotInput{
+			{Weekday: 7, StartTime: "10:00", EndTime: "11:00"},
+			{Weekday: 1, StartTime: "17:30", EndTime: "19:00"},
+		},
+	}
+
+	created, status, err := work.PutSchedule(
+		ctx, tutorID, classResult.Class.ClassID, "Asia/Ho_Chi_Minh", "put-schedule", input,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 201, status)
+	require.Equal(t, int64(1), created.Class.ScheduleRevision)
+	require.Equal(t, 3, created.CandidateCount)
+	require.Equal(t, 2, created.CreatedCount)
+	require.Equal(t, 1, created.AdoptedCount)
+	require.NotNil(t, created.FirstSession)
+	require.Equal(t, standaloneID, created.FirstSession.SessionID)
+	require.Equal(t, "Asia/Ho_Chi_Minh", created.Rule.TimeZone)
+	require.Equal(t, int16(1), created.Rule.Slots[0].Weekday)
+	require.Equal(t, int16(7), created.Rule.Slots[1].Weekday)
+
+	work.now = func() time.Time { return commandTime.AddDate(1, 0, 0) }
+	reordered := input
+	reordered.Slots = []WeeklyScheduleSlotInput{input.Slots[1], input.Slots[0]}
+	replayed, replayStatus, err := work.PutSchedule(
+		ctx, tutorID, classResult.Class.ClassID, "UTC", "put-schedule", reordered,
+	)
+	require.NoError(t, err)
+	require.Equal(t, status, replayStatus)
+	require.Equal(t, created, replayed)
+
+	var sessionCount, scheduledEventCount int
+	require.NoError(t, pool.QueryRow(t.Context(), `
+		SELECT count(*) FROM sessions WHERE tutor_id = $1 AND class_id = $2`,
+		tutorID, classResult.Class.ClassID,
+	).Scan(&sessionCount))
+	require.NoError(t, pool.QueryRow(t.Context(), `
+		SELECT count(*) FROM outbox
+		WHERE tutor_id = $1 AND event_name = $2`,
+		tutorID, vermouth.EventSessionScheduled,
+	).Scan(&scheduledEventCount))
+	require.Equal(t, 3, sessionCount)
+	require.Equal(t, 3, scheduledEventCount)
+
+	var version int64
+	var scheduleRuleID uuid.UUID
+	require.NoError(t, pool.QueryRow(t.Context(), `
+		SELECT version, schedule_rule_id
+		FROM sessions
+		WHERE tutor_id = $1 AND session_id = $2`,
+		tutorID, standaloneID,
+	).Scan(&version, &scheduleRuleID))
+	require.Equal(t, int64(2), version)
+	require.Equal(t, created.Rule.ScheduleRuleID, scheduleRuleID)
+
+	var contextTime string
+	var contextZone string
+	require.NoError(t, pool.QueryRow(t.Context(), `
+		SELECT context_snapshot->>'command_time', context_snapshot->>'governing_time_zone'
+		FROM command_receipts
+		WHERE tutor_id = $1 AND operation = 'put_schedule' AND idempotency_key = 'put-schedule'`,
+		tutorID,
+	).Scan(&contextTime, &contextZone))
+	require.Equal(t, commandTime.Format(time.RFC3339), contextTime)
+	require.Equal(t, "Asia/Ho_Chi_Minh", contextZone)
 }
 
 func newTeachingHandler(t *testing.T, pool *pgxpool.Pool, now time.Time) *Handler {
@@ -126,8 +214,12 @@ func TestCreateClass_ConcurrentRetryReturnsOneCommittedAggregate(t *testing.T) {
 	changed.Name = "Physics"
 	_, _, err := work.CreateClass(ctx, tutorID, "Asia/Ho_Chi_Minh", "class-command", changed)
 	require.ErrorIs(t, err, ErrIdempotencyConflict)
-	_, _, err = work.CreateClass(ctx, tutorID, "UTC", "class-command", testClassInput())
-	require.ErrorIs(t, err, ErrIdempotencyConflict)
+	timezoneReplay, replayCreated, err := work.CreateClass(
+		ctx, tutorID, "UTC", "class-command", testClassInput(),
+	)
+	require.NoError(t, err)
+	require.False(t, replayCreated)
+	require.Equal(t, first.result, timezoneReplay)
 }
 
 // covers: AC-4, AC-6, AC-10, AC-11
