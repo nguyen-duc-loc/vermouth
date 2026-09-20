@@ -27,10 +27,12 @@ generates its Go types from, so a contract change breaks the build rather than a
 |---|---|
 | `src/main.tsx` | Mounting, the `QueryClient`, and the router provider |
 | `src/routes.tsx` | The route tree |
-| `src/pages/ThreadPage.tsx` | The skeleton's one screen, which drives the end to end thread |
+| `src/pages/HomePage.tsx` | The core teaching workspace for setup, sessions, attendance, and billing projection state |
+| `src/pages/SchedulePage.tsx` | The Day, Week, and Month calendar plus schedule and session mutation sheets |
 | `src/api/client.ts` | The single `openapi-fetch` client and the auth header |
+| `src/api/teaching.ts` | Typed teaching reads and mutations, query keys, and schedule cache invalidation |
 | `src/api/schema.d.ts` | Generated. Never edit by hand; run `task web:generate` |
-| `src/api/thread.ts` | Typed calls and the shared `ApiError` shape, both taken from the schema |
+| `src/api/session.ts` | Access token renewal, route guard state, and sign in callback errors |
 | `design.md` | The visual direction and component usage contract; token values remain in CSS |
 | `src/styles.css` | The Tailwind v4 entry point |
 | `vite.config.ts` | The dev server on port 5173 and the proxy to the gateway |
@@ -64,6 +66,8 @@ path. Running `pnpm` directly works in your own shell.
   caught up yet is refetched rather than assumed. Invalidate after a write instead of guessing.
 - Money arrives as an integer count of dong and is formatted here, at the edge, never earlier.
 - Design system: build all UI to `design.md`; token values live in `src/styles.css`.
+* Schedule view, visible date, and class filters live in validated TanStack Router search values, so
+  a reload restores the same calendar state.
 
 ## Gotchas
 
@@ -122,5 +126,6 @@ developing Playwright itself).
 
 - [0002 stack and scaffold](../docs/specs/0002-stack-and-scaffold/index.md) (the web app, styling, API contract, and testing rows)
 - [0008 design system and UI foundation](../docs/specs/0008-design-system-ui-foundation/index.md) owns the component set, themes, responsive shell, and gallery
+* [0010 recurring sessions and exceptions](../docs/specs/0010-recurring-sessions-exceptions/index.md) owns the calendar, schedule management, and session exception flows
 
 _Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

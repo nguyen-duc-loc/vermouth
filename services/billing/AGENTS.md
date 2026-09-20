@@ -7,7 +7,8 @@ details, invoices, invoice lines, invoice numbers, voids, paid state, and the re
 must never own attendance truth, the schedule, student management, or email sending. This is the one
 service where the difference between a projection and an authoritative record decides correctness.
 
-Only the skeleton exists today. Feature 4 decides the entities, features 13 to 15 build the behaviour.
+The teaching projection path and invoice profile gate exist. Features 13 to 15 build the month end
+calculation, invoice records, PDF rendering, sharing, and paid state.
 
 ## Stack
 
@@ -22,9 +23,9 @@ Only the skeleton exists today. Feature 4 decides the entities, features 13 to 1
 |---|---|
 | `cmd/billing/main.go` | Startup, including `EnsureTopics` and the relay |
 | `internal/http/routes.go` | Routing only |
-| `internal/consumer/doc.go` | Empty until feature 4. It will be the only writer of the projections |
-| `internal/store/doc.go`, `internal/handler/doc.go` | Empty until the entities exist |
-| `db/migrations/00001_vermouth_kit.sql` | The shared kit tables, copied from `pkg/vermouth/ddl` |
+| `internal/consumer/teaching.go` | The only writer of teaching projections, including session reactivation and cancellation |
+| `internal/store/store.go`, `internal/handler/projection.go`, `internal/handler/profile.go` | Typed database access and the current billing read surfaces |
+| `db/migrations/00001_vermouth_kit.sql` through `00003_model_integrity.sql` | Shared machinery, billing entities, and integrity constraints |
 
 ## Conventions
 
@@ -34,6 +35,8 @@ Only the skeleton exists today. Feature 4 decides the entities, features 13 to 1
 - A student label is marked inactive, never deleted, because a past invoice must still print the name.
 - The month end run is synchronous inside this service: every input is already local, so it is a local
   read rather than a call to anyone.
+* A scheduled or moved session upsert clears `cancelled_at`, so restoring the same session identifier
+  reactivates its projection. A cancelled fact sets it inactive.
 
 ## Gotchas
 
@@ -58,5 +61,6 @@ The repo wide skills in the root file all apply here. These are the ones that ea
 
 - [0001 service boundaries and communication](../../docs/specs/0001-service-boundaries-and-communication/index.md) (flow 1, month end invoice generation)
 - [0002 stack and scaffold](../../docs/specs/0002-stack-and-scaffold/index.md) (STK-7, and the replay rule under conventions)
+* [0010 recurring sessions and exceptions](../../docs/specs/0010-recurring-sessions-exceptions/index.md) (session move, cancellation, restoration, and invoice immutability)
 
 _Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

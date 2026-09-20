@@ -38,6 +38,8 @@ services importing it (STK-24), which is the reason for one repository.
 - Consumer group names are `<consuming service>.<consumer name>` and match the `consumer_name` in
   `handled_events` (STK-12), so a reset and a row delete are one visible pair.
 - Every event gets one test asserting its key is the field spec 0001's catalogue names for it (STK-19).
+* Boundary errors that need structured recovery data use `WriteErrorDetails`. The details must be
+  safe for the caller and JSON serializable, while the outer `APIError` shape stays stable.
 
 ## Gotchas
 

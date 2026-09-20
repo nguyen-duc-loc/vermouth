@@ -7,25 +7,33 @@ current tuition rate on a class. It publishes most of the facts in the system, s
 publisher and the one whose event changes ripple furthest. It must never own invoices, money
 arithmetic, rate history for billing, or email sending, and it holds copies of nothing.
 
-Only the skeleton exists today: the layers are in place with package comments, and feature 8 gives it
-its first real behaviour.
+The service provides the core teaching loop, recurring schedule commands, session exceptions, and
+calendar reads. The handler keeps each aggregate write and its outbox facts inside one transaction.
 
 ## Stack
 
 - **Module**: `github.com/nguyen-duc-loc/vermouth/services/teaching`, Go 1.27
 - **Database**: its own Postgres 18 instance, `TEACHING_DATABASE_URL` only
 - **Publishes**: `teaching.events`, keyed by `class_id`, `session_id`, or `student_id`
-- No `sqlc.yaml` yet. It appears with the first query, next to `db/queries/`
+* **Queries**: hand written in `db/queries/teaching.sql`, then generated through `sqlc` into
+  `internal/store/sqlcgen/`
 
 ## Key files
 
 | File | Owns |
 |---|---|
 | `cmd/teaching/main.go` | Startup, including `EnsureTopics` and the relay |
+| `cmd/scheduleconflicts/main.go` | Read only report for active session overlaps before the guarded constraint migration |
 | `internal/http/routes.go` | Routing only |
-| `internal/handler/doc.go` | Empty until feature 8. The write and its outbox insert belong in one `pgx.Tx` |
-| `internal/store/doc.go` | Empty until feature 4 decides the entities |
-| `db/migrations/00001_vermouth_kit.sql` | The shared kit tables, copied from `pkg/vermouth/ddl` |
+| `internal/handler/commands.go`, `schedule*.go`, `session_commands.go` | Teaching commands and reads, including immutable command replay and schedule state guards |
+| `internal/store/store.go`, `db/queries/teaching.sql` | The only database path and its hand written queries |
+| `db/migrations/00002_teaching_model.sql` through `00006_recurring_schedule_constraints.sql` | Teaching entities, tenant references, the core loop, recurring rules, and overlap constraints |
+
+## Commands
+
+```bash
+task schedule:conflicts   # report active overlaps in stable JSON without writing
+```
 
 ## Conventions
 
@@ -34,6 +42,12 @@ its first real behaviour.
   no consumer has to recompute it.
 - The rate on a class is the current one here. Dated rate history belongs to `billing`, fed by
   `teaching.class.rate.changed`.
+* Weekly rules are versioned by `classes.schedule_revision`, but every occurrence is a concrete
+  session row. Billing and notifications still react only to concrete session facts.
+* An active session has both `cancelled_at` and `superseded_at` empty. Tutor cancellation can be
+  restored for the same identifier, while schedule replacement is terminal.
+* Schedule and session commands store immutable response and context snapshots in
+  `command_receipts`, so a retry returns the original result after later state changes.
 
 ## Gotchas
 
@@ -53,5 +67,6 @@ The repo wide skills in the root file all apply here. These are the ones that ea
 
 - [0001 service boundaries and communication](../../docs/specs/0001-service-boundaries-and-communication/index.md) (the event catalogue)
 - [0002 stack and scaffold](../../docs/specs/0002-stack-and-scaffold/index.md) (STK-11, STK-19)
+* [0010 recurring sessions and exceptions](../../docs/specs/0010-recurring-sessions-exceptions/index.md) (weekly rules, concrete occurrences, exceptions, overlap guards, and calendar reads)
 
 _Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

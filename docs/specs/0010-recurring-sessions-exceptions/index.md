@@ -1,7 +1,7 @@
 # 0010. Recurring sessions and exceptions
 
 **Date**: 2026-09-18
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 

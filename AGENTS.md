@@ -49,7 +49,7 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md` plus its `rati
 Spec 0001 fixes the service boundaries and the event catalogue (`INV-n`), spec 0002 the stack
 (`STK-n`). Both are Accepted, and the rules below only say how they are met.
 
-The feature roadmap lives in `docs/scope/scope.md`: twenty features in phases with their status, the
+The feature roadmap lives in `docs/scope/scope.md`: twenty one features in phases with their status, the
 workflow level (Beta, so `$develop` then `$check verify` then `$test`), and the decisions taken up
 front so no feature reopens them. `$scope` owns that file.
 

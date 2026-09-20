@@ -23,7 +23,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 7 | Tutor sign in & identity | Slice 1 | done |
 | 8 | Core teaching loop | Slice 1 | done |
 | 9 | Tracing, central logs & error alerts | Slice 2 | planned |
-| 10 | Recurring sessions & exceptions | Slice 3 | in-progress |
+| 10 | Recurring sessions & exceptions | Slice 3 | done |
 | 11 | Student records & class rosters | Slice 3 | planned |
 | 12 | Tutor profile & bank details | Slice 4 | planned |
 | 13 | Tuition rate & monthly calculation | Slice 4 | planned |
@@ -141,7 +141,7 @@ Follow one request from the gateway through every service it touches, including 
 
 ## Slice 3: Real schedules
 
-### 10. Recurring sessions & exceptions · in-progress
+### 10. Recurring sessions & exceptions · done
 A class repeats weekly (for example every Monday and Thursday) and generates its sessions, and a single session can be cancelled or moved without disturbing the rest. The rule versus the exception is a genuinely tricky model, and attendance and billing both read it.
 **Done when:** a tutor can define a repeating schedule with an end, see the generated sessions, cancel one session, and move one session to another time, with the change touching only that session and the invoice count reflecting it.
 spec [0010](../specs/0010-recurring-sessions-exceptions/index.md)
