@@ -29,8 +29,9 @@ generates its Go types from, so a contract change breaks the build rather than a
 | `src/routes.tsx` | The route tree |
 | `src/pages/HomePage.tsx` | The core teaching workspace for setup, sessions, attendance, and billing projection state |
 | `src/pages/SchedulePage.tsx` | The Day, Week, and Month calendar plus schedule and session mutation sheets |
+| `src/pages/{StudentsPage,StudentDetailPage,ClassDetailPage}.tsx` | Student records, retained membership history, and dated class roster management |
 | `src/api/client.ts` | The single `openapi-fetch` client and the auth header |
-| `src/api/teaching.ts` | Typed teaching reads and mutations, query keys, and schedule cache invalidation |
+| `src/api/teaching.ts` | Typed teaching reads and mutations plus tutor scoped resource query keys |
 | `src/api/schema.d.ts` | Generated. Never edit by hand; run `task web:generate` |
 | `src/api/session.ts` | Access token renewal, route guard state, and sign in callback errors |
 | `design.md` | The visual direction and component usage contract; token values remain in CSS |
@@ -68,6 +69,8 @@ path. Running `pnpm` directly works in your own shell.
 - Design system: build all UI to `design.md`; token values live in `src/styles.css`.
 * Schedule view, visible date, and class filters live in validated TanStack Router search values, so
   a reload restores the same calendar state.
+* Teaching command sheets keep one idempotency key while the input is unchanged, preserve drafts
+  after network failure, and replace the key when the tutor changes the input.
 
 ## Gotchas
 
@@ -127,5 +130,6 @@ developing Playwright itself).
 - [0002 stack and scaffold](../docs/specs/0002-stack-and-scaffold/index.md) (the web app, styling, API contract, and testing rows)
 - [0008 design system and UI foundation](../docs/specs/0008-design-system-ui-foundation/index.md) owns the component set, themes, responsive shell, and gallery
 * [0010 recurring sessions and exceptions](../docs/specs/0010-recurring-sessions-exceptions/index.md) owns the calendar, schedule management, and session exception flows
+* [0011 student records and class rosters](../docs/specs/0011-student-records-class-rosters/index.md) owns student records, dated rosters, and whole roster attendance
 
 _Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

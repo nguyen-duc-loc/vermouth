@@ -22,6 +22,7 @@ business rule and no write logic of its own, and it never touches a database.
 | `internal/auth/auth.go` | Token verification, rejecting an unsigned or expired request |
 | `internal/aggregate/upstream.go` | Calling a service on the gateway's behalf, with a timeout |
 | `internal/aggregate/thread.go` | The read fan out, the skeleton's one aggregated screen |
+| `internal/route/{student,class_roster,attendance}_routes.go` | Direct teaching proxies for student resources, dated rosters, and atomic attendance |
 | `internal/apitypes/types.gen.go` | Generated. Never edit by hand; run `task generate:api` |
 
 ## Commands
@@ -63,5 +64,6 @@ The repo wide skills in the root file all apply here. These are the ones that ea
 
 - [0001 service boundaries and communication](../docs/specs/0001-service-boundaries-and-communication/index.md) (the service map, identity propagation, gateway read aggregation)
 - [0002 stack and scaffold](../docs/specs/0002-stack-and-scaffold/index.md) (STK-10, STK-14)
+* [0011 student records and class rosters](../docs/specs/0011-student-records-class-rosters/index.md) (the public contract and direct teaching proxies)
 
 _Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

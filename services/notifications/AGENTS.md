@@ -20,7 +20,7 @@ today's sessions is a projection kept current by its consumers and rebuildable b
 |---|---|
 | `cmd/notifications/main.go` | Startup, plus starting the consumer alongside the server |
 | `internal/consumer/recipients.go` | The recipient projection, and the only writer of it. `RecipientsConsumerName` fixes the group name |
-| `internal/consumer/teaching.go` | The class and session projection for digest reads. `TeachingConsumerName` fixes the group name |
+| `internal/consumer/teaching.go` | The class, session, and dated roster projection for digest reads. `TeachingConsumerName` fixes the group name |
 | `internal/http/routes.go` | Routing only |
 | `internal/store/`, `internal/store/sqlcgen/` | This service's database, generated queries included |
 | `db/queries/recipients.sql`, `db/queries/digest.sql` | Hand written SQL for recipient, class, session, and digest data |
@@ -64,5 +64,6 @@ The repo wide skills in the root file all apply here. These are the ones that ea
 - [0001 service boundaries and communication](../../docs/specs/0001-service-boundaries-and-communication/index.md) (flow 2, the daily digest)
 - [0002 stack and scaffold](../../docs/specs/0002-stack-and-scaffold/index.md) (STK-12, STK-22, STK-23)
 * [0010 recurring sessions and exceptions](../../docs/specs/0010-recurring-sessions-exceptions/index.md) (concrete session projection and replay behavior)
+* [0011 student records and class rosters](../../docs/specs/0011-student-records-class-rosters/index.md) (dated roster projection and replay behavior)
 
 _Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

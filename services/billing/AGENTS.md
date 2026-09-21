@@ -23,7 +23,7 @@ calculation, invoice records, PDF rendering, sharing, and paid state.
 |---|---|
 | `cmd/billing/main.go` | Startup, including `EnsureTopics` and the relay |
 | `internal/http/routes.go` | Routing only |
-| `internal/consumer/teaching.go` | The only writer of teaching projections, including session reactivation and cancellation |
+| `internal/consumer/teaching.go` | The only writer of teaching projections, including students, roster periods, attendance, and session state |
 | `internal/store/store.go`, `internal/handler/projection.go`, `internal/handler/profile.go` | Typed database access and the current billing read surfaces |
 | `db/migrations/00001_vermouth_kit.sql` through `00003_model_integrity.sql` | Shared machinery, billing entities, and integrity constraints |
 
@@ -62,5 +62,6 @@ The repo wide skills in the root file all apply here. These are the ones that ea
 - [0001 service boundaries and communication](../../docs/specs/0001-service-boundaries-and-communication/index.md) (flow 1, month end invoice generation)
 - [0002 stack and scaffold](../../docs/specs/0002-stack-and-scaffold/index.md) (STK-7, and the replay rule under conventions)
 * [0010 recurring sessions and exceptions](../../docs/specs/0010-recurring-sessions-exceptions/index.md) (session move, cancellation, restoration, and invoice immutability)
+* [0011 student records and class rosters](../../docs/specs/0011-student-records-class-rosters/index.md) (student labels, dated membership, attendance, and issued invoice immutability)
 
 _Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

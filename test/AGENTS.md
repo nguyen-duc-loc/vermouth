@@ -74,5 +74,6 @@ The gateway on 8080, then the services on 8081 to 8084.
 - [0002 stack and scaffold](../docs/specs/0002-stack-and-scaffold/index.md) (STK-15 to STK-17, STK-22, STK-23, and the scaffold target the thread proves)
 - [0001 service boundaries and communication](../docs/specs/0001-service-boundaries-and-communication/index.md) (the thread `thread.sh` drives, browser to gateway to service to broker to consumer)
 * [0010 recurring sessions and exceptions](../docs/specs/0010-recurring-sessions-exceptions/index.md) (the recurring verification script and replay evidence)
+* [0011 student records and class rosters](../docs/specs/0011-student-records-class-rosters/index.md) (the student, roster, attendance, and projection thread)
 
 _Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._
