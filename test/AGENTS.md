@@ -17,7 +17,7 @@ prove complete paths through the real stack.
 | `compose.test.yaml` | Four Postgres 18 instances and one Redpanda node, tuned small, under the compose project name `vermouth` |
 | `start-service.sh` | Start one binary from `bin/`, record its pid under `.tmp/run`, and confirm it stayed up |
 | `stop-service.sh` | Stop one service and wait until it is really gone, forcing it after 20 seconds |
-| `thread.sh` | Drive tutor setup, recurrence, one session exception, attendance, and projection convergence through the gateway and Redpanda |
+| `thread.sh` | Drive tutor setup, invoice profile save and reload, recurrence, one session exception, attendance, and projection convergence through the gateway and Redpanda |
 | `verify-recurring.sh` | Prove recurring schedules, projection replay, controlled clock behavior, overlap guards, and invoice immutability on the host stack |
 | `e2e/` | Empty. Playwright for the money path lands here when `$test` sets the runners up |
 
@@ -75,5 +75,6 @@ The gateway on 8080, then the services on 8081 to 8084.
 - [0001 service boundaries and communication](../docs/specs/0001-service-boundaries-and-communication/index.md) (the thread `thread.sh` drives, browser to gateway to service to broker to consumer)
 * [0010 recurring sessions and exceptions](../docs/specs/0010-recurring-sessions-exceptions/index.md) (the recurring verification script and replay evidence)
 * [0011 student records and class rosters](../docs/specs/0011-student-records-class-rosters/index.md) (the student, roster, attendance, and projection thread)
+* [0012 tutor profile and bank details](../docs/specs/0012-tutor-profile-bank-details/index.md) (the profile save, identical retry, and reload in the end to end thread)
 
 _Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

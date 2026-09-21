@@ -92,6 +92,36 @@ func TestProfileService_NormalizesRetriesConflictsAndCompletes(t *testing.T) {
 	require.Nil(t, other.LegalName, "one tutor must never read another tutor's profile")
 }
 
+// covers: AC-6, AC-7
+func TestProfileService_RejectsInvalidTextThatNormalizesToTheCurrentValue(t *testing.T) {
+	t.Parallel()
+
+	pool := billingProjectionPool(t)
+	tutorID := uuid.Must(uuid.NewV7())
+	cleanInvoiceProfiles(t, pool, tutorID)
+	profiles := handler.NewProfileService(pool)
+
+	current, err := profiles.Save(t.Context(), tutorID, handler.ProfileInput{
+		ExpectedRevision: 0,
+		LegalName:        new("Nguyễn An"),
+	})
+	require.NoError(t, err)
+
+	_, err = profiles.Save(t.Context(), tutorID, handler.ProfileInput{
+		ExpectedRevision: current.Revision,
+		LegalName:        new("Nguyễn\nAn"),
+	})
+	var validation *handler.ProfileValidationError
+	require.ErrorAs(t, err, &validation)
+	require.Equal(t, []handler.ProfileFieldError{
+		{Field: handler.FieldLegalName, Reason: "invalid_format"},
+	}, validation.Fields)
+
+	after, err := profiles.Read(t.Context(), tutorID)
+	require.NoError(t, err)
+	require.Equal(t, current, after)
+}
+
 // covers: AC-6, AC-8
 func TestProfileService_RejectsInvalidAndInactiveBankValuesWithoutChangingTheRow(t *testing.T) {
 	t.Parallel()

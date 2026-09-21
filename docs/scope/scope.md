@@ -25,7 +25,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 9 | Tracing, central logs & error alerts | Slice 2 | planned |
 | 10 | Recurring sessions & exceptions | Slice 3 | done |
 | 11 | Student records & class rosters | Slice 3 | done |
-| 12 | Tutor profile & bank details | Slice 4 | in-progress |
+| 12 | Tutor profile & bank details | Slice 4 | done |
 | 13 | Tuition rate & monthly calculation | Slice 4 | planned |
 | 14 | Invoice PDF with payment QR | Slice 4 | planned |
 | 15 | Invoice list, share & mark paid | Slice 4 | planned |
@@ -172,7 +172,7 @@ code in `services/teaching/`, `services/{billing,notifications}/internal/consume
 
 ## Slice 4: The money loop
 
-### 12. Tutor profile & bank details · in-progress · Alpha
+### 12. Tutor profile & bank details · done · Alpha
 The tutor's name, contact line, bank name, account number, and account holder name, which are what the invoice and its payment QR are built from.
 **Done when:** a tutor can save and edit their profile and bank details, the fields are validated, and the invoice service can read them when it builds an invoice.
 spec [0012](../specs/0012-tutor-profile-bank-details/index.md)
@@ -183,7 +183,7 @@ code in `services/billing/`, `gateway/`, `api/openapi.yaml`, `web/src/`, and `te
   - [x] Add the reviewed bank catalog, full normalization and validation, every field, the searchable bank list, completion state, responsive page, and cache policy · AC-1, AC-3 to AC-6, AC-8, AC-10, AC-14
   - [x] Add revision guarded saves, identical retry recovery, conflict handling, inactive bank rules, dirty navigation, incomplete confirmation, and independent load and save recovery · AC-7, AC-8, AC-11, AC-12
   - [x] Close the thread with migration reversal, generated contracts, tenant and replay safety, private logging, browser cleanup, accessibility evidence, and `task thread` · AC-2, AC-4, AC-6, AC-7, AC-9 to AC-14
-- [ ] Verify it: `$check verify tutor profile & bank details`
+- [x] Verify it: `$check verify tutor profile & bank details`
 
 ### 13. Tuition rate & monthly calculation · needs a decision · GA
 A rate per session lives on the class, and at month end the system counts each student's Present sessions and works out what they owe. This is where a silent error sends a wrong bill to a parent, so it gets the heaviest treatment in the project.

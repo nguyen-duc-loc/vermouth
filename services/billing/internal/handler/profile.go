@@ -76,7 +76,7 @@ type ProfileValidationError struct {
 }
 
 // Error implements error without exposing private profile values.
-func (_ *ProfileValidationError) Error() string { return "invoice profile validation failed" }
+func (*ProfileValidationError) Error() string { return "invoice profile validation failed" }
 
 // ProfileConflictError reports only the revision needed for safe conflict recovery.
 type ProfileConflictError struct {
@@ -84,7 +84,7 @@ type ProfileConflictError struct {
 }
 
 // Error implements error without exposing private profile values.
-func (_ *ProfileConflictError) Error() string { return "invoice profile changed after it was read" }
+func (*ProfileConflictError) Error() string { return "invoice profile changed after it was read" }
 
 // ProfileService owns profile reads and revision guarded saves.
 type ProfileService struct {
@@ -117,7 +117,7 @@ func (s *ProfileService) Read(ctx context.Context, tutorID uuid.UUID) (InvoicePr
 	return profileFromStored(profile), nil
 }
 
-// Save recognizes identical retries before revision checks, then validates and commits one change.
+// Save rejects malformed values, recognizes identical retries, then commits one change.
 func (s *ProfileService) Save(
 	ctx context.Context,
 	tutorID uuid.UUID,
@@ -138,7 +138,7 @@ func (s *ProfileService) Save(
 		return InvoiceProfile{}, fmt.Errorf("lock invoice profile: %w", err)
 	}
 	normalized, fieldErrors := normalizeProfileInput(input)
-	if profileInputMatches(current, normalized) {
+	if len(fieldErrors) == 0 && profileInputMatches(current, normalized) {
 		err = tx.Commit(ctx)
 		if err != nil {
 			return InvoiceProfile{}, fmt.Errorf("commit identical profile save: %w", err)
