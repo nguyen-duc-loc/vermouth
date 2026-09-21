@@ -283,7 +283,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Search active students */
+        get: operations["listStudents"];
         put?: never;
         /** Register a student */
         post: operations["createStudent"];
@@ -293,6 +294,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/students/{student_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one active student and class history */
+        get: operations["getStudent"];
+        put?: never;
+        post?: never;
+        /** Archive an active student with no current class membership */
+        delete: operations["archiveStudent"];
+        options?: never;
+        head?: never;
+        /** Edit an active student using the last read timestamp */
+        patch: operations["updateStudent"];
+        trace?: never;
+    };
     "/api/classes/{class_id}/roster": {
         parameters: {
             query?: never;
@@ -300,26 +320,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /** Join a student to a class */
-        post: operations["joinRoster"];
+        /** Read an owned class roster on a local date */
+        get: operations["getClassRoster"];
+        /** Apply one atomic dated roster delta */
+        put: operations["changeClassRoster"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{session_id}/attendance/{student_id}": {
+    "/api/sessions/{session_id}/attendance": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        /** Save or correct one attendance mark */
-        put: operations["markAttendance"];
+        /** Read one whole roster attendance sheet */
+        get: operations["getSessionAttendance"];
+        /** Save one complete whole roster attendance pass */
+        put: operations["saveSessionAttendance"];
         post?: never;
         delete?: never;
         options?: never;
@@ -637,41 +659,174 @@ export interface components {
             name: string;
             phone?: string | null;
         };
-        Student: {
+        StudentRecord: {
             /** Format: uuid */
             student_id: string;
             name: string;
             phone: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
-        JoinRosterRequest: {
+        StudentSummary: {
             /** Format: uuid */
             student_id: string;
-            /** Format: date */
-            effective_from: string;
+            name: string;
+            phone: string | null;
+            /** Format: int64 */
+            active_class_count: number;
+            /** Format: date-time */
+            updated_at: string;
         };
-        RosterPeriod: {
+        StudentPage: {
+            students: components["schemas"]["StudentSummary"][];
+            next_cursor: string | null;
+        };
+        StudentMembership: {
             /** Format: uuid */
             class_id: string;
+            class_name: string;
+            class_color: components["schemas"]["ClassColor"];
+            /** Format: date */
+            effective_from: string;
+            /** Format: date */
+            effective_to: string | null;
+            active: boolean;
+        };
+        StudentDetail: {
+            student: components["schemas"]["StudentRecord"];
+            memberships: components["schemas"]["StudentMembership"][];
+        };
+        UpdateStudentRequest: {
+            /** Format: date-time */
+            expected_updated_at: string;
+            name?: string;
+            phone?: string | null;
+        };
+        StudentChangedDetails: {
             /** Format: uuid */
             student_id: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ClassReference: {
+            /** Format: uuid */
+            class_id: string;
+            name: string;
+        };
+        ActiveMembershipDetails: {
+            classes: components["schemas"]["ClassReference"][];
+        };
+        ClassSummary: {
+            /** Format: uuid */
+            class_id: string;
+            name: string;
+            color: components["schemas"]["ClassColor"];
+        };
+        RosterStudent: {
+            /** Format: uuid */
+            student_id: string;
+            name: string;
+            phone: string | null;
+            archived: boolean;
             /** Format: date */
             effective_from: string;
             /** Format: date */
             effective_to: string | null;
         };
+        ClassRoster: {
+            class: components["schemas"]["ClassSummary"];
+            /** Format: date */
+            resolved_date: string;
+            students: components["schemas"]["RosterStudent"][];
+        };
+        ChangeRosterRequest: {
+            /** Format: date */
+            change_date: string;
+            additions: string[];
+            removals: string[];
+        };
+        RosterConflictStudent: {
+            /** Format: uuid */
+            student_id: string;
+            name: string;
+            archived: boolean;
+            /** Format: date */
+            effective_from: string;
+            /** Format: date */
+            effective_to: string | null;
+        };
+        RosterConflictDetails: {
+            class: components["schemas"]["ClassSummary"];
+            /** Format: date */
+            resolved_date: string;
+            students: components["schemas"]["RosterConflictStudent"][];
+        };
         /** @enum {string} */
         AttendanceState: "Present" | "Absent";
-        MarkAttendanceRequest: {
-            state: components["schemas"]["AttendanceState"];
-        };
-        Attendance: {
+        SessionSummary: {
             /** Format: uuid */
             session_id: string;
+            /** Format: uuid */
+            class_id: string;
+            class_name: string;
+            class_color: components["schemas"]["ClassColor"];
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            /** Format: date */
+            local_date: string;
+            /** @enum {string} */
+            state: "active" | "cancelled" | "replaced" | "class_archived";
+        };
+        AttendanceStudent: {
+            /** Format: uuid */
+            student_id: string;
+            name: string;
+            archived: boolean;
+            state: components["schemas"]["AttendanceState"] | null;
+            /** Format: date-time */
+            marked_at: string | null;
+        };
+        AttendanceSheet: {
+            session: components["schemas"]["SessionSummary"];
+            eligible: boolean;
+            /** @enum {string|null} */
+            ineligible_reason: "replaced" | "cancelled" | "class_archived" | "not_started" | null;
+            revision: string;
+            students: components["schemas"]["AttendanceStudent"][];
+        };
+        AttendanceMarkInput: {
+            /** Format: uuid */
+            student_id: string;
+            state: components["schemas"]["AttendanceState"];
+        };
+        SaveAttendanceRequest: {
+            revision: string;
+            marks: components["schemas"]["AttendanceMarkInput"][];
+        };
+        SavedAttendanceMark: {
             /** Format: uuid */
             student_id: string;
             state: components["schemas"]["AttendanceState"];
             /** Format: date-time */
             marked_at: string;
+        };
+        AttendanceSave: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: date-time */
+            marked_at: string;
+            marks: components["schemas"]["SavedAttendanceMark"][];
+        };
+        AttendanceChangedDetails: {
+            sheet: components["schemas"]["AttendanceSheet"];
+        };
+        SessionNotEligibleDetails: {
+            /** @enum {string} */
+            reason: "replaced" | "cancelled" | "class_archived" | "not_started";
         };
         SetupDefaults: {
             /** Format: date */
@@ -813,6 +968,12 @@ export interface components {
         ClassId: string;
         SessionId: string;
         StudentId: string;
+        /** @description Case insensitive name or literal phone fragment, trimmed by teaching. */
+        StudentQuery: string;
+        /** @description Opaque cursor bound to the trimmed student search. */
+        StudentCursor: string;
+        /** @description Local roster date. Teaching defaults it from verified token timezone claims. */
+        RosterDate: string;
         /** @description Opaque cursor bound to the current tutor local date. */
         HomeCursor: string;
     };
@@ -1303,6 +1464,33 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
         };
     };
+    listStudents: {
+        parameters: {
+            query?: {
+                /** @description Case insensitive name or literal phone fragment, trimmed by teaching. */
+                q?: components["parameters"]["StudentQuery"];
+                /** @description Opaque cursor bound to the trimmed student search. */
+                cursor?: components["parameters"]["StudentCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One stable cursor page of active students */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
     createStudent: {
         parameters: {
             query?: never;
@@ -1325,7 +1513,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Student"];
+                    "application/json": components["schemas"]["StudentRecord"];
                 };
             };
             /** @description The student was registered */
@@ -1334,7 +1522,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Student"];
+                    "application/json": components["schemas"]["StudentRecord"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -1342,37 +1530,82 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
-    joinRoster: {
+    getStudent: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                class_id: components["parameters"]["ClassId"];
+                student_id: components["parameters"]["StudentId"];
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["JoinRosterRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description The exact open roster period already existed */
+            /** @description The active student and retained memberships */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RosterPeriod"];
+                    "application/json": components["schemas"]["StudentDetail"];
                 };
             };
-            /** @description The roster period was opened */
-            201: {
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    archiveStudent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                student_id: components["parameters"]["StudentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The student was archived or the exact command was replayed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateStudent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                student_id: components["parameters"]["StudentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStudentRequest"];
+            };
+        };
+        responses: {
+            /** @description The canonical updated student */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RosterPeriod"];
+                    "application/json": components["schemas"]["StudentRecord"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -1381,29 +1614,116 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
-    markAttendance: {
+    getClassRoster: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Local roster date. Teaching defaults it from verified token timezone claims. */
+                date?: components["parameters"]["RosterDate"];
+            };
             header?: never;
             path: {
-                session_id: components["parameters"]["SessionId"];
-                student_id: components["parameters"]["StudentId"];
+                class_id: components["parameters"]["ClassId"];
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MarkAttendanceRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description The canonical attendance row */
+            /** @description The owned class and students covered by the resolved date */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Attendance"];
+                    "application/json": components["schemas"]["ClassRoster"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    changeClassRoster: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                class_id: components["parameters"]["ClassId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeRosterRequest"];
+            };
+        };
+        responses: {
+            /** @description The canonical roster on the change date */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassRoster"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getSessionAttendance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The coherent session, roster, saved states, and revision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceSheet"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    saveSessionAttendance: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveAttendanceRequest"];
+            };
+        };
+        responses: {
+            /** @description The complete canonical saved pass */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceSave"];
                 };
             };
             400: components["responses"]["BadRequest"];

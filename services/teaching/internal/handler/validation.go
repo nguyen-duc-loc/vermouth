@@ -14,6 +14,7 @@ const (
 	dateLayout                = time.DateOnly
 	localTimeLayout           = "15:04"
 	maxNameRunes              = 120
+	maxStudentNameRunes       = 160
 	maxPhoneRunes             = 40
 	maxRateAmount             = int64(1_000_000_000)
 	fnvOffsetBasis            = uint32(0x811c9dc5)
@@ -24,6 +25,9 @@ const (
 	maxRuleYears              = 2
 	weeklyOccurrencesCapacity = 732
 	daysPerWeek               = 7
+	validationFieldBody       = "body"
+	validationFieldPhone      = "phone"
+	validationFieldMarks      = "marks"
 )
 
 const (
@@ -362,18 +366,33 @@ func localCalendarDate(now time.Time, location *time.Location) time.Time {
 }
 
 func validateStudentInput(input CreateStudentInput) (validatedStudent, error) {
-	name, err := validateName("name", input.Name)
+	name, err := validateStudentName(input.Name)
 	if err != nil {
 		return validatedStudent{}, err
 	}
 	phone := input.Phone
+	if phone != nil {
+		trimmed := strings.TrimSpace(*phone)
+		phone = &trimmed
+	}
 	if phone != nil && utf8.RuneCountInString(*phone) > maxPhoneRunes {
-		return validatedStudent{}, &ValidationError{Field: "phone", Message: "must contain at most 40 characters"}
+		return validatedStudent{}, &ValidationError{
+			Field: validationFieldPhone, Message: "must contain at most 40 characters",
+		}
 	}
 	if phone != nil && *phone == "" {
 		phone = nil
 	}
 	return validatedStudent{name: name, phone: phone}, nil
+}
+
+func validateStudentName(raw string) (string, error) {
+	name := strings.TrimSpace(raw)
+	count := utf8.RuneCountInString(name)
+	if count < 1 || count > maxStudentNameRunes {
+		return "", &ValidationError{Field: "name", Message: "must contain 1 through 160 characters"}
+	}
+	return name, nil
 }
 
 func validateIdempotencyKey(key string) error {

@@ -551,6 +551,23 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
 
   /api/students:
+    get:
+      operationId: listStudents
+      summary: Search active students
+      parameters:
+        - $ref: "#/components/parameters/StudentQuery"
+        - $ref: "#/components/parameters/StudentCursor"
+      responses:
+        "200":
+          description: One stable cursor page of active students
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
     post:
       operationId: createStudent
       summary: Register a student
@@ -568,13 +585,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Student"
+                $ref: "#/components/schemas/StudentRecord"
         "201":
           description: The student was registered
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Student"
+                $ref: "#/components/schemas/StudentRecord"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -582,31 +599,59 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
-  /api/classes/{class_id}/roster:
-    post:
-      operationId: joinRoster
-      summary: Join a student to a class
+  /api/students/{student_id}:
+    get:
+      operationId: getStudent
+      summary: Read one active student and class history
       parameters:
-        - $ref: "#/components/parameters/ClassId"
+        - $ref: "#/components/parameters/StudentId"
+      responses:
+        "200":
+          description: The active student and retained memberships
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentDetail"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateStudent
+      summary: Edit an active student using the last read timestamp
+      parameters:
+        - $ref: "#/components/parameters/StudentId"
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/JoinRosterRequest"
+              $ref: "#/components/schemas/UpdateStudentRequest"
       responses:
         "200":
-          description: The exact open roster period already existed
+          description: The canonical updated student
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RosterPeriod"
-        "201":
-          description: The roster period was opened
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RosterPeriod"
+                $ref: "#/components/schemas/StudentRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      operationId: archiveStudent
+      summary: Archive an active student with no current class membership
+      parameters:
+        - $ref: "#/components/parameters/StudentId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: The student was archived or the exact command was replayed
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -616,26 +661,89 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
-  /api/sessions/{session_id}/attendance/{student_id}:
-    put:
-      operationId: markAttendance
-      summary: Save or correct one attendance mark
+  /api/classes/{class_id}/roster:
+    get:
+      operationId: getClassRoster
+      summary: Read an owned class roster on a local date
       parameters:
-        - $ref: "#/components/parameters/SessionId"
-        - $ref: "#/components/parameters/StudentId"
+        - $ref: "#/components/parameters/ClassId"
+        - $ref: "#/components/parameters/RosterDate"
+      responses:
+        "200":
+          description: The owned class and students covered by the resolved date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClassRoster"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: changeClassRoster
+      summary: Apply one atomic dated roster delta
+      parameters:
+        - $ref: "#/components/parameters/ClassId"
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/MarkAttendanceRequest"
+              $ref: "#/components/schemas/ChangeRosterRequest"
       responses:
         "200":
-          description: The canonical attendance row
+          description: The canonical roster on the change date
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Attendance"
+                $ref: "#/components/schemas/ClassRoster"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/sessions/{session_id}/attendance:
+    get:
+      operationId: getSessionAttendance
+      summary: Read one whole roster attendance sheet
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: The coherent session, roster, saved states, and revision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSheet"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: saveSessionAttendance
+      summary: Save one complete whole roster attendance pass
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveAttendanceRequest"
+      responses:
+        "200":
+          description: The complete canonical saved pass
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSave"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -711,6 +819,29 @@ components:
       schema:
         type: string
         format: uuid
+    StudentQuery:
+      name: q
+      in: query
+      required: false
+      description: Case insensitive name or literal phone fragment, trimmed by teaching.
+      schema:
+        type: string
+        maxLength: 160
+    StudentCursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor bound to the trimmed student search.
+      schema:
+        type: string
+    RosterDate:
+      name: date
+      in: query
+      required: false
+      description: Local roster date. Teaching defaults it from verified token timezone claims.
+      schema:
+        type: string
+        format: date
     HomeCursor:
       name: cursor
       in: query
@@ -1332,14 +1463,14 @@ components:
         name:
           type: string
           minLength: 1
-          maxLength: 120
+          maxLength: 160
         phone:
           type: [string, "null"]
           maxLength: 40
 
-    Student:
+    StudentRecord:
       type: object
-      required: [student_id, name, phone]
+      required: [student_id, name, phone, created_at, updated_at]
       properties:
         student_id:
           type: string
@@ -1348,28 +1479,152 @@ components:
           type: string
         phone:
           type: [string, "null"]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
-    JoinRosterRequest:
+    StudentSummary:
       type: object
-      required: [student_id, effective_from]
+      required: [student_id, name, phone, active_class_count, updated_at]
       properties:
         student_id:
           type: string
           format: uuid
-        effective_from:
+        name:
           type: string
-          format: date
+        phone:
+          type: [string, "null"]
+        active_class_count:
+          type: integer
+          format: int64
+          minimum: 0
+        updated_at:
+          type: string
+          format: date-time
 
-    RosterPeriod:
+    StudentPage:
       type: object
-      required: [class_id, student_id, effective_from, effective_to]
+      required: [students, next_cursor]
+      properties:
+        students:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/StudentSummary"
+        next_cursor:
+          type: [string, "null"]
+
+    StudentMembership:
+      type: object
+      required: [class_id, class_name, class_color, effective_from, effective_to, active]
       properties:
         class_id:
           type: string
           format: uuid
+        class_name:
+          type: string
+        class_color:
+          $ref: "#/components/schemas/ClassColor"
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type: [string, "null"]
+          format: date
+        active:
+          type: boolean
+
+    StudentDetail:
+      type: object
+      required: [student, memberships]
+      properties:
+        student:
+          $ref: "#/components/schemas/StudentRecord"
+        memberships:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentMembership"
+
+    UpdateStudentRequest:
+      type: object
+      required: [expected_updated_at]
+      minProperties: 2
+      additionalProperties: false
+      properties:
+        expected_updated_at:
+          type: string
+          format: date-time
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        phone:
+          type: [string, "null"]
+          maxLength: 40
+
+    StudentChangedDetails:
+      type: object
+      required: [student_id, updated_at]
+      additionalProperties: false
+      properties:
         student_id:
           type: string
           format: uuid
+        updated_at:
+          type: string
+          format: date-time
+
+    ClassReference:
+      type: object
+      required: [class_id, name]
+      additionalProperties: false
+      properties:
+        class_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    ActiveMembershipDetails:
+      type: object
+      required: [classes]
+      additionalProperties: false
+      properties:
+        classes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClassReference"
+
+    ClassSummary:
+      type: object
+      required: [class_id, name, color]
+      additionalProperties: false
+      properties:
+        class_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          $ref: "#/components/schemas/ClassColor"
+
+    RosterStudent:
+      type: object
+      required: [student_id, name, phone, archived, effective_from, effective_to]
+      additionalProperties: false
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone:
+          type: [string, "null"]
+        archived:
+          type: boolean
         effective_from:
           type: string
           format: date
@@ -1377,24 +1632,181 @@ components:
           type: [string, "null"]
           format: date
 
+    ClassRoster:
+      type: object
+      required: [class, resolved_date, students]
+      additionalProperties: false
+      properties:
+        class:
+          $ref: "#/components/schemas/ClassSummary"
+        resolved_date:
+          type: string
+          format: date
+        students:
+          type: array
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/RosterStudent"
+
+    ChangeRosterRequest:
+      type: object
+      required: [change_date, additions, removals]
+      additionalProperties: false
+      properties:
+        change_date:
+          type: string
+          format: date
+        additions:
+          type: array
+          maxItems: 200
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        removals:
+          type: array
+          maxItems: 200
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+
+    RosterConflictStudent:
+      type: object
+      required: [student_id, name, archived, effective_from, effective_to]
+      additionalProperties: false
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        archived:
+          type: boolean
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type: [string, "null"]
+          format: date
+
+    RosterConflictDetails:
+      type: object
+      required: [class, resolved_date, students]
+      additionalProperties: false
+      properties:
+        class:
+          $ref: "#/components/schemas/ClassSummary"
+        resolved_date:
+          type: string
+          format: date
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/RosterConflictStudent"
+
     AttendanceState:
       type: string
       enum: [Present, Absent]
 
-    MarkAttendanceRequest:
+    SessionSummary:
       type: object
-      required: [state]
-      properties:
-        state:
-          $ref: "#/components/schemas/AttendanceState"
-
-    Attendance:
-      type: object
-      required: [session_id, student_id, state, marked_at]
+      required: [session_id, class_id, class_name, class_color, starts_at, ends_at, local_date, state]
+      additionalProperties: false
       properties:
         session_id:
           type: string
           format: uuid
+        class_id:
+          type: string
+          format: uuid
+        class_name:
+          type: string
+        class_color:
+          $ref: "#/components/schemas/ClassColor"
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        local_date:
+          type: string
+          format: date
+        state:
+          type: string
+          enum: [active, cancelled, replaced, class_archived]
+
+    AttendanceStudent:
+      type: object
+      required: [student_id, name, archived, state, marked_at]
+      additionalProperties: false
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        archived:
+          type: boolean
+        state:
+          oneOf:
+            - $ref: "#/components/schemas/AttendanceState"
+            - type: "null"
+        marked_at:
+          type: [string, "null"]
+          format: date-time
+
+    AttendanceSheet:
+      type: object
+      required: [session, eligible, ineligible_reason, revision, students]
+      additionalProperties: false
+      properties:
+        session:
+          $ref: "#/components/schemas/SessionSummary"
+        eligible:
+          type: boolean
+        ineligible_reason:
+          type: [string, "null"]
+          enum: [replaced, cancelled, class_archived, not_started, null]
+        revision:
+          type: string
+        students:
+          type: array
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/AttendanceStudent"
+
+    AttendanceMarkInput:
+      type: object
+      required: [student_id, state]
+      additionalProperties: false
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        state:
+          $ref: "#/components/schemas/AttendanceState"
+
+    SaveAttendanceRequest:
+      type: object
+      required: [revision, marks]
+      additionalProperties: false
+      properties:
+        revision:
+          type: string
+          minLength: 1
+        marks:
+          type: array
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/AttendanceMarkInput"
+
+    SavedAttendanceMark:
+      type: object
+      required: [student_id, state, marked_at]
+      additionalProperties: false
+      properties:
         student_id:
           type: string
           format: uuid
@@ -1403,6 +1815,39 @@ components:
         marked_at:
           type: string
           format: date-time
+
+    AttendanceSave:
+      type: object
+      required: [session_id, marked_at, marks]
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        marked_at:
+          type: string
+          format: date-time
+        marks:
+          type: array
+          items:
+            $ref: "#/components/schemas/SavedAttendanceMark"
+
+    AttendanceChangedDetails:
+      type: object
+      required: [sheet]
+      additionalProperties: false
+      properties:
+        sheet:
+          $ref: "#/components/schemas/AttendanceSheet"
+
+    SessionNotEligibleDetails:
+      type: object
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          enum: [replaced, cancelled, class_archived, not_started]
 
     SetupDefaults:
       type: object

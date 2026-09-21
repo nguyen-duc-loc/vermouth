@@ -38,9 +38,15 @@ func TestMux_RequiresAValidTokenOnEveryTeachingOperation(t *testing.T) {
 	}{
 		{stdhttp.MethodPost, "/classes"},
 		{stdhttp.MethodPut, "/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/schedule"},
+		{stdhttp.MethodGet, "/students"},
 		{stdhttp.MethodPost, "/students"},
-		{stdhttp.MethodPost, "/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/roster"},
-		{stdhttp.MethodPut, "/sessions/018f8f7e-91b0-7cc4-bd8c-f4d9030ca423/attendance/018f8f7e-91b0-7cc4-bd8c-f4d9030ca422"},
+		{stdhttp.MethodGet, "/students/018f8f7e-91b0-7cc4-bd8c-f4d9030ca422"},
+		{stdhttp.MethodPatch, "/students/018f8f7e-91b0-7cc4-bd8c-f4d9030ca422"},
+		{stdhttp.MethodDelete, "/students/018f8f7e-91b0-7cc4-bd8c-f4d9030ca422"},
+		{stdhttp.MethodGet, "/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/roster"},
+		{stdhttp.MethodPut, "/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/roster"},
+		{stdhttp.MethodGet, "/sessions/018f8f7e-91b0-7cc4-bd8c-f4d9030ca423/attendance"},
+		{stdhttp.MethodPut, "/sessions/018f8f7e-91b0-7cc4-bd8c-f4d9030ca423/attendance"},
 		{stdhttp.MethodGet, "/home"},
 		{stdhttp.MethodGet, "/schedule?from=2026-08-30&through=2026-09-05"},
 	}
@@ -78,9 +84,9 @@ func TestMux_RejectsInvalidTransportInputBeforeBusinessWork(t *testing.T) {
 	}{
 		{"unknown class field", stdhttp.MethodPost, "/classes", `{"unknown":true}`},
 		{"two student values", stdhttp.MethodPost, "/students", `{"name":"Mai"}{"name":"Lan"}`},
-		{"invalid class id", stdhttp.MethodPost, "/classes/not-a-uuid/roster", `{}`},
+		{"invalid class id", stdhttp.MethodPut, "/classes/not-a-uuid/roster", `{}`},
 		{"invalid schedule class id", stdhttp.MethodPut, "/classes/not-a-uuid/schedule", `{}`},
-		{"invalid attendance ids", stdhttp.MethodPut, "/sessions/not-a-uuid/attendance/not-a-uuid", `{}`},
+		{"invalid attendance id", stdhttp.MethodGet, "/sessions/not-a-uuid/attendance", `{}`},
 	}
 
 	for _, test := range tests {

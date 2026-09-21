@@ -44,12 +44,12 @@ type MoveSessionInput struct {
 
 func sessionState(cancelledAt, supersededAt pgtype.Timestamptz) string {
 	if cancelledAt.Valid {
-		return "cancelled"
+		return stateCancelled
 	}
 	if supersededAt.Valid {
 		return stateReplaced
 	}
-	return "active"
+	return stateActive
 }
 
 func canonicalSession(
@@ -99,10 +99,10 @@ func staleSessionError(session CanonicalSession) error {
 
 func invalidSessionStateError(sessionID uuid.UUID, state string, version int64) error {
 	allowed := []string{"move", "cancel"}
-	if state == "cancelled" {
+	if state == stateCancelled {
 		allowed = []string{"restore"}
 	}
-	if state == "replaced" {
+	if state == stateReplaced {
 		allowed = []string{}
 	}
 	return &ConflictError{
@@ -160,9 +160,36 @@ func (h *Handler) committedOverlapError(
 	return fmt.Errorf("read committed session overlap: %w", err)
 }
 
+func (h *Handler) recoverSessionConstraintOverlap(
+	ctx context.Context,
+	tx pgx.Tx,
+	tutorID uuid.UUID,
+	excludedSessionID uuid.UUID,
+	startsAt time.Time,
+	endsAt time.Time,
+	displayZone string,
+	remainingOverlapRetries int,
+) (bool, error) {
+	h.rollback(ctx, tx)
+	conflict, err := store.Queries(h.pool).FindOwnedSessionConflict(
+		ctx, sqlcgen.FindOwnedSessionConflictParams{
+			TutorID: tutorID, ExcludedSessionID: excludedSessionID,
+			StartsAt: startsAt, EndsAt: endsAt,
+		},
+	)
+	if err == nil {
+		return false, overlapError(&conflict, displayZone)
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return false, fmt.Errorf("read committed session overlap: %w", err)
+	}
+	if remainingOverlapRetries > 0 {
+		return true, nil
+	}
+	return false, overlapError(nil, displayZone)
+}
+
 // MoveSession changes one active session while retaining its identifier and attendance.
-//
-//nolint:funlen,gocognit,gocritic,noinlineerr // Lock order, validation, receipt, update, and event are one auditable command.
 func (h *Handler) MoveSession(
 	ctx context.Context,
 	tutorID uuid.UUID,
@@ -170,6 +197,19 @@ func (h *Handler) MoveSession(
 	requestZone string,
 	idempotencyKey string,
 	input MoveSessionInput,
+) (CanonicalSession, int, error) {
+	return h.moveSession(ctx, tutorID, sessionID, requestZone, idempotencyKey, input, 1)
+}
+
+//nolint:funlen,gocognit,gocritic,maintidx,noinlineerr // Lock order, validation, receipt, update, and event are one auditable command.
+func (h *Handler) moveSession(
+	ctx context.Context,
+	tutorID uuid.UUID,
+	sessionID uuid.UUID,
+	requestZone string,
+	idempotencyKey string,
+	input MoveSessionInput,
+	remainingOverlapRetries int,
 ) (CanonicalSession, int, error) {
 	err := validateIdempotencyKey(idempotencyKey)
 	if err != nil {
@@ -302,7 +342,16 @@ func (h *Handler) MoveSession(
 	})
 	if err != nil {
 		if constraintConflict(err) {
-			return CanonicalSession{}, 0, overlapError(nil, requestZone)
+			retry, overlapErr := h.recoverSessionConstraintOverlap(
+				ctx, tx, tutorID, sessionID, occurrence.startsAt, occurrence.endsAt,
+				requestZone, remainingOverlapRetries,
+			)
+			if retry {
+				return h.moveSession(
+					ctx, tutorID, sessionID, requestZone, idempotencyKey, input, remainingOverlapRetries-1,
+				)
+			}
+			return CanonicalSession{}, 0, overlapErr
 		}
 		return CanonicalSession{}, 0, fmt.Errorf("move session: %w", err)
 	}
@@ -312,8 +361,10 @@ func (h *Handler) MoveSession(
 		row.CancelledAt, row.SupersededAt, row.UpdatedAt, sourceZonePointer, requestZone,
 	)
 	if err = h.writeEvent(ctx, tx, teachingEvent{
-		name: vermouth.EventSessionMoved, tutorID: tutorID,
-		key: vermouth.Key{Kind: vermouth.KeySessionID, Value: sessionID},
+		name:       vermouth.EventSessionMoved,
+		tutorID:    tutorID,
+		key:        vermouth.Key{Kind: vermouth.KeySessionID, Value: sessionID},
+		occurredAt: commandTime,
 		fields: sessionScheduledFields{
 			SessionID: sessionID, ClassID: row.ClassID, TutorID: tutorID,
 			StartsAt: row.StartsAt, EndsAt: row.EndsAt,
@@ -327,7 +378,16 @@ func (h *Handler) MoveSession(
 	}
 	if err = tx.Commit(ctx); err != nil {
 		if constraintConflict(err) {
-			return CanonicalSession{}, 0, overlapError(nil, requestZone)
+			retry, overlapErr := h.recoverSessionConstraintOverlap(
+				ctx, tx, tutorID, sessionID, occurrence.startsAt, occurrence.endsAt,
+				requestZone, remainingOverlapRetries,
+			)
+			if retry {
+				return h.moveSession(
+					ctx, tutorID, sessionID, requestZone, idempotencyKey, input, remainingOverlapRetries-1,
+				)
+			}
+			return CanonicalSession{}, 0, overlapErr
 		}
 		return CanonicalSession{}, 0, fmt.Errorf("commit move session: %w", err)
 	}
@@ -345,7 +405,7 @@ func (h *Handler) CancelSession(
 ) (CanonicalSession, int, error) {
 	return h.changeSessionState(
 		ctx, tutorID, sessionID, requestZone, idempotencyKey, input,
-		operationCancelSession, sessionStateCancel,
+		operationCancelSession, sessionStateCancel, 0,
 	)
 }
 
@@ -360,11 +420,11 @@ func (h *Handler) RestoreSession(
 ) (CanonicalSession, int, error) {
 	return h.changeSessionState(
 		ctx, tutorID, sessionID, requestZone, idempotencyKey, input,
-		operationRestoreSession, sessionStateRestore,
+		operationRestoreSession, sessionStateRestore, 1,
 	)
 }
 
-//nolint:funlen,gocognit,gocritic,nestif,noinlineerr // Cancel and restore intentionally share the same lock and receipt protocol.
+//nolint:funlen,gocognit,gocritic,maintidx,nestif,noinlineerr // Cancel and restore intentionally share the same lock and receipt protocol.
 func (h *Handler) changeSessionState(
 	ctx context.Context,
 	tutorID uuid.UUID,
@@ -374,6 +434,7 @@ func (h *Handler) changeSessionState(
 	input SessionVersionInput,
 	operation string,
 	change sessionStateChange,
+	remainingOverlapRetries int,
 ) (CanonicalSession, int, error) {
 	restore := change == sessionStateRestore
 	err := validateIdempotencyKey(idempotencyKey)
@@ -485,7 +546,17 @@ func (h *Handler) changeSessionState(
 		})
 		if updateErr != nil {
 			if constraintConflict(updateErr) {
-				return CanonicalSession{}, 0, overlapError(nil, requestZone)
+				retry, overlapErr := h.recoverSessionConstraintOverlap(
+					ctx, tx, tutorID, sessionID, current.StartsAt, current.EndsAt,
+					requestZone, remainingOverlapRetries,
+				)
+				if retry {
+					return h.changeSessionState(
+						ctx, tutorID, sessionID, requestZone, idempotencyKey, input,
+						operation, change, remainingOverlapRetries-1,
+					)
+				}
+				return CanonicalSession{}, 0, overlapErr
 			}
 			return CanonicalSession{}, 0, fmt.Errorf("restore session: %w", updateErr)
 		}
@@ -495,8 +566,10 @@ func (h *Handler) changeSessionState(
 			row.CancelledAt, row.SupersededAt, row.UpdatedAt, sourceZone, requestZone,
 		)
 		err = h.writeEvent(ctx, tx, teachingEvent{
-			name: vermouth.EventSessionScheduled, tutorID: tutorID,
-			key: vermouth.Key{Kind: vermouth.KeySessionID, Value: sessionID},
+			name:       vermouth.EventSessionScheduled,
+			tutorID:    tutorID,
+			key:        vermouth.Key{Kind: vermouth.KeySessionID, Value: sessionID},
+			occurredAt: commandTime,
 			fields: sessionScheduledFields{
 				SessionID: sessionID, ClassID: row.ClassID, TutorID: tutorID,
 				StartsAt: row.StartsAt, EndsAt: row.EndsAt,
@@ -516,7 +589,9 @@ func (h *Handler) changeSessionState(
 			row.OriginLocalDate, row.ScheduleRuleID, row.Version, row.MovedAt,
 			row.CancelledAt, row.SupersededAt, row.UpdatedAt, sourceZone, requestZone,
 		)
-		err = h.writeSessionCancelledEvent(ctx, tx, tutorID, sessionID, row.ClassID)
+		err = h.writeSessionCancelledEvent(
+			ctx, tx, tutorID, sessionID, row.ClassID, commandTime,
+		)
 	}
 	if err != nil {
 		return CanonicalSession{}, 0, err
@@ -526,7 +601,17 @@ func (h *Handler) changeSessionState(
 	}
 	if err = tx.Commit(ctx); err != nil {
 		if constraintConflict(err) {
-			return CanonicalSession{}, 0, overlapError(nil, requestZone)
+			retry, overlapErr := h.recoverSessionConstraintOverlap(
+				ctx, tx, tutorID, sessionID, current.StartsAt, current.EndsAt,
+				requestZone, remainingOverlapRetries,
+			)
+			if retry {
+				return h.changeSessionState(
+					ctx, tutorID, sessionID, requestZone, idempotencyKey, input,
+					operation, change, remainingOverlapRetries-1,
+				)
+			}
+			return CanonicalSession{}, 0, overlapErr
 		}
 		return CanonicalSession{}, 0, fmt.Errorf("commit %s: %w", operation, err)
 	}

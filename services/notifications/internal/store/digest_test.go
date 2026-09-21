@@ -87,6 +87,37 @@ func TestProjectionUpsertsAreIdempotent(t *testing.T) {
 	require.Equal(t, once, twice, "the same delivery again must change nothing, count included (AC-7, AC-9)")
 }
 
+func TestRosterLeaveReplayDoesNotCloseALaterRejoin(t *testing.T) {
+	t.Parallel()
+	q := queries(t)
+	ctx := t.Context()
+	tutorID := newTutor(t)
+	classID, studentID := newID(t), newID(t)
+
+	require.NoError(t, q.OpenRosterPeriod(ctx, sqlcgen.OpenRosterPeriodParams{
+		ClassID: classID, StudentID: studentID,
+		EffectiveFrom: day(time.September, 1), TutorID: tutorID,
+	}))
+	require.NoError(t, q.CloseRosterPeriod(ctx, sqlcgen.CloseRosterPeriodParams{
+		TutorID: tutorID, ClassID: classID, StudentID: studentID,
+		EffectiveTo: day(time.September, 7),
+	}))
+	require.NoError(t, q.OpenRosterPeriod(ctx, sqlcgen.OpenRosterPeriodParams{
+		ClassID: classID, StudentID: studentID,
+		EffectiveFrom: day(time.September, 15), TutorID: tutorID,
+	}))
+
+	require.NoError(t, q.CloseRosterPeriod(ctx, sqlcgen.CloseRosterPeriodParams{
+		TutorID: tutorID, ClassID: classID, StudentID: studentID,
+		EffectiveTo: day(time.September, 7),
+	}), "replaying the old leave must not close the later rejoin")
+
+	require.NoError(t, q.CloseRosterPeriod(ctx, sqlcgen.CloseRosterPeriodParams{
+		TutorID: tutorID, ClassID: classID, StudentID: studentID,
+		EffectiveTo: day(time.September, 20),
+	}), "the current leave must still close the later rejoin")
+}
+
 func TestProjectionReplayPreservesDigestRuns(t *testing.T) {
 	t.Parallel()
 	q := queries(t)

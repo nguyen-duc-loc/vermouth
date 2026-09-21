@@ -10,8 +10,17 @@ import {
   Plus,
   RefreshCw,
   Repeat2,
+  Users,
 } from 'lucide-react'
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import {
+  type FormEvent,
+  type MouseEvent as ReactMouseEvent,
+  type RefObject,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 import {
   cancelSession,
@@ -26,6 +35,7 @@ import {
 } from '../api/teaching'
 import { AppearancePanel, type AppearancePanelText } from '../components/AppearancePanel'
 import { type AppDestination, AppShell } from '../components/AppShell'
+import { AttendanceSheet } from '../components/AttendanceSheet'
 import { EmptyState } from '../components/EmptyState'
 import { ErrorState } from '../components/ErrorState'
 import { FormField } from '../components/FormField'
@@ -60,6 +70,7 @@ type CalendarView = 'day' | 'week' | 'month'
 const destinations: readonly AppDestination[] = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/schedule', label: 'Schedule', icon: CalendarDays },
+  { href: '/students', label: 'Students', icon: Users },
 ]
 
 const appearanceText: AppearancePanelText = {
@@ -95,6 +106,11 @@ type SlotDraft = {
   endTime: string
 }
 
+type RetainedCommand = {
+  key: string
+  signature: string
+}
+
 /** Provides one tutor wide, Monday first calendar and every schedule action. */
 export function SchedulePage() {
   const search = scheduleRoute.useSearch()
@@ -102,10 +118,13 @@ export function SchedulePage() {
   const queryClient = useQueryClient()
   const [isPhone, setIsPhone] = useState(false)
   const [selectedSession, setSelectedSession] = useState<ScheduleSession>()
+  const [attendanceSessionID, setAttendanceSessionID] = useState<string>()
   const [scheduleClassID, setScheduleClassID] = useState<string>()
   const [announcement, setAnnouncement] = useState('')
   const [extraHistory, setExtraHistory] = useState<ScheduleSession[]>([])
   const [nextHistoryCursor, setNextHistoryCursor] = useState<string>()
+  const sessionReturnFocusRef = useRef<HTMLButtonElement>(null)
+  const scheduleReturnFocusRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     document.title = 'Schedule · Vermouth'
@@ -189,6 +208,14 @@ export function SchedulePage() {
   const invalidateSchedule = async () => {
     await queryClient.invalidateQueries({ queryKey: ['schedule', tutor?.tutor_id] })
   }
+  const openSession = (session: ScheduleSession, trigger: HTMLButtonElement) => {
+    sessionReturnFocusRef.current = trigger
+    setSelectedSession(session)
+  }
+  const openSchedule = (classID: string, event: ReactMouseEvent<HTMLButtonElement>) => {
+    scheduleReturnFocusRef.current = event.currentTarget
+    setScheduleClassID(classID)
+  }
 
   const contextualPanel = schedule ? (
     <div className="grid gap-7">
@@ -244,7 +271,7 @@ export function SchedulePage() {
                 <Button
                   variant="quiet"
                   className="justify-start"
-                  onClick={() => setScheduleClassID(item.class_id)}
+                  onClick={(event) => openSchedule(item.class_id, event)}
                 >
                   <Repeat2 aria-hidden="true" className="size-icon-sm" />
                   Manage schedule
@@ -290,7 +317,7 @@ export function SchedulePage() {
               history.
             </p>
           </div>
-          <Button onClick={() => setScheduleClassID('')} disabled={!schedule?.classes.length}>
+          <Button onClick={(event) => openSchedule('', event)} disabled={!schedule?.classes.length}>
             <Plus aria-hidden="true" className="size-icon-sm" />
             Add schedule
           </Button>
@@ -370,22 +397,18 @@ export function SchedulePage() {
               <DayView
                 date={visibleDate}
                 sessions={sessionsForDate(schedule, visibleDate)}
-                onSelect={setSelectedSession}
+                onSelect={openSession}
               />
             </TabsContent>
             <TabsContent value="week">
-              <WeekView
-                dates={weekDates(visibleDate)}
-                schedule={schedule}
-                onSelect={setSelectedSession}
-              />
+              <WeekView dates={weekDates(visibleDate)} schedule={schedule} onSelect={openSession} />
             </TabsContent>
             <TabsContent value="month">
               <MonthView
                 dates={monthDates(visibleDate)}
                 schedule={schedule}
                 visibleDate={visibleDate}
-                onSelect={setSelectedSession}
+                onSelect={openSession}
               />
             </TabsContent>
           </Tabs>
@@ -409,7 +432,7 @@ export function SchedulePage() {
                 <ScheduleSessionCard
                   key={session.session_id}
                   session={session}
-                  onSelect={setSelectedSession}
+                  onSelect={openSession}
                 />
               ))}
             </div>
@@ -431,18 +454,40 @@ export function SchedulePage() {
         session={selectedSession}
         open={selectedSession !== undefined}
         onOpenChange={(open) => !open && setSelectedSession(undefined)}
+        returnFocusRef={sessionReturnFocusRef}
+        onAttendance={(sessionID) => {
+          setSelectedSession(undefined)
+          setAttendanceSessionID(sessionID)
+        }}
         onChanged={async (message) => {
           setAnnouncement(message)
           await invalidateSchedule()
           setSelectedSession(undefined)
         }}
       />
+      {tutor && (
+        <AttendanceSheet
+          open={attendanceSessionID !== undefined}
+          tutorId={tutor.tutor_id}
+          sessionId={attendanceSessionID}
+          onOpenChange={(open) => {
+            if (!open) setAttendanceSessionID(undefined)
+          }}
+          returnFocusRef={sessionReturnFocusRef}
+          onSaved={() => {
+            setAnnouncement('Attendance saved for the whole roster.')
+            void queryClient.invalidateQueries({ queryKey: ['home'] })
+            void invalidateSchedule()
+          }}
+        />
+      )}
       <ScheduleRuleSheet
         schedule={schedule}
         classID={scheduleClassID}
         onClassChange={setScheduleClassID}
         open={scheduleClassID !== undefined}
         onOpenChange={(open) => !open && setScheduleClassID(undefined)}
+        returnFocusRef={scheduleReturnFocusRef}
         onChanged={async (message) => {
           setAnnouncement(message)
           await invalidateSchedule()
@@ -476,7 +521,7 @@ function DayView({
 }: {
   date: string
   sessions: ScheduleSession[]
-  onSelect: (session: ScheduleSession) => void
+  onSelect: (session: ScheduleSession, trigger: HTMLButtonElement) => void
 }) {
   return (
     <section aria-labelledby="day-heading" className="grid gap-4">
@@ -510,7 +555,7 @@ function WeekView({
 }: {
   dates: string[]
   schedule: Schedule
-  onSelect: (session: ScheduleSession) => void
+  onSelect: (session: ScheduleSession, trigger: HTMLButtonElement) => void
 }) {
   return (
     <section aria-labelledby="week-heading" className="grid gap-4">
@@ -563,7 +608,7 @@ function MonthView({
   dates: string[]
   schedule: Schedule
   visibleDate: string
-  onSelect: (session: ScheduleSession) => void
+  onSelect: (session: ScheduleSession, trigger: HTMLButtonElement) => void
 }) {
   return (
     <section aria-labelledby="month-heading" className="grid gap-4">
@@ -599,7 +644,7 @@ function MonthView({
                   <button
                     key={session.session_id}
                     type="button"
-                    onClick={() => onSelect(session)}
+                    onClick={(event) => onSelect(session, event.currentTarget)}
                     data-class-color={session.class_color}
                     className="min-h-11 rounded-md border border-class-border border-s-4 border-s-class-marker bg-class-surface p-1 text-start text-caption font-medium outline-none focus-visible:ring-2 focus-visible:ring-focus"
                   >
@@ -624,15 +669,20 @@ function SessionDetailsSheet({
   open,
   onOpenChange,
   onChanged,
+  onAttendance,
+  returnFocusRef,
 }: {
   session?: ScheduleSession
   open: boolean
   onOpenChange: (open: boolean) => void
   onChanged: (message: string) => Promise<void>
+  onAttendance: (sessionID: string) => void
+  returnFocusRef: RefObject<HTMLButtonElement | null>
 }) {
   const [date, setDate] = useState('')
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
+  const commandRef = useRef<RetainedCommand | undefined>(undefined)
   useEffect(() => {
     if (!session) return
     setDate(session.display_date)
@@ -642,35 +692,54 @@ function SessionDetailsSheet({
   const mutation = useMutation({
     mutationFn: async (action: 'move' | 'cancel' | 'restore') => {
       if (!session) throw new Error('Choose a session first')
-      const key = crypto.randomUUID()
-      if (action === 'move')
+      if (action === 'move') {
+        const input = {
+          expected_version: session.version,
+          local_date: date,
+          start_time: startTime,
+          end_time: endTime,
+        }
         return moveSession(
           session.session_id,
-          {
-            expected_version: session.version,
-            local_date: date,
-            start_time: startTime,
-            end_time: endTime,
-          },
-          key,
+          input,
+          retainedCommandKey(commandRef, { action, input }),
         )
+      }
       const input = { expected_version: session.version }
       return action === 'cancel'
-        ? cancelSession(session.session_id, input, key)
-        : restoreSession(session.session_id, input, key)
+        ? cancelSession(
+            session.session_id,
+            input,
+            retainedCommandKey(commandRef, { action, input }),
+          )
+        : restoreSession(
+            session.session_id,
+            input,
+            retainedCommandKey(commandRef, { action, input }),
+          )
     },
-    onSuccess: async (_result, action) =>
-      onChanged(
+    onSuccess: async (_result, action) => {
+      commandRef.current = undefined
+      await onChanged(
         action === 'move'
           ? `Session moved to ${date} at ${startTime}.`
           : action === 'cancel'
             ? 'Session cancelled.'
             : 'Session restored.',
-      ),
+      )
+    },
   })
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="end" closeLabel="Close session details" className="content-start">
+      <SheetContent
+        side="end"
+        closeLabel="Close session details"
+        className="content-start"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          restoreSheetFocus(returnFocusRef)
+        }}
+      >
         <SheetHeader>
           <SheetTitle>{session?.class_name ?? 'Session details'}</SheetTitle>
           <SheetDescription>
@@ -689,7 +758,8 @@ function SessionDetailsSheet({
               <div>
                 <dt className="text-muted-foreground">State and version</dt>
                 <dd>
-                  {session.state} · {session.version}
+                  {session.state}
+                  {session.moved_at ? ' · moved' : ''} · {session.version}
                 </dd>
               </div>
               <div>
@@ -772,6 +842,11 @@ function SessionDetailsSheet({
         )}
         <SheetFooter>
           {session?.state === 'active' && (
+            <Button variant="secondary" onClick={() => onAttendance(session.session_id)}>
+              Mark attendance
+            </Button>
+          )}
+          {session?.state === 'active' && (
             <Button
               variant="destructive"
               onClick={() => mutation.mutate('cancel')}
@@ -798,6 +873,7 @@ function ScheduleRuleSheet({
   open,
   onOpenChange,
   onChanged,
+  returnFocusRef,
 }: {
   schedule?: Schedule
   classID?: string
@@ -805,6 +881,7 @@ function ScheduleRuleSheet({
   open: boolean
   onOpenChange: (open: boolean) => void
   onChanged: (message: string) => Promise<void>
+  returnFocusRef: RefObject<HTMLButtonElement | null>
 }) {
   const selectedClass = schedule?.classes.find((item) => item.class_id === classID)
   const latestRule = schedule?.rules
@@ -814,19 +891,29 @@ function ScheduleRuleSheet({
   const [validThrough, setValidThrough] = useState('')
   const [lastDate, setLastDate] = useState('')
   const [slots, setSlots] = useState<SlotDraft[]>(defaultSlots())
+  const saveCommandRef = useRef<RetainedCommand | undefined>(undefined)
+  const endCommandRef = useRef<RetainedCommand | undefined>(undefined)
   useEffect(() => {
     if (!open) return
     const today = localDateInZone(new Date(), schedule?.request_time_zone ?? 'UTC')
     setEffectiveFrom(latestRule?.valid_from ?? today)
     setValidThrough(latestRule?.valid_through ?? addDates(today, 90))
     setLastDate(latestRule?.valid_through ?? today)
+    const initialSlots = defaultSlots()
     setSlots(
-      defaultSlots().map((slot) => {
-        const current = latestRule?.slots.find((value) => value.weekday === slot.weekday)
-        return current
-          ? { ...slot, selected: true, startTime: current.start_time, endTime: current.end_time }
-          : slot
-      }),
+      latestRule
+        ? initialSlots.map((slot) => {
+            const current = latestRule?.slots.find((value) => value.weekday === slot.weekday)
+            return current
+              ? {
+                  ...slot,
+                  selected: true,
+                  startTime: current.start_time,
+                  endTime: current.end_time,
+                }
+              : { ...slot, selected: false }
+          })
+        : initialSlots,
     )
   }, [latestRule, open, schedule?.request_time_zone])
   const saveMutation = useMutation({
@@ -834,39 +921,37 @@ function ScheduleRuleSheet({
       if (!selectedClass) throw new Error('Choose a class first')
       const selectedSlots = slots.filter((slot) => slot.selected)
       if (selectedSlots.length === 0) throw new Error('Choose at least one weekday')
-      return putSchedule(
-        selectedClass.class_id,
-        {
-          expected_revision: selectedClass.schedule_revision,
-          effective_from: effectiveFrom,
-          valid_through: validThrough,
-          slots: selectedSlots.map((slot) => ({
-            weekday: slot.weekday,
-            start_time: slot.startTime,
-            end_time: slot.endTime,
-          })),
-        },
-        crypto.randomUUID(),
+      const input = {
+        expected_revision: selectedClass.schedule_revision,
+        effective_from: effectiveFrom,
+        valid_through: validThrough,
+        slots: selectedSlots.map((slot) => ({
+          weekday: slot.weekday,
+          start_time: slot.startTime,
+          end_time: slot.endTime,
+        })),
+      }
+      return putSchedule(selectedClass.class_id, input, retainedCommandKey(saveCommandRef, input))
+    },
+    onSuccess: async (result) => {
+      saveCommandRef.current = undefined
+      await onChanged(
+        `Schedule saved. ${result.created_count} created, ${result.adopted_count} adopted, ${result.preserved_count} exceptions preserved, and ${result.superseded_count} sessions replaced.`,
       )
     },
-    onSuccess: async (result) =>
-      onChanged(
-        `Schedule saved. ${result.created_count} created, ${result.adopted_count} adopted, ${result.preserved_count} exceptions preserved, and ${result.superseded_count} sessions replaced.`,
-      ),
   })
   const endMutation = useMutation({
     mutationFn: async () => {
       if (!selectedClass) throw new Error('Choose a class first')
-      return endSchedule(
-        selectedClass.class_id,
-        { expected_revision: selectedClass.schedule_revision, last_date: lastDate },
-        crypto.randomUUID(),
+      const input = { expected_revision: selectedClass.schedule_revision, last_date: lastDate }
+      return endSchedule(selectedClass.class_id, input, retainedCommandKey(endCommandRef, input))
+    },
+    onSuccess: async (result) => {
+      endCommandRef.current = undefined
+      await onChanged(
+        `Schedule ended. ${result.preserved_count} exceptions preserved and ${result.superseded_count} sessions replaced.`,
       )
     },
-    onSuccess: async (result) =>
-      onChanged(
-        `Schedule ended. ${result.preserved_count} exceptions preserved and ${result.superseded_count} sessions replaced.`,
-      ),
   })
   const error = saveMutation.error ?? endMutation.error
   return (
@@ -875,6 +960,10 @@ function ScheduleRuleSheet({
         side="end"
         closeLabel="Close schedule form"
         className="content-start sm:w-[min(34rem,92vw)]"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          restoreSheetFocus(returnFocusRef)
+        }}
       >
         <SheetHeader>
           <SheetTitle>
@@ -1066,6 +1155,26 @@ function ScheduleRuleSheet({
       </SheetContent>
     </Sheet>
   )
+}
+
+function restoreSheetFocus(returnFocusRef: RefObject<HTMLButtonElement | null>) {
+  const trigger = returnFocusRef.current
+  if (trigger?.isConnected) {
+    trigger.focus()
+    return
+  }
+  document.getElementById('main-content')?.focus()
+}
+
+function retainedCommandKey(
+  commandRef: RefObject<RetainedCommand | undefined>,
+  input: unknown,
+): string {
+  const signature = JSON.stringify(input)
+  if (commandRef.current?.signature !== signature) {
+    commandRef.current = { key: crypto.randomUUID(), signature }
+  }
+  return commandRef.current.key
 }
 
 function defaultSlots(): SlotDraft[] {

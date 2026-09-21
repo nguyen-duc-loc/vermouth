@@ -335,8 +335,10 @@ func (h *Handler) replaceSchedule(
 		}
 		createdCount++
 		if err = h.writeEvent(ctx, tx, teachingEvent{
-			name: vermouth.EventSessionScheduled, tutorID: tutorID,
-			key: vermouth.Key{Kind: vermouth.KeySessionID, Value: row.SessionID},
+			name:       vermouth.EventSessionScheduled,
+			tutorID:    tutorID,
+			key:        vermouth.Key{Kind: vermouth.KeySessionID, Value: row.SessionID},
+			occurredAt: commandTime,
 			fields: sessionScheduledFields{
 				SessionID: row.SessionID, ClassID: classID, TutorID: tutorID,
 				StartsAt: row.StartsAt, EndsAt: row.EndsAt,
@@ -348,7 +350,9 @@ func (h *Handler) replaceSchedule(
 	}
 	for index := range superseded {
 		row := &superseded[index]
-		if err = h.writeSessionCancelledEvent(ctx, tx, tutorID, row.SessionID, row.ClassID); err != nil {
+		if err = h.writeSessionCancelledEvent(
+			ctx, tx, tutorID, row.SessionID, row.ClassID, commandTime,
+		); err != nil {
 			return PutScheduleResult{}, 0, err
 		}
 	}
@@ -538,7 +542,9 @@ func (h *Handler) EndSchedule(
 	}
 	for index := range superseded {
 		row := &superseded[index]
-		if err = h.writeSessionCancelledEvent(ctx, tx, tutorID, row.SessionID, row.ClassID); err != nil {
+		if err = h.writeSessionCancelledEvent(
+			ctx, tx, tutorID, row.SessionID, row.ClassID, commandTime,
+		); err != nil {
 			return EndScheduleResult{}, 0, err
 		}
 	}
@@ -604,10 +610,13 @@ func (h *Handler) writeSessionCancelledEvent(
 	tutorID uuid.UUID,
 	sessionID uuid.UUID,
 	classID uuid.UUID,
+	commandTime time.Time,
 ) error {
 	return h.writeEvent(ctx, tx, teachingEvent{
-		name: vermouth.EventSessionCancelled, tutorID: tutorID,
-		key: vermouth.Key{Kind: vermouth.KeySessionID, Value: sessionID},
+		name:       vermouth.EventSessionCancelled,
+		tutorID:    tutorID,
+		key:        vermouth.Key{Kind: vermouth.KeySessionID, Value: sessionID},
+		occurredAt: commandTime,
 		fields: sessionCancelledFields{
 			SessionID: sessionID, ClassID: classID, TutorID: tutorID,
 		},

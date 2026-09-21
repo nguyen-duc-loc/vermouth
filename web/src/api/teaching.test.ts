@@ -118,48 +118,70 @@ describe('teaching commands', () => {
   })
 
   // covers: AC-4, AC-5, AC-12
-  it('puts owned identifiers in the roster and attendance paths', async () => {
+  it('puts owned identifiers and idempotency keys in atomic resource paths', async () => {
     const roster = {
-      class_id: 'class-1',
-      student_id: 'student-1',
-      effective_from: '2026-08-30',
-      effective_to: null,
+      class: { class_id: 'class-1', name: 'Maths', color: 'blue' },
+      resolved_date: '2026-08-30',
+      students: [],
     }
     const attendance = {
       session_id: 'session-1',
-      student_id: 'student-1',
-      state: 'Present',
       marked_at: '2026-08-30T03:30:00Z',
+      marks: [
+        {
+          student_id: 'student-1',
+          state: 'Present',
+          marked_at: '2026-08-30T03:30:00Z',
+        },
+      ],
     }
-    client.post.mockResolvedValue({ data: roster, response: new Response(null, { status: 201 }) })
-    client.put.mockResolvedValue({
-      data: attendance,
-      response: new Response(null, { status: 200 }),
-    })
-    const { joinRoster, markAttendance } = await import('./teaching')
+    client.put
+      .mockResolvedValueOnce({ data: roster, response: new Response(null, { status: 200 }) })
+      .mockResolvedValueOnce({ data: attendance, response: new Response(null, { status: 200 }) })
+    const { changeClassRoster, saveAttendance } = await import('./teaching')
 
     await expect(
-      joinRoster('class-1', { student_id: 'student-1', effective_from: '2026-08-30' }),
+      changeClassRoster(
+        'class-1',
+        { change_date: '2026-08-30', additions: ['student-1'], removals: [] },
+        'roster-command',
+      ),
     ).resolves.toBe(roster)
-    await expect(markAttendance('session-1', 'student-1', { state: 'Present' })).resolves.toBe(
-      attendance,
-    )
+    await expect(
+      saveAttendance(
+        'session-1',
+        {
+          revision: 'revision-1',
+          marks: [{ student_id: 'student-1', state: 'Present' }],
+        },
+        'attendance-command',
+      ),
+    ).resolves.toBe(attendance)
 
-    expect(client.post).toHaveBeenCalledWith('/api/classes/{class_id}/roster', {
+    expect(client.put).toHaveBeenNthCalledWith(1, '/api/classes/{class_id}/roster', {
       headers: { Authorization: 'Bearer access-token' },
-      params: { path: { class_id: 'class-1' } },
-      body: { student_id: 'student-1', effective_from: '2026-08-30' },
+      params: {
+        path: { class_id: 'class-1' },
+        header: { 'Idempotency-Key': 'roster-command' },
+      },
+      body: { change_date: '2026-08-30', additions: ['student-1'], removals: [] },
     })
-    expect(client.put).toHaveBeenCalledWith('/api/sessions/{session_id}/attendance/{student_id}', {
+    expect(client.put).toHaveBeenNthCalledWith(2, '/api/sessions/{session_id}/attendance', {
       headers: { Authorization: 'Bearer access-token' },
-      params: { path: { session_id: 'session-1', student_id: 'student-1' } },
-      body: { state: 'Present' },
+      params: {
+        path: { session_id: 'session-1' },
+        header: { 'Idempotency-Key': 'attendance-command' },
+      },
+      body: {
+        revision: 'revision-1',
+        marks: [{ student_id: 'student-1', state: 'Present' }],
+      },
     })
   })
 
   // covers: AC-10, AC-12
   it('returns safe command errors without losing a server message', async () => {
-    const { createStudent, markAttendance } = await import('./teaching')
+    const { createStudent, saveAttendance } = await import('./teaching')
     client.post.mockResolvedValueOnce({
       error: { error: { message: 'the idempotency key names another student' } },
       response: new Response(null, { status: 409 }),
@@ -169,8 +191,12 @@ describe('teaching commands', () => {
     )
 
     client.put.mockResolvedValueOnce({ response: new Response(null, { status: 502 }) })
-    await expect(markAttendance('session-1', 'student-1', { state: 'Absent' })).rejects.toThrow(
-      'attendance could not be saved',
-    )
+    await expect(
+      saveAttendance(
+        'session-1',
+        { revision: 'revision-1', marks: [{ student_id: 'student-1', state: 'Absent' }] },
+        'attendance-command',
+      ),
+    ).rejects.toThrow('attendance could not be saved')
   })
 })

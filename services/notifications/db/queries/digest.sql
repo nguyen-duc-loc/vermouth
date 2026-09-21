@@ -42,6 +42,8 @@ INSERT INTO roster_periods (class_id, student_id, effective_from, tutor_id)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (class_id, student_id, effective_from) DO NOTHING;
 
+-- A replay may see an old leave after a later rejoin is already open in the
+-- projection. The event end date excludes that later period from the target.
 -- name: CloseRosterPeriod :exec
 UPDATE roster_periods
 SET effective_to = $4,
@@ -49,7 +51,8 @@ SET effective_to = $4,
 WHERE tutor_id = $1
   AND class_id = $2
   AND student_id = $3
-  AND effective_to IS NULL;
+  AND effective_to IS NULL
+  AND effective_from <= $4;
 
 -- ListDigestSessions is the whole digest read: the tutor's sessions on their own
 -- local day, the class label, and how many students were in that class on that

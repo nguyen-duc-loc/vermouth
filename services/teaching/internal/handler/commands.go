@@ -49,10 +49,11 @@ func New(pool *pgxpool.Pool, logger *slog.Logger, publishTopic string) *Handler 
 }
 
 type teachingEvent struct {
-	name    string
-	tutorID uuid.UUID
-	key     vermouth.Key
-	fields  any
+	name       string
+	tutorID    uuid.UUID
+	key        vermouth.Key
+	fields     any
+	occurredAt time.Time
 }
 
 type classCreatedFields struct {
@@ -253,9 +254,10 @@ func (h *Handler) CreateClass(
 		}
 	}
 	err = h.writeEvent(ctx, tx, teachingEvent{
-		name:    vermouth.EventClassCreated,
-		tutorID: tutorID,
-		key:     vermouth.Key{Kind: vermouth.KeyClassID, Value: classID},
+		name:       vermouth.EventClassCreated,
+		tutorID:    tutorID,
+		key:        vermouth.Key{Kind: vermouth.KeyClassID, Value: classID},
+		occurredAt: commandTime,
 		fields: classCreatedFields{
 			ClassID: classID, TutorID: tutorID, Name: validated.name,
 			RateAmount: validated.rateAmount, Currency: currencyVND,
@@ -291,8 +293,10 @@ func (h *Handler) CreateClass(
 		inserted = append(inserted, row)
 		date := occurrence.localDate.Format(dateLayout)
 		writeErr := h.writeEvent(ctx, tx, teachingEvent{
-			name: vermouth.EventSessionScheduled, tutorID: tutorID,
-			key: vermouth.Key{Kind: vermouth.KeySessionID, Value: sessionIDs[index]},
+			name:       vermouth.EventSessionScheduled,
+			tutorID:    tutorID,
+			key:        vermouth.Key{Kind: vermouth.KeySessionID, Value: sessionIDs[index]},
+			occurredAt: commandTime,
 			fields: sessionScheduledFields{
 				SessionID: sessionIDs[index], ClassID: classID, TutorID: tutorID,
 				StartsAt: occurrence.startsAt, EndsAt: occurrence.endsAt, LocalDate: date,
@@ -508,7 +512,7 @@ func (h *Handler) CreateStudent(
 	if err != nil {
 		return Student{}, false, fmt.Errorf("commit create student: %w", err)
 	}
-	return Student{StudentID: row.StudentID, Name: row.Name, Phone: textPointer(row.Phone)}, true, nil
+	return studentFromStored(row), true, nil
 }
 
 func (h *Handler) replayStudent(
@@ -533,157 +537,17 @@ func (h *Handler) replayStudent(
 	if err != nil {
 		return Student{}, false, fmt.Errorf("recover student receipt resource: %w", err)
 	}
-	return Student{StudentID: row.StudentID, Name: row.Name, Phone: textPointer(row.Phone)}, false, nil
+	return studentFromStored(row), false, nil
 }
 
-// JoinRoster opens one period or returns the exact existing open period. A
-// different open effective date is a conflict and writes no event.
-//
-//nolint:funlen // The linear flow makes every ownership, retry, event, and commit decision visible in one transaction.
-func (h *Handler) JoinRoster(
-	ctx context.Context,
-	tutorID uuid.UUID,
-	classID uuid.UUID,
-	input JoinRosterInput,
-) (RosterPeriod, bool, error) {
-	effectiveFrom, err := parseDate("effective_from", input.EffectiveFrom)
-	if err != nil {
-		return RosterPeriod{}, false, err
+func studentFromStored(row sqlcgen.Student) Student {
+	return Student{
+		StudentID: row.StudentID,
+		Name:      row.Name,
+		Phone:     textPointer(row.Phone),
+		CreatedAt: row.CreatedAt.UTC(),
+		UpdatedAt: row.UpdatedAt.UTC(),
 	}
-	tx, err := h.pool.Begin(ctx)
-	if err != nil {
-		return RosterPeriod{}, false, fmt.Errorf("begin join roster: %w", err)
-	}
-	defer h.rollback(ctx, tx)
-	queries := store.Queries(tx)
-	_, err = queries.GetOwnedClass(ctx, sqlcgen.GetOwnedClassParams{
-		TutorID: tutorID, ClassID: classID,
-	})
-	if err != nil {
-		return RosterPeriod{}, false, ownedReadError("read roster class", err)
-	}
-	_, err = queries.GetOwnedStudent(ctx, sqlcgen.GetOwnedStudentParams{
-		TutorID: tutorID, StudentID: input.StudentID,
-	})
-	if err != nil {
-		return RosterPeriod{}, false, ownedReadError("read roster student", err)
-	}
-
-	open, err := queries.FindOpenRosterPeriod(ctx, sqlcgen.FindOpenRosterPeriodParams{
-		TutorID: tutorID, ClassID: classID, StudentID: input.StudentID,
-	})
-	if err == nil {
-		if open.EffectiveFrom.Time.Equal(effectiveFrom) {
-			return rosterFromOpen(open), false, nil
-		}
-		return RosterPeriod{}, false, ErrConflict
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return RosterPeriod{}, false, fmt.Errorf("read open roster period: %w", err)
-	}
-
-	row, err := queries.InsertRosterPeriod(ctx, sqlcgen.InsertRosterPeriodParams{
-		ClassID: classID, StudentID: input.StudentID,
-		EffectiveFrom: pgtype.Date{Time: effectiveFrom, Valid: true}, TutorID: tutorID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		recoveredOpen, readErr := queries.FindOpenRosterPeriod(ctx, sqlcgen.FindOpenRosterPeriodParams{
-			TutorID: tutorID, ClassID: classID, StudentID: input.StudentID,
-		})
-		if readErr != nil {
-			return RosterPeriod{}, false, fmt.Errorf("recover concurrent roster period: %w", readErr)
-		}
-		if recoveredOpen.EffectiveFrom.Time.Equal(effectiveFrom) {
-			return rosterFromOpen(recoveredOpen), false, nil
-		}
-		return RosterPeriod{}, false, ErrConflict
-	}
-	if err != nil {
-		if constraintConflict(err) {
-			return RosterPeriod{}, false, ErrConflict
-		}
-		return RosterPeriod{}, false, fmt.Errorf("insert roster period: %w", err)
-	}
-	err = h.writeEvent(ctx, tx, teachingEvent{
-		name:    vermouth.EventRosterJoined,
-		tutorID: tutorID,
-		key:     vermouth.Key{Kind: vermouth.KeyClassID, Value: classID},
-		fields: rosterJoinedFields{
-			ClassID: classID, StudentID: input.StudentID, TutorID: tutorID,
-			EffectiveFrom: effectiveFrom.Format(dateLayout),
-		},
-	})
-	if err != nil {
-		return RosterPeriod{}, false, err
-	}
-	err = tx.Commit(ctx)
-	if err != nil {
-		return RosterPeriod{}, false, fmt.Errorf("commit join roster: %w", err)
-	}
-	return rosterFromStored(row), true, nil
-}
-
-// MarkAttendance serialises corrections on the owned session, checks inclusive
-// roster coverage, and writes an event only for a real state change.
-func (h *Handler) MarkAttendance(
-	ctx context.Context,
-	tutorID uuid.UUID,
-	sessionID uuid.UUID,
-	studentID uuid.UUID,
-	input MarkAttendanceInput,
-) (Attendance, error) {
-	if input.State != "Present" && input.State != "Absent" {
-		return Attendance{}, &ValidationError{Field: "state", Message: "must be Present or Absent"}
-	}
-	tx, err := h.pool.Begin(ctx)
-	if err != nil {
-		return Attendance{}, fmt.Errorf("begin mark attendance: %w", err)
-	}
-	defer h.rollback(ctx, tx)
-	queries := store.Queries(tx)
-	writeContext, err := queries.GetAttendanceWriteContext(ctx, sqlcgen.GetAttendanceWriteContextParams{
-		StudentID: studentID, TutorID: tutorID, SessionID: sessionID,
-	})
-	if err != nil {
-		return Attendance{}, ownedReadError("read attendance context", err)
-	}
-	if !writeContext.Rostered {
-		return Attendance{}, ErrConflict
-	}
-	existing, err := queries.GetAttendance(ctx, sqlcgen.GetAttendanceParams{
-		TutorID: tutorID, SessionID: sessionID, StudentID: studentID,
-	})
-	if err == nil && existing.State == input.State {
-		return attendanceFromStored(existing), nil
-	}
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return Attendance{}, fmt.Errorf("read attendance: %w", err)
-	}
-	markedAt := h.now().UTC()
-	row, err := queries.UpsertAttendance(ctx, sqlcgen.UpsertAttendanceParams{
-		SessionID: sessionID, StudentID: studentID, TutorID: tutorID,
-		State: input.State, MarkedAt: markedAt,
-	})
-	if err != nil {
-		return Attendance{}, fmt.Errorf("save attendance: %w", err)
-	}
-	err = h.writeEvent(ctx, tx, teachingEvent{
-		name:    vermouth.EventAttendanceMarked,
-		tutorID: tutorID,
-		key:     vermouth.Key{Kind: vermouth.KeySessionID, Value: sessionID},
-		fields: attendanceMarkedFields{
-			SessionID: sessionID, ClassID: writeContext.ClassID, StudentID: studentID,
-			TutorID: tutorID, State: input.State, MarkedAt: markedAt,
-		},
-	})
-	if err != nil {
-		return Attendance{}, err
-	}
-	err = tx.Commit(ctx)
-	if err != nil {
-		return Attendance{}, fmt.Errorf("commit attendance: %w", err)
-	}
-	return attendanceFromStored(row), nil
 }
 
 func (h *Handler) writeEvent(ctx context.Context, tx pgx.Tx, event teachingEvent) error {
@@ -691,6 +555,10 @@ func (h *Handler) writeEvent(ctx context.Context, tx pgx.Tx, event teachingEvent
 	if err != nil {
 		return fmt.Errorf("build %s: %w", event.name, err)
 	}
+	if event.occurredAt.IsZero() {
+		event.occurredAt = h.now().UTC()
+	}
+	envelope.OccurredAt = event.occurredAt.UTC()
 	err = vermouth.WriteOutbox(ctx, tx, h.publishTopic, envelope)
 	if err != nil {
 		return err
@@ -804,32 +672,4 @@ func textPointer(value pgtype.Text) *string {
 	}
 	result := value.String
 	return &result
-}
-
-func rosterFromOpen(row sqlcgen.FindOpenRosterPeriodRow) RosterPeriod {
-	return RosterPeriod{
-		ClassID: row.ClassID, StudentID: row.StudentID,
-		EffectiveFrom: row.EffectiveFrom.Time.Format(dateLayout),
-	}
-}
-
-func rosterFromStored(row sqlcgen.RosterPeriod) RosterPeriod {
-	var effectiveTo *string
-	if row.EffectiveTo.Valid {
-		value := row.EffectiveTo.Time.Format(dateLayout)
-		effectiveTo = &value
-	}
-	return RosterPeriod{
-		ClassID: row.ClassID, StudentID: row.StudentID,
-		EffectiveFrom: row.EffectiveFrom.Time.Format(dateLayout), EffectiveTo: effectiveTo,
-	}
-}
-
-func attendanceFromStored(row sqlcgen.Attendance) Attendance {
-	return Attendance{
-		SessionID: row.SessionID,
-		StudentID: row.StudentID,
-		State:     row.State,
-		MarkedAt:  row.MarkedAt,
-	}
 }

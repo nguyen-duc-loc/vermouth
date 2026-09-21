@@ -381,6 +381,11 @@ tasks:
     cmds:
       - ./test/thread.sh
 
+  verify:recurring:
+    desc: Prove recurring schedules, projection replay, and invoice immutability on the host stack
+    cmds:
+      - bash ./test/verify-recurring.sh
+
   # ---------------------------------------------------------------- images
 
   image:

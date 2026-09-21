@@ -153,17 +153,58 @@ func TestValidateWeeklySchedule_RejectsDuplicateWeekdays(t *testing.T) {
 
 	location, err := time.LoadLocation("UTC")
 	require.NoError(t, err)
-	_, err = validateWeeklySchedule(WeeklyScheduleInput{
-		ValidFrom:    "2026-08-30",
-		ValidThrough: "2026-09-06",
-		Slots: []WeeklyScheduleSlotInput{
-			{Weekday: 1, StartTime: "09:00", EndTime: "10:00"},
-			{Weekday: 1, StartTime: "11:00", EndTime: "12:00"},
+	tests := []struct {
+		name      string
+		slots     []WeeklyScheduleSlotInput
+		wantField string
+	}{
+		{name: "zero slots", wantField: "schedule.slots"},
+		{
+			name: "eight slots",
+			slots: []WeeklyScheduleSlotInput{
+				{Weekday: 1, StartTime: "09:00", EndTime: "10:00"},
+				{Weekday: 2, StartTime: "09:00", EndTime: "10:00"},
+				{Weekday: 3, StartTime: "09:00", EndTime: "10:00"},
+				{Weekday: 4, StartTime: "09:00", EndTime: "10:00"},
+				{Weekday: 5, StartTime: "09:00", EndTime: "10:00"},
+				{Weekday: 6, StartTime: "09:00", EndTime: "10:00"},
+				{Weekday: 7, StartTime: "09:00", EndTime: "10:00"},
+				{Weekday: 1, StartTime: "11:00", EndTime: "12:00"},
+			},
+			wantField: "schedule.slots",
 		},
-	}, location, validationTestNow())
-	var validation *ValidationError
-	require.ErrorAs(t, err, &validation)
-	require.Contains(t, validation.Field, "weekday")
+		{
+			name: "duplicate weekday",
+			slots: []WeeklyScheduleSlotInput{
+				{Weekday: 1, StartTime: "09:00", EndTime: "10:00"},
+				{Weekday: 1, StartTime: "11:00", EndTime: "12:00"},
+			},
+			wantField: "schedule.slots[1].weekday",
+		},
+		{
+			name:      "equal clocks",
+			slots:     []WeeklyScheduleSlotInput{{Weekday: 7, StartTime: "09:00", EndTime: "09:00"}},
+			wantField: "schedule.slots[0].end_time",
+		},
+		{
+			name:      "reversed clocks",
+			slots:     []WeeklyScheduleSlotInput{{Weekday: 7, StartTime: "10:00", EndTime: "09:00"}},
+			wantField: "schedule.slots[0].end_time",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := validateWeeklySchedule(WeeklyScheduleInput{
+				ValidFrom: "2026-08-30", ValidThrough: "2026-09-06", Slots: test.slots,
+			}, location, validationTestNow())
+			var validation *ValidationError
+			require.ErrorAs(t, err, &validation)
+			require.Equal(t, test.wantField, validation.Field)
+		})
+	}
 }
 
 // covers: AC-10
@@ -191,6 +232,38 @@ func TestValidateWeeklySchedule_ResolvesGapForwardAndAmbiguityEarlier(t *testing
 	require.Len(t, autumn.occurrences, 1)
 	require.Equal(t, time.Date(2026, time.November, 1, 5, 30, 0, 0, time.UTC), autumn.occurrences[0].startsAt)
 	require.Equal(t, time.Date(2026, time.November, 1, 7, 30, 0, 0, time.UTC), autumn.occurrences[0].endsAt)
+}
+
+// covers: AC-1, AC-10
+func TestValidateWeeklySchedule_EnforcesPastBoundAndRejectsWholeDayGap(t *testing.T) {
+	t.Parallel()
+
+	utc := time.UTC
+	now := time.Date(2026, time.September, 20, 12, 0, 0, 0, time.UTC)
+	accepted, err := validateWeeklySchedule(WeeklyScheduleInput{
+		ValidFrom: "2026-08-21", ValidThrough: "2026-08-21",
+		Slots: []WeeklyScheduleSlotInput{{Weekday: 5, StartTime: "09:00", EndTime: "10:00"}},
+	}, utc, now)
+	require.NoError(t, err)
+	require.Len(t, accepted.occurrences, 1)
+
+	_, err = validateWeeklySchedule(WeeklyScheduleInput{
+		ValidFrom: "2026-08-20", ValidThrough: "2026-08-20",
+		Slots: []WeeklyScheduleSlotInput{{Weekday: 4, StartTime: "09:00", EndTime: "10:00"}},
+	}, utc, now)
+	var tooOld *ValidationError
+	require.ErrorAs(t, err, &tooOld)
+	require.Equal(t, "schedule.valid_from", tooOld.Field)
+
+	apia, err := time.LoadLocation("Pacific/Apia")
+	require.NoError(t, err)
+	_, err = validateWeeklySchedule(WeeklyScheduleInput{
+		ValidFrom: "2011-12-30", ValidThrough: "2011-12-30",
+		Slots: []WeeklyScheduleSlotInput{{Weekday: 5, StartTime: "09:00", EndTime: "10:00"}},
+	}, apia, time.Date(2011, time.December, 29, 12, 0, 0, 0, time.UTC))
+	var skippedDay *ValidationError
+	require.ErrorAs(t, err, &skippedDay)
+	require.Contains(t, skippedDay.Message, "outside the schedule date range")
 }
 
 // covers: AC-3, AC-11
@@ -227,7 +300,7 @@ func TestValidateStudentInput_NormalizesOnlyTheDocumentedFields(t *testing.T) {
 	validated, err = validateStudentInput(CreateStudentInput{Name: "Mai", Phone: &phone})
 	require.NoError(t, err)
 	require.NotNil(t, validated.phone)
-	require.Equal(t, phone, *validated.phone)
+	require.Equal(t, "090 123", *validated.phone)
 
 	tooLong := strings.Repeat("1", maxPhoneRunes+1)
 	_, err = validateStudentInput(CreateStudentInput{Name: "Mai", Phone: &tooLong})

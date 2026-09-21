@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router'
 import { LoaderCircle } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { lazy, Suspense, useEffect } from 'react'
 
 import { sessionCoordinator, useSession } from '../api/session'
@@ -10,6 +11,15 @@ import { Card, CardContent, CardHeader } from '../components/ui/card'
 const HomePage = lazy(() => import('./HomePage').then((module) => ({ default: module.HomePage })))
 const SchedulePage = lazy(() =>
   import('./SchedulePage').then((module) => ({ default: module.SchedulePage })),
+)
+const StudentsPage = lazy(() =>
+  import('./StudentsPage').then((module) => ({ default: module.StudentsPage })),
+)
+const StudentDetailPage = lazy(() =>
+  import('./StudentDetailPage').then((module) => ({ default: module.StudentDetailPage })),
+)
+const ClassDetailPage = lazy(() =>
+  import('./ClassDetailPage').then((module) => ({ default: module.ClassDetailPage })),
 )
 
 /** Keeps protected content behind the current session state. */
@@ -58,6 +68,39 @@ export function ProtectedSchedulePage() {
         <SchedulePage />
       </Suspense>
     )
+  }
+  return null
+}
+
+/** Keeps student records behind the verified session boundary. */
+export function ProtectedStudentsPage() {
+  return <ProtectedLazyPage redirectTo="/students" page={<StudentsPage />} />
+}
+
+/** Keeps one student record behind the verified session boundary. */
+export function ProtectedStudentDetailPage() {
+  return <ProtectedLazyPage redirectTo="/students" page={<StudentDetailPage />} />
+}
+
+/** Keeps one class roster behind the verified session boundary. */
+export function ProtectedClassDetailPage() {
+  return <ProtectedLazyPage redirectTo="/schedule" page={<ClassDetailPage />} />
+}
+
+function ProtectedLazyPage({ redirectTo, page }: { redirectTo: string; page: ReactNode }) {
+  const session = useSession()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (session.status === 'anonymous') {
+      void navigate({ to: '/signin', search: { redirect: redirectTo } })
+    }
+  }, [navigate, redirectTo, session.status])
+
+  if (session.status === 'checking') return <CheckingSession />
+  if (session.status === 'unavailable') return <UnavailableSession message={session.message} />
+  if (session.status === 'authenticated') {
+    return <Suspense fallback={<OpeningHomePage />}>{page}</Suspense>
   }
   return null
 }

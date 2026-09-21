@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ComponentProps } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AppearanceProvider } from '../appearance/appearance'
@@ -7,7 +8,14 @@ import { TooltipProvider } from '../components/ui/tooltip'
 import { installMatchMedia } from '../test/setup'
 import { DesignSystemPage } from './DesignSystemPage'
 
+type MockLinkProps = Omit<ComponentProps<'a'>, 'href'> & { to: string }
+
 vi.mock('@tanstack/react-router', () => ({
+  Link: ({ to, children, ...props }: MockLinkProps) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
   useRouterState: ({
     select,
   }: {

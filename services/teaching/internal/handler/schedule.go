@@ -24,11 +24,13 @@ const (
 	historyCursorField    = "history_cursor"
 	invalidHistoryCursor  = "is invalid for this schedule query"
 	stateReplaced         = "replaced"
+	stateActive           = "active"
+	stateCancelled        = "cancelled"
 )
 
 // ReadSchedule returns one bounded calendar window in the verified token zone.
 //
-//nolint:funlen,gocognit,nestif,revive // The bounded read keeps validation and its owned query sets in one visible flow.
+//nolint:funlen,gocognit,nestif,revive // The bounded read keeps validation and the explicit API history flag in one visible flow.
 func (h *Handler) ReadSchedule(
 	ctx context.Context,
 	tutorID uuid.UUID,
@@ -405,7 +407,7 @@ func ruleState(
 	if today.After(validThrough) {
 		return "completed"
 	}
-	return "active"
+	return stateActive
 }
 
 func timestampPointer(value pgtype.Timestamptz) *time.Time {

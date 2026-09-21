@@ -12,18 +12,25 @@ import (
 
 type Querier interface {
 	AdoptStandaloneSession(ctx context.Context, arg AdoptStandaloneSessionParams) (AdoptStandaloneSessionRow, error)
+	ArchiveStudentRecord(ctx context.Context, arg ArchiveStudentRecordParams) (Student, error)
 	CancelOwnedSession(ctx context.Context, arg CancelOwnedSessionParams) (CancelOwnedSessionRow, error)
 	// CloseRosterPeriod closes the one open row for the pair, which the partial
 	// unique index makes well defined: teaching.roster.left carries no
 	// effective_from, so the open row is the only possible target. A second left for
 	// the same pair updates nothing.
 	CloseRosterPeriod(ctx context.Context, arg CloseRosterPeriodParams) error
+	CloseRosterPeriodAt(ctx context.Context, arg CloseRosterPeriodAtParams) (RosterPeriod, error)
 	CompleteCommandReceipt(ctx context.Context, arg CompleteCommandReceiptParams) (CommandReceipt, error)
+	CountClassRosterAtDate(ctx context.Context, arg CountClassRosterAtDateParams) (int64, error)
 	EndScheduleRule(ctx context.Context, arg EndScheduleRuleParams) (ScheduleRule, error)
 	FindAdoptableStandaloneSession(ctx context.Context, arg FindAdoptableStandaloneSessionParams) (FindAdoptableStandaloneSessionRow, error)
 	FindOpenRosterPeriod(ctx context.Context, arg FindOpenRosterPeriodParams) (FindOpenRosterPeriodRow, error)
 	FindOwnedSessionConflict(ctx context.Context, arg FindOwnedSessionConflictParams) (FindOwnedSessionConflictRow, error)
+	GetActiveOwnedStudent(ctx context.Context, arg GetActiveOwnedStudentParams) (Student, error)
 	GetAttendance(ctx context.Context, arg GetAttendanceParams) (Attendance, error)
+	// Whole roster attendance reads use retained student labels and never select a
+	// phone value. Saves lock the class and session through existing owned queries.
+	GetAttendanceSheetSession(ctx context.Context, arg GetAttendanceSheetSessionParams) (GetAttendanceSheetSessionRow, error)
 	// Locking the owned session serialises corrections, including the first mark
 	// where no attendance row exists yet. The roster flag uses the same inclusive
 	// coverage predicate as every home and billing read.
@@ -53,6 +60,11 @@ type Querier interface {
 	// filters on the end timestamp being empty, because nothing is ever deleted
 	// (AC-11).
 	InsertStudent(ctx context.Context, arg InsertStudentParams) (Student, error)
+	ListActiveStudentClasses(ctx context.Context, arg ListActiveStudentClassesParams) ([]ListActiveStudentClassesRow, error)
+	ListAttendanceSheetStudents(ctx context.Context, arg ListAttendanceSheetStudentsParams) ([]ListAttendanceSheetStudentsRow, error)
+	// Dated roster reads and writes use the same inclusive date predicate in every
+	// statement. The class lock in the handler serialises competing deltas.
+	ListClassRosterAtDate(ctx context.Context, arg ListClassRosterAtDateParams) ([]ListClassRosterAtDateRow, error)
 	// ListHomeSessions pages session rows before roster students are joined, so a
 	// large roster cannot consume the 51 row page proof.
 	ListHomeSessions(ctx context.Context, arg ListHomeSessionsParams) ([]ListHomeSessionsRow, error)
@@ -64,6 +76,7 @@ type Querier interface {
 	// ListRosterPeriods is the whole membership history of one pair, oldest first,
 	// so a rejoin reads as two periods rather than one edited row.
 	ListRosterPeriods(ctx context.Context, arg ListRosterPeriodsParams) ([]ListRosterPeriodsRow, error)
+	ListRosterPeriodsForStudents(ctx context.Context, arg ListRosterPeriodsForStudentsParams) ([]RosterPeriod, error)
 	ListScheduleClasses(ctx context.Context, tutorID uuid.UUID) ([]ListScheduleClassesRow, error)
 	ListScheduleRules(ctx context.Context, arg ListScheduleRulesParams) ([]ListScheduleRulesRow, error)
 	ListScheduleSessions(ctx context.Context, arg ListScheduleSessionsParams) ([]ListScheduleSessionsRow, error)
@@ -75,7 +88,13 @@ type Querier interface {
 	// is a date this service computed in their timezone and stored, so reading it
 	// back needs no timezone arithmetic here.
 	ListSessionsForLocalDate(ctx context.Context, arg ListSessionsForLocalDateParams) ([]ListSessionsForLocalDateRow, error)
+	ListStudentMemberships(ctx context.Context, arg ListStudentMembershipsParams) ([]ListStudentMembershipsRow, error)
+	// Student record reads and writes remain inside teaching. Every statement
+	// includes the tutor identifier supplied by verified token claims.
+	ListStudents(ctx context.Context, arg ListStudentsParams) ([]ListStudentsRow, error)
+	LockActiveOwnedStudent(ctx context.Context, arg LockActiveOwnedStudentParams) (Student, error)
 	LockOwnedClass(ctx context.Context, arg LockOwnedClassParams) (LockOwnedClassRow, error)
+	LockRosterStudents(ctx context.Context, arg LockRosterStudentsParams) ([]Student, error)
 	MoveOwnedSession(ctx context.Context, arg MoveOwnedSessionParams) (MoveOwnedSessionRow, error)
 	// OpenRosterPeriod starts a membership. Joining a class the student is already
 	// in on the same day changes nothing, which is what makes a repeated join safe.
@@ -85,10 +104,12 @@ type Querier interface {
 	RetireScheduleRule(ctx context.Context, arg RetireScheduleRuleParams) (ScheduleRule, error)
 	SetClassScheduleRevision(ctx context.Context, arg SetClassScheduleRevisionParams) (SetClassScheduleRevisionRow, error)
 	SupersedeUntouchedScheduleSessions(ctx context.Context, arg SupersedeUntouchedScheduleSessionsParams) ([]SupersedeUntouchedScheduleSessionsRow, error)
+	UpdateStudentRecord(ctx context.Context, arg UpdateStudentRecordParams) (Student, error)
 	// UpsertAttendance keeps at most one row per session and student, so a
 	// correction updates it in place rather than adding a second opinion, and a
 	// redelivered mark lands on the same row (INV-6).
 	UpsertAttendance(ctx context.Context, arg UpsertAttendanceParams) (Attendance, error)
+	UpsertAttendanceAt(ctx context.Context, arg UpsertAttendanceAtParams) (Attendance, error)
 }
 
 var _ Querier = (*Queries)(nil)

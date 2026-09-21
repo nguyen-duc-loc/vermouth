@@ -5,11 +5,11 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 
 import type {
+  ChangeRosterInput,
+  ClassRoster,
   CreateClassInput,
   CreateClassResult,
   CreateStudentInput,
-  JoinRosterInput,
-  RosterPeriod,
   SetupDefaults,
   Student,
 } from '../api/teaching'
@@ -96,7 +96,7 @@ export type TeachingSetupSheetProps = {
   onOpenChange: (open: boolean) => void
   onCreateClass: (input: CreateClassInput, key: string) => Promise<CreateClassResult>
   onCreateStudent: (input: CreateStudentInput, key: string) => Promise<Student>
-  onJoinRoster: (classId: string, input: JoinRosterInput) => Promise<RosterPeriod>
+  onChangeRoster: (classId: string, input: ChangeRosterInput, key: string) => Promise<ClassRoster>
   onComplete: (localDate: string) => void
   returnFocusRef: RefObject<HTMLButtonElement | null>
 }
@@ -115,7 +115,7 @@ export function TeachingSetupSheet({
   onOpenChange,
   onCreateClass,
   onCreateStudent,
-  onJoinRoster,
+  onChangeRoster,
   onComplete,
   returnFocusRef,
 }: TeachingSetupSheetProps) {
@@ -220,10 +220,15 @@ export function TeachingSetupSheet({
           'The saved setup identifiers are incomplete. Close this sheet and start again.',
         )
       }
-      await onJoinRoster(draft.classId, {
-        student_id: draft.studentId,
-        effective_from: draft.firstLocalDate,
-      })
+      await onChangeRoster(
+        draft.classId,
+        {
+          change_date: draft.firstLocalDate,
+          additions: [draft.studentId],
+          removals: [],
+        },
+        draft.rosterKey,
+      )
       clearTeachingDraft(tutorId)
       onComplete(draft.firstLocalDate)
       onOpenChange(false)

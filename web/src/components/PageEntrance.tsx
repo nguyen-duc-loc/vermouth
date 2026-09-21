@@ -21,6 +21,9 @@ export function PageEntrance({ children, className }: PageEntranceProps) {
 
   useGSAP(
     () => {
+      const items = gsap.utils.toArray<HTMLElement>('[data-entrance-item]', scope.current)
+      if (items.length === 0) return
+
       const media = gsap.matchMedia()
       media.add(
         {
@@ -29,12 +32,12 @@ export function PageEntrance({ children, className }: PageEntranceProps) {
         },
         (context) => {
           if (context.conditions?.reduceMotion) {
-            gsap.set('[data-entrance-item]', { autoAlpha: 1, y: 0 })
+            gsap.set(items, { autoAlpha: 1, y: 0 })
             return
           }
 
           gsap.fromTo(
-            '[data-entrance-item]',
+            items,
             { autoAlpha: 0, y: 12 },
             {
               autoAlpha: 1,

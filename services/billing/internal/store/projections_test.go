@@ -301,6 +301,9 @@ func TestRejoinBillsBothPeriodsAndNotTheGap(t *testing.T) {
 	require.NoError(t, q.OpenRosterPeriod(ctx, sqlcgen.OpenRosterPeriodParams{
 		ClassID: classID, StudentID: studentID, EffectiveFrom: day(time.September, 15), TutorID: tutorID,
 	}))
+	require.NoError(t, q.CloseRosterPeriod(ctx, sqlcgen.CloseRosterPeriodParams{
+		TutorID: tutorID, ClassID: classID, StudentID: studentID, EffectiveTo: day(time.September, 7),
+	}), "replaying the old leave must not close the later rejoin")
 
 	// One Present session in each week, including the gap.
 	for _, dayOfMonth := range []int{3, 10, 17} {

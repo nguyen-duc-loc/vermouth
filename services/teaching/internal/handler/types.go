@@ -190,39 +190,14 @@ type CreateStudentInput struct {
 	Phone *string `json:"phone"`
 }
 
-// Student is returned only by the immediate create command. Phone never enters
-// an event or the home response.
+// Student is the active owned record returned by student commands and reads.
+// Phone never enters an event, history response, or attendance response.
 type Student struct {
 	StudentID uuid.UUID `json:"student_id"`
 	Name      string    `json:"name"`
 	Phone     *string   `json:"phone"`
-}
-
-// JoinRosterInput opens membership on an inclusive local date.
-type JoinRosterInput struct {
-	StudentID     uuid.UUID `json:"student_id"`
-	EffectiveFrom string    `json:"effective_from"`
-}
-
-// RosterPeriod is the canonical open membership returned by a join.
-type RosterPeriod struct {
-	ClassID       uuid.UUID `json:"class_id"`
-	StudentID     uuid.UUID `json:"student_id"`
-	EffectiveFrom string    `json:"effective_from"`
-	EffectiveTo   *string   `json:"effective_to"`
-}
-
-// MarkAttendanceInput is one of the two catalogue states.
-type MarkAttendanceInput struct {
-	State string `json:"state"`
-}
-
-// Attendance is the canonical saved state used after every write and reload.
-type Attendance struct {
-	SessionID uuid.UUID `json:"session_id"`
-	StudentID uuid.UUID `json:"student_id"`
-	State     string    `json:"state"`
-	MarkedAt  time.Time `json:"marked_at"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // SetupDefaults starts the guided sheet from the tutor's verified local clock.

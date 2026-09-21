@@ -28,6 +28,7 @@ type teachingFacts struct {
 	Currency          string    `json:"currency"`
 	RateEffectiveFrom string    `json:"rate_effective_from"`
 	EffectiveFrom     string    `json:"effective_from"`
+	EffectiveTo       string    `json:"effective_to"`
 	StartsAt          time.Time `json:"starts_at"`
 	EndsAt            time.Time `json:"ends_at"`
 	LocalDate         string    `json:"local_date"`
@@ -54,7 +55,10 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 		vermouth.EventSessionMoved,
 		vermouth.EventSessionCancelled,
 		vermouth.EventStudentRegistered,
+		vermouth.EventStudentChanged,
+		vermouth.EventStudentRemoved,
 		vermouth.EventRosterJoined,
+		vermouth.EventRosterLeft,
 		vermouth.EventAttendanceMarked:
 	default:
 		return nil
@@ -113,12 +117,22 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 			return fmt.Errorf("cancel projected session: %w", err)
 		}
 		return nil
-	case vermouth.EventStudentRegistered:
+	case vermouth.EventStudentRegistered, vermouth.EventStudentChanged:
 		err = queries.UpsertStudent(ctx, sqlcgen.UpsertStudentParams{
 			StudentID: facts.StudentID, TutorID: tutorID, Name: facts.Name,
 		})
 		if err != nil {
 			return fmt.Errorf("project student: %w", err)
+		}
+		return nil
+	case vermouth.EventStudentRemoved:
+		err = queries.MarkStudentRemoved(ctx, sqlcgen.MarkStudentRemovedParams{
+			TutorID:   tutorID,
+			StudentID: facts.StudentID,
+			RemovedAt: pgtype.Timestamptz{Time: env.OccurredAt, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("remove projected student: %w", err)
 		}
 		return nil
 	case vermouth.EventRosterJoined:
@@ -132,6 +146,21 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 		})
 		if err != nil {
 			return fmt.Errorf("project roster period: %w", err)
+		}
+		return nil
+	case vermouth.EventRosterLeft:
+		effectiveTo, err := parseDay(facts.EffectiveTo)
+		if err != nil {
+			return err
+		}
+		err = queries.CloseRosterPeriod(ctx, sqlcgen.CloseRosterPeriodParams{
+			TutorID:     tutorID,
+			ClassID:     facts.ClassID,
+			StudentID:   facts.StudentID,
+			EffectiveTo: effectiveTo,
+		})
+		if err != nil {
+			return fmt.Errorf("close projected roster period: %w", err)
 		}
 		return nil
 	case vermouth.EventAttendanceMarked:

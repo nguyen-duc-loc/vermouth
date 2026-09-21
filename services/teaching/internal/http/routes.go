@@ -38,9 +38,15 @@ func Mux(deps Deps) http.Handler {
 	mux.HandleFunc("POST /sessions/{session_id}/move", moveSession(deps))
 	mux.HandleFunc("POST /sessions/{session_id}/cancel", cancelSession(deps))
 	mux.HandleFunc("POST /sessions/{session_id}/restore", restoreSession(deps))
+	mux.HandleFunc("GET /students", listStudents(deps))
 	mux.HandleFunc("POST /students", createStudent(deps))
-	mux.HandleFunc("POST /classes/{class_id}/roster", joinRoster(deps))
-	mux.HandleFunc("PUT /sessions/{session_id}/attendance/{student_id}", markAttendance(deps))
+	mux.HandleFunc("GET /students/{student_id}", readStudent(deps))
+	mux.HandleFunc("PATCH /students/{student_id}", updateStudent(deps))
+	mux.HandleFunc("DELETE /students/{student_id}", archiveStudent(deps))
+	mux.HandleFunc("GET /classes/{class_id}/roster", readClassRoster(deps))
+	mux.HandleFunc("PUT /classes/{class_id}/roster", changeClassRoster(deps))
+	mux.HandleFunc("GET /sessions/{session_id}/attendance", readAttendance(deps))
+	mux.HandleFunc("PUT /sessions/{session_id}/attendance", saveAttendance(deps))
 	mux.HandleFunc("GET /home", readHome(deps))
 	mux.HandleFunc("GET /schedule", readSchedule(deps))
 	return vermouth.RequestIDMiddleware(deps.Logger, mux)
@@ -261,71 +267,6 @@ func createStudent(deps Deps) http.HandlerFunc {
 			status = http.StatusCreated
 		}
 		vermouth.WriteJSON(r.Context(), deps.Logger, w, status, result)
-	}
-}
-
-func joinRoster(deps Deps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		claims, ok := verifiedClaims(deps, w, r)
-		if !ok {
-			return
-		}
-		classID, err := uuid.Parse(r.PathValue("class_id"))
-		if err != nil {
-			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "class_id must be a UUID")
-			return
-		}
-		var input handler.JoinRosterInput
-		if !decodeJSON(w, r, &input) {
-			return
-		}
-		result, created, err := deps.Handler.JoinRoster(r.Context(), claims.TutorID, classID, input)
-		if err != nil {
-			writeHandlerError(deps, w, r, "Join roster", err)
-			return
-		}
-		status := http.StatusOK
-		if created {
-			status = http.StatusCreated
-		}
-		vermouth.WriteJSON(r.Context(), deps.Logger, w, status, result)
-	}
-}
-
-func markAttendance(deps Deps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		claims, ok := verifiedClaims(deps, w, r)
-		if !ok {
-			return
-		}
-		sessionID, sessionErr := uuid.Parse(r.PathValue("session_id"))
-		studentID, studentErr := uuid.Parse(r.PathValue("student_id"))
-		if sessionErr != nil || studentErr != nil {
-			vermouth.WriteError(
-				r.Context(),
-				w,
-				http.StatusBadRequest,
-				"invalid_input",
-				"session_id and student_id must be UUID values",
-			)
-			return
-		}
-		var input handler.MarkAttendanceInput
-		if !decodeJSON(w, r, &input) {
-			return
-		}
-		result, err := deps.Handler.MarkAttendance(
-			r.Context(),
-			claims.TutorID,
-			sessionID,
-			studentID,
-			input,
-		)
-		if err != nil {
-			writeHandlerError(deps, w, r, "Mark attendance", err)
-			return
-		}
-		vermouth.WriteJSON(r.Context(), deps.Logger, w, http.StatusOK, result)
 	}
 }
 

@@ -20,6 +20,7 @@ export type TeachingDraft = {
   step: TeachingDraftStep
   classKey: string
   studentKey: string
+  rosterKey: string
   classId?: string
   sessionId?: string
   studentId?: string
@@ -51,6 +52,7 @@ export function newTeachingDraft(tutorId: string, defaults: SetupDefaults): Teac
     step: 'class',
     classKey: crypto.randomUUID(),
     studentKey: crypto.randomUUID(),
+    rosterKey: crypto.randomUUID(),
     values: {
       className: '',
       rateAmount: '',
@@ -80,7 +82,8 @@ export function loadTeachingDraft(tutorId: string): TeachingDraft | undefined {
       (parsed.step === 'class' || parsed.step === 'student' || parsed.step === 'roster') &&
       'values' in parsed
     ) {
-      return parsed as TeachingDraft
+      const draft = parsed as TeachingDraft
+      return { ...draft, rosterKey: draft.rosterKey ?? crypto.randomUUID() }
     }
   } catch {
     window.sessionStorage.removeItem(draftKey(tutorId))

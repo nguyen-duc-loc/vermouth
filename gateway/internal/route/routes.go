@@ -39,6 +39,8 @@ type Deps struct {
 // Mux builds the gateway surface described by api/openapi.yaml (STK-10). The
 // request id is created here and travels onward on every call, and from there
 // onto every event published while handling it (INV-15).
+//
+//nolint:funlen // Keeping the complete explicit public route table together makes contract drift visible.
 func Mux(deps Deps) http.Handler {
 	mux := http.NewServeMux()
 
@@ -92,12 +94,15 @@ func Mux(deps Deps) http.Handler {
 	authenticated.HandleFunc("POST /api/sessions/{session_id}/move", proxyMoveSession(deps))
 	authenticated.HandleFunc("POST /api/sessions/{session_id}/cancel", proxyCancelSession(deps))
 	authenticated.HandleFunc("POST /api/sessions/{session_id}/restore", proxyRestoreSession(deps))
+	authenticated.HandleFunc("GET /api/students", proxyListStudents(deps))
 	authenticated.HandleFunc("POST /api/students", proxyCreateStudent(deps))
-	authenticated.HandleFunc("POST /api/classes/{class_id}/roster", proxyJoinRoster(deps))
-	authenticated.HandleFunc(
-		"PUT /api/sessions/{session_id}/attendance/{student_id}",
-		proxyMarkAttendance(deps),
-	)
+	authenticated.HandleFunc("GET /api/students/{student_id}", proxyGetStudent(deps))
+	authenticated.HandleFunc("PATCH /api/students/{student_id}", proxyUpdateStudent(deps))
+	authenticated.HandleFunc("DELETE /api/students/{student_id}", proxyArchiveStudent(deps))
+	authenticated.HandleFunc("GET /api/classes/{class_id}/roster", proxyGetClassRoster(deps))
+	authenticated.HandleFunc("PUT /api/classes/{class_id}/roster", proxyChangeClassRoster(deps))
+	authenticated.HandleFunc("GET /api/sessions/{session_id}/attendance", proxyGetAttendance(deps))
+	authenticated.HandleFunc("PUT /api/sessions/{session_id}/attendance", proxySaveAttendance(deps))
 	authenticated.HandleFunc("GET /api/home", readHome(deps))
 	authenticated.HandleFunc("GET /api/home/billing-projection", readHomeBillingProjection(deps))
 	authenticated.HandleFunc("GET /api/schedule", readSchedule(deps))
@@ -237,67 +242,6 @@ func proxyCreateStudent(deps Deps) http.HandlerFunc {
 			"/students",
 			vermouth.BearerToken(r),
 			http.Header{idempotencyHeader: []string{r.Header.Get(idempotencyHeader)}},
-			input,
-		)
-		if err != nil {
-			upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)
-			return
-		}
-		passThrough(r.Context(), deps.Logger, w, response)
-	}
-}
-
-func proxyJoinRoster(deps Deps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		classID, err := uuid.Parse(r.PathValue("class_id"))
-		if err != nil {
-			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "class_id must be a UUID")
-			return
-		}
-		var input apitypes.JoinRosterRequest
-		if !decodeJSONBody(w, r, &input) {
-			return
-		}
-		response, err := deps.Client.Call(
-			r.Context(),
-			http.MethodPost,
-			deps.Client.Upstreams().Teaching,
-			"/classes/"+classID.String()+"/roster",
-			vermouth.BearerToken(r),
-			input,
-		)
-		if err != nil {
-			upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)
-			return
-		}
-		passThrough(r.Context(), deps.Logger, w, response)
-	}
-}
-
-func proxyMarkAttendance(deps Deps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		sessionID, sessionErr := uuid.Parse(r.PathValue("session_id"))
-		studentID, studentErr := uuid.Parse(r.PathValue("student_id"))
-		if sessionErr != nil || studentErr != nil {
-			vermouth.WriteError(
-				r.Context(),
-				w,
-				http.StatusBadRequest,
-				"invalid_input",
-				"session_id and student_id must be UUID values",
-			)
-			return
-		}
-		var input apitypes.MarkAttendanceRequest
-		if !decodeJSONBody(w, r, &input) {
-			return
-		}
-		response, err := deps.Client.Call(
-			r.Context(),
-			http.MethodPut,
-			deps.Client.Upstreams().Teaching,
-			"/sessions/"+sessionID.String()+"/attendance/"+studentID.String(),
-			vermouth.BearerToken(r),
 			input,
 		)
 		if err != nil {

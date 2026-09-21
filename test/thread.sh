@@ -91,7 +91,7 @@ test "$(printf '%s' "$SCHEDULE_RESULT" | jq -er '.adopted_count')" = 1
 
 printf 'Moving, cancelling, and restoring the recurring occurrence\n'
 MOVE_BODY=$(jq -n --arg date "$LOCAL_DATE" \
-  '{expected_version:2,local_date:$date,start_time:"11:00",end_time:"12:00"}')
+  '{expected_version:2,local_date:$date,start_time:"00:00",end_time:"23:59"}')
 MOVE_RESULT=$(curl -fsS -X POST "$GATEWAY/api/sessions/$SESSION_ID/move" \
   -H "$AUTH" -H 'Content-Type: application/json' \
   -H "Idempotency-Key: thread-move-$TUTOR" --data "$MOVE_BODY")
@@ -117,13 +117,19 @@ STUDENT_REPLAY=$(curl -fsS -X POST "$GATEWAY/api/students" \
   --data "$STUDENT_BODY")
 test "$(printf '%s' "$STUDENT_REPLAY" | jq -er '.student_id')" = "$STUDENT_ID"
 
-printf 'Joining the roster and marking Present\n'
-ROSTER_BODY=$(jq -n --arg student_id "$STUDENT_ID" --arg effective_from "$LOCAL_DATE" \
-  '{student_id:$student_id,effective_from:$effective_from}')
-curl -fsS -X POST "$GATEWAY/api/classes/$CLASS_ID/roster" \
-  -H "$AUTH" -H 'Content-Type: application/json' --data "$ROSTER_BODY" >/dev/null
-curl -fsS -X PUT "$GATEWAY/api/sessions/$SESSION_ID/attendance/$STUDENT_ID" \
-  -H "$AUTH" -H 'Content-Type: application/json' --data '{"state":"Present"}' >/dev/null
+printf 'Saving one roster delta and one whole roster attendance pass\n'
+ROSTER_BODY=$(jq -n --arg student_id "$STUDENT_ID" --arg change_date "$LOCAL_DATE" \
+  '{change_date:$change_date,additions:[$student_id],removals:[]}')
+curl -fsS -X PUT "$GATEWAY/api/classes/$CLASS_ID/roster" \
+  -H "$AUTH" -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: thread-roster-$TUTOR" --data "$ROSTER_BODY" >/dev/null
+ATTENDANCE_SHEET=$(curl -fsS "$GATEWAY/api/sessions/$SESSION_ID/attendance" -H "$AUTH")
+ATTENDANCE_REVISION=$(printf '%s' "$ATTENDANCE_SHEET" | jq -er '.revision')
+ATTENDANCE_BODY=$(jq -n --arg revision "$ATTENDANCE_REVISION" --arg student_id "$STUDENT_ID" \
+  '{revision:$revision,marks:[{student_id:$student_id,state:"Present"}]}')
+curl -fsS -X PUT "$GATEWAY/api/sessions/$SESSION_ID/attendance" \
+  -H "$AUTH" -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: thread-attendance-$TUTOR" --data "$ATTENDANCE_BODY" >/dev/null
 
 printf 'Waiting for billing to project all five facts'
 START=$(date +%s)

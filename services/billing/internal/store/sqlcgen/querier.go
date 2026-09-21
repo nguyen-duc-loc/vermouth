@@ -11,6 +11,8 @@ import (
 )
 
 type Querier interface {
+	// A replay may see an old leave after a later rejoin is already open in the
+	// projection. The event end date excludes that later period from the target.
 	CloseRosterPeriod(ctx context.Context, arg CloseRosterPeriodParams) error
 	// CurrentBillingRunGeneration only tells the handler which number to attempt. It
 	// needs no lock and no SELECT ... FOR UPDATE: the unique constraint on

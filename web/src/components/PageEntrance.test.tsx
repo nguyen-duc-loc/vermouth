@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { installMatchMedia } from '../test/setup'
 import { PageEntrance } from './PageEntrance'
@@ -15,5 +15,19 @@ describe('PageEntrance', () => {
     )
 
     expect(screen.getByText('Nội dung sẵn sàng')).toBeVisible()
+  })
+
+  it('does not warn while a page has no entrance targets yet', () => {
+    installMatchMedia(true)
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    render(
+      <PageEntrance>
+        <p>Loading the record</p>
+      </PageEntrance>,
+    )
+
+    expect(warning).not.toHaveBeenCalled()
+    warning.mockRestore()
   })
 })

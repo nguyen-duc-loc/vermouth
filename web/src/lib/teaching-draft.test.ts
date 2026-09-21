@@ -19,6 +19,7 @@ beforeEach(() => {
   vi.spyOn(crypto, 'randomUUID')
     .mockReturnValueOnce('018f8f7e-91b0-7cc4-bd8c-f4d9030ca421')
     .mockReturnValueOnce('018f8f7e-91b0-7cc4-bd8c-f4d9030ca422')
+    .mockReturnValueOnce('018f8f7e-91b0-7cc4-bd8c-f4d9030ca423')
 })
 
 describe('teaching draft storage', () => {
@@ -31,6 +32,7 @@ describe('teaching draft storage', () => {
       step: 'class',
       classKey: '018f8f7e-91b0-7cc4-bd8c-f4d9030ca421',
       studentKey: '018f8f7e-91b0-7cc4-bd8c-f4d9030ca422',
+      rosterKey: '018f8f7e-91b0-7cc4-bd8c-f4d9030ca423',
       values: {
         className: '',
         rateAmount: '',

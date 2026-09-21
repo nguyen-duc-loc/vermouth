@@ -212,8 +212,10 @@ func (h *Handler) PutSchedule(
 		}
 		createdCount++
 		writeErr := h.writeEvent(ctx, tx, teachingEvent{
-			name: vermouth.EventSessionScheduled, tutorID: tutorID,
-			key: vermouth.Key{Kind: vermouth.KeySessionID, Value: row.SessionID},
+			name:       vermouth.EventSessionScheduled,
+			tutorID:    tutorID,
+			key:        vermouth.Key{Kind: vermouth.KeySessionID, Value: row.SessionID},
+			occurredAt: commandTime,
 			fields: sessionScheduledFields{
 				SessionID: row.SessionID, ClassID: classID, TutorID: tutorID,
 				StartsAt: row.StartsAt, EndsAt: row.EndsAt,

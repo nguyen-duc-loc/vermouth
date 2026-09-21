@@ -13,7 +13,13 @@ import {
   type SignInErrorCode,
   sessionCoordinator,
 } from './api/session'
-import { ProtectedHomePage, ProtectedSchedulePage } from './pages/SessionStatePage'
+import {
+  ProtectedClassDetailPage,
+  ProtectedHomePage,
+  ProtectedSchedulePage,
+  ProtectedStudentDetailPage,
+  ProtectedStudentsPage,
+} from './pages/SessionStatePage'
 import { SignInPage } from './pages/SignInPage'
 
 type RouterContext = {
@@ -92,14 +98,79 @@ const scheduleRoute = createRoute({
   },
 })
 
+type StudentsSearch = {
+  q?: string
+  cursor?: string
+}
+
+const studentsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/students',
+  component: ProtectedStudentsPage,
+  validateSearch: (search: Record<string, unknown>): StudentsSearch => ({
+    q: cleanOptionalSearchText(search.q, 160),
+    cursor: cleanOptionalSearchText(search.cursor, 4096),
+  }),
+  beforeLoad: requireSession,
+})
+
+const studentDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/students/$studentId',
+  component: ProtectedStudentDetailPage,
+  beforeLoad: requireSession,
+})
+
+type ClassSearch = { date?: string }
+
+const classDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/classes/$classId',
+  component: ProtectedClassDetailPage,
+  validateSearch: (search: Record<string, unknown>): ClassSearch => ({
+    date: validCalendarDate(search.date) ? search.date : undefined,
+  }),
+  beforeLoad: requireSession,
+})
+
+async function requireSession({
+  context,
+  location,
+}: {
+  context: RouterContext
+  location: { href: string }
+}) {
+  const session = await context.session.ensure()
+  if (session.status === 'anonymous') {
+    throw redirect({
+      to: '/signin',
+      search: { redirect: cleanRedirect(location.href) },
+    })
+  }
+}
+
+function cleanOptionalSearchText(value: unknown, maximum: number) {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed !== '' && [...trimmed].length <= maximum ? trimmed : undefined
+}
+
 function validCalendarDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-  return !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime())
+  const parsed = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
 }
 
 function cleanClassSearch(value: unknown): string[] {
   const values = Array.isArray(value) ? value : typeof value === 'string' ? [value] : []
-  return [...new Set(values.filter((item): item is string => typeof item === 'string'))].sort()
+  return [...new Set(values.filter(validUUID))].sort()
+}
+
+function validUUID(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  )
 }
 
 function routeTree() {
@@ -126,10 +197,25 @@ function routeTree() {
       ),
     })
 
-    return rootRoute.addChildren([threadRoute, scheduleRoute, signInRoute, designSystemRoute])
+    return rootRoute.addChildren([
+      threadRoute,
+      scheduleRoute,
+      studentsRoute,
+      studentDetailRoute,
+      classDetailRoute,
+      signInRoute,
+      designSystemRoute,
+    ])
   }
 
-  return rootRoute.addChildren([threadRoute, scheduleRoute, signInRoute])
+  return rootRoute.addChildren([
+    threadRoute,
+    scheduleRoute,
+    studentsRoute,
+    studentDetailRoute,
+    classDetailRoute,
+    signInRoute,
+  ])
 }
 
 export const router = createRouter({

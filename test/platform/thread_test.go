@@ -43,7 +43,7 @@ func TestThreadRetriesATemporaryGatewayFailure(t *testing.T) {
 	require.NoErrorf(t, result.err, "stdout: %s\nstderr: %s", result.stdout, result.stderr)
 	count, err := os.ReadFile(fixture.count)
 	require.NoError(t, err)
-	require.Equal(t, "13", strings.TrimSpace(string(count)))
+	require.Equal(t, "14", strings.TrimSpace(string(count)))
 }
 
 // covers: AC-6, AC-13
@@ -144,10 +144,13 @@ case "$calls" in
     printf '%s\n' '{"session_id":"session-1","version":5,"state":"active"}'
     ;;
   *"/roster"*)
-    printf '%s\n' '{"class_id":"class-1","student_id":"student-1","effective_from":"2026-08-30","effective_to":null}'
+    printf '%s\n' '{"class":{"class_id":"class-1","name":"Maths","color":"blue"},"resolved_date":"2026-08-30","students":[{"student_id":"student-1","name":"Thread student","phone":null,"archived":false,"effective_from":"2026-08-30","effective_to":null}]}'
     ;;
-  *"/attendance/"*)
-    printf '%s\n' '{"session_id":"session-1","student_id":"student-1","state":"Present","marked_at":"2026-08-30T03:00:00Z"}'
+  *"<-X> <PUT>"*"/attendance"*)
+    printf '%s\n' '{"session_id":"session-1","marked_at":"2026-08-30T03:00:00Z","marks":[{"student_id":"student-1","state":"Present","marked_at":"2026-08-30T03:00:00Z"}]}'
+    ;;
+  *"/attendance"*)
+    printf '%s\n' '{"session":{"session_id":"session-1","class_id":"class-1","class_name":"Maths","class_color":"blue","starts_at":"2026-08-30T03:00:00Z","ends_at":"2026-08-30T04:00:00Z","local_date":"2026-08-30","state":"active"},"eligible":true,"ineligible_reason":null,"revision":"revision-1","students":[{"student_id":"student-1","name":"Thread student","archived":false,"state":null,"marked_at":null}]}'
     ;;
   *"/api/classes"*)
     printf '%s\n' '{"class":{"class_id":"class-1"},"first_session":{"session_id":"session-1","local_date":"2026-08-30"}}'
@@ -186,8 +189,10 @@ func assertThreadCalls(t *testing.T, path, tokenTask, gateway string) {
 	require.Contains(t, calls, "<"+gateway+"/api/classes/class-1/roster>")
 	require.Contains(t, calls, "<"+gateway+"/api/classes/class-1/schedule>")
 	require.Contains(t, calls, "<"+gateway+"/api/sessions/session-1/move>")
+	require.Contains(t, calls, `"start_time": "00:00"`)
+	require.Contains(t, calls, `"end_time": "23:59"`)
 	require.Contains(t, calls, "<"+gateway+"/api/sessions/session-1/cancel>")
 	require.Contains(t, calls, "<"+gateway+"/api/sessions/session-1/restore>")
-	require.Contains(t, calls, "<"+gateway+"/api/sessions/session-1/attendance/student-1>")
+	require.Contains(t, calls, "<"+gateway+"/api/sessions/session-1/attendance>")
 	require.Contains(t, calls, "<-H> <Authorization: Bearer ")
 }

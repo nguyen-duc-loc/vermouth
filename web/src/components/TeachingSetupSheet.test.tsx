@@ -46,12 +46,13 @@ function sheetProps(overrides: Partial<TeachingSetupSheetProps> = {}): TeachingS
       student_id: 'student-1',
       name: 'Mai',
       phone: null,
+      created_at: '2026-08-30T00:00:00Z',
+      updated_at: '2026-08-30T00:00:00Z',
     })),
-    onJoinRoster: vi.fn(async () => ({
-      class_id: 'class-1',
-      student_id: 'student-1',
-      effective_from: '2026-08-30',
-      effective_to: null,
+    onChangeRoster: vi.fn(async () => ({
+      class: { class_id: 'class-1', name: 'Maths 9A', color: 'blue' as const },
+      resolved_date: '2026-08-30',
+      students: [],
     })),
     onComplete: vi.fn(),
     returnFocusRef: createRef<HTMLButtonElement>(),
@@ -105,10 +106,15 @@ describe('TeachingSetupSheet', () => {
 
     await user.click(screen.getByRole('button', { name: 'Complete roster' }))
 
-    expect(props.onJoinRoster).toHaveBeenCalledWith('class-1', {
-      student_id: 'student-1',
-      effective_from: '2026-08-30',
-    })
+    expect(props.onChangeRoster).toHaveBeenCalledWith(
+      'class-1',
+      {
+        change_date: '2026-08-30',
+        additions: ['student-1'],
+        removals: [],
+      },
+      '018f8f7e-91b0-7cc4-bd8c-f4d9030ca421',
+    )
     expect(props.onComplete).toHaveBeenCalledWith('2026-08-30')
     expect(props.onOpenChange).toHaveBeenCalledWith(false)
     expect(window.sessionStorage.getItem('vermouth.teaching-setup.v1:tutor-1')).toBeNull()

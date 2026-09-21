@@ -113,6 +113,48 @@ func TestPutSchedule_AdoptsExactStandaloneAndReplaysImmutableResponse(t *testing
 	).Scan(&scheduledEventCount))
 	require.Equal(t, 3, sessionCount)
 	require.Equal(t, 3, scheduledEventCount)
+	require.Equal(t, uuid.Version(7), created.Rule.ScheduleRuleID.Version())
+
+	rows, err := pool.Query(t.Context(), `
+		SELECT key_kind, key_value, occurred_at
+		FROM outbox
+		WHERE tutor_id = $1 AND event_name = $2
+		ORDER BY key_value`, tutorID, vermouth.EventSessionScheduled)
+	require.NoError(t, err)
+	t.Cleanup(rows.Close)
+	eventSessionIDs := make([]uuid.UUID, 0, 3)
+	for rows.Next() {
+		var keyKind string
+		var sessionID uuid.UUID
+		var occurredAt time.Time
+		require.NoError(t, rows.Scan(&keyKind, &sessionID, &occurredAt))
+		require.Equal(t, string(vermouth.KeySessionID), keyKind)
+		require.True(t, occurredAt.Equal(commandTime))
+		require.Equal(t, uuid.Version(7), sessionID.Version())
+		eventSessionIDs = append(eventSessionIDs, sessionID)
+	}
+	require.NoError(t, rows.Err())
+
+	schedule, err := work.ReadSchedule(
+		t.Context(), tutorID, "Asia/Ho_Chi_Minh", "2026-08-30", "2026-09-06",
+		[]uuid.UUID{classResult.Class.ClassID}, false, 50, "",
+	)
+	require.NoError(t, err)
+	require.Len(t, schedule.Sessions, 3)
+	storedSessionIDs := make([]uuid.UUID, 0, len(schedule.Sessions))
+	for _, session := range schedule.Sessions {
+		require.Equal(t, uuid.Version(7), session.SessionID.Version())
+		require.NotNil(t, session.ScheduleRuleID)
+		require.Equal(t, created.Rule.ScheduleRuleID, *session.ScheduleRuleID)
+		require.NotNil(t, session.SourceTimeZone)
+		require.Equal(t, "Asia/Ho_Chi_Minh", *session.SourceTimeZone)
+		require.Equal(t, session.OriginLocalDate, session.LocalDate)
+		require.Equal(t, session.DisplayDate, session.LocalDate)
+		require.Equal(t, "+07:00", session.StartUTCOffset)
+		require.Equal(t, "+07:00", session.EndUTCOffset)
+		storedSessionIDs = append(storedSessionIDs, session.SessionID)
+	}
+	require.ElementsMatch(t, storedSessionIDs, eventSessionIDs)
 
 	var version int64
 	var scheduleRuleID uuid.UUID
@@ -286,60 +328,64 @@ func TestRosterAndAttendance_RetryCorrectionAndReloadUseTeachingTruth(t *testing
 	require.NoError(t, err)
 	student, _, err := work.CreateStudent(ctx, tutorID, "student-loop", CreateStudentInput{Name: "Mai"})
 	require.NoError(t, err)
-	joinInput := JoinRosterInput{StudentID: student.StudentID, EffectiveFrom: "2026-08-30"}
-
-	period, created, err := work.JoinRoster(ctx, tutorID, classResult.Class.ClassID, joinInput)
+	rosterInput := ChangeRosterInput{
+		ChangeDate: "2026-08-30", Additions: []uuid.UUID{student.StudentID}, Removals: []uuid.UUID{},
+	}
+	roster, err := work.ChangeClassRoster(
+		ctx, tutorID, classResult.Class.ClassID, "Asia/Ho_Chi_Minh", "roster-loop", rosterInput,
+	)
 	require.NoError(t, err)
-	require.True(t, created)
-	replayedPeriod, created, err := work.JoinRoster(ctx, tutorID, classResult.Class.ClassID, joinInput)
+	replayedRoster, err := work.ChangeClassRoster(
+		ctx, tutorID, classResult.Class.ClassID, "Asia/Ho_Chi_Minh", "roster-loop", rosterInput,
+	)
 	require.NoError(t, err)
-	require.False(t, created)
-	require.Equal(t, period, replayedPeriod)
-	_, _, err = work.JoinRoster(ctx, tutorID, classResult.Class.ClassID, JoinRosterInput{
-		StudentID: student.StudentID, EffectiveFrom: "2026-08-31",
-	})
-	require.ErrorIs(t, err, ErrConflict)
+	require.Equal(t, roster, replayedRoster)
+	_, err = work.ChangeClassRoster(
+		ctx, tutorID, classResult.Class.ClassID, "Asia/Ho_Chi_Minh", "roster-loop",
+		ChangeRosterInput{
+			ChangeDate: "2026-08-30", Additions: []uuid.UUID{}, Removals: []uuid.UUID{student.StudentID},
+		},
+	)
+	require.ErrorIs(t, err, ErrIdempotencyConflict)
 
-	present, err := work.MarkAttendance(
-		ctx,
-		tutorID,
-		classResult.FirstSession.SessionID,
-		student.StudentID,
-		MarkAttendanceInput{State: "Present"},
+	sheet, err := work.ReadAttendance(ctx, tutorID, classResult.FirstSession.SessionID)
+	require.NoError(t, err)
+	present, err := work.SaveAttendance(
+		ctx, tutorID, classResult.FirstSession.SessionID, "attendance-present",
+		SaveAttendanceInput{
+			Revision: sheet.Revision,
+			Marks:    []AttendanceMarkInput{{StudentID: student.StudentID, State: "Present"}},
+		},
 	)
 	require.NoError(t, err)
 	require.True(t, present.MarkedAt.Equal(markedAt))
-	repeated, err := work.MarkAttendance(
-		ctx,
-		tutorID,
-		classResult.FirstSession.SessionID,
-		student.StudentID,
-		MarkAttendanceInput{State: "Present"},
+	repeated, err := work.SaveAttendance(
+		ctx, tutorID, classResult.FirstSession.SessionID, "attendance-present",
+		SaveAttendanceInput{
+			Revision: sheet.Revision,
+			Marks:    []AttendanceMarkInput{{StudentID: student.StudentID, State: "Present"}},
+		},
 	)
 	require.NoError(t, err)
 	require.Equal(t, present, repeated)
 
 	correctedAt := markedAt.Add(time.Minute)
 	work.now = func() time.Time { return correctedAt }
-	corrected, err := work.MarkAttendance(
-		ctx,
-		tutorID,
-		classResult.FirstSession.SessionID,
-		student.StudentID,
-		MarkAttendanceInput{State: "Absent"},
+	freshSheet, err := work.ReadAttendance(ctx, tutorID, classResult.FirstSession.SessionID)
+	require.NoError(t, err)
+	corrected, err := work.SaveAttendance(
+		ctx, tutorID, classResult.FirstSession.SessionID, "attendance-absent",
+		SaveAttendanceInput{
+			Revision: freshSheet.Revision,
+			Marks:    []AttendanceMarkInput{{StudentID: student.StudentID, State: "Absent"}},
+		},
 	)
 	require.NoError(t, err)
-	require.Equal(t, "Absent", corrected.State)
+	require.Equal(t, "Absent", corrected.Marks[0].State)
 	require.True(t, corrected.MarkedAt.Equal(correctedAt))
 
 	strangerID := uuid.Must(uuid.NewV7())
-	_, err = work.MarkAttendance(
-		ctx,
-		strangerID,
-		classResult.FirstSession.SessionID,
-		student.StudentID,
-		MarkAttendanceInput{State: "Present"},
-	)
+	_, err = work.ReadAttendance(ctx, strangerID, classResult.FirstSession.SessionID)
 	require.ErrorIs(t, err, ErrNotFound)
 
 	work.now = func() time.Time { return time.Date(2026, time.August, 30, 4, 0, 0, 0, time.UTC) }

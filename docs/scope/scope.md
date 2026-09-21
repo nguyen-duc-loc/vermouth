@@ -24,7 +24,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 8 | Core teaching loop | Slice 1 | done |
 | 9 | Tracing, central logs & error alerts | Slice 2 | planned |
 | 10 | Recurring sessions & exceptions | Slice 3 | done |
-| 11 | Student records & class rosters | Slice 3 | planned |
+| 11 | Student records & class rosters | Slice 3 | done |
 | 12 | Tutor profile & bank details | Slice 4 | planned |
 | 13 | Tuition rate & monthly calculation | Slice 4 | planned |
 | 14 | Invoice PDF with payment QR | Slice 4 | planned |
@@ -153,13 +153,22 @@ code in `services/teaching/`, `services/notifications/`, `gateway/`, `api/openap
   - [x] Add future replacement, early ending, preserved exceptions, session actions, and detailed conflict recovery · AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-11, AC-13, AC-16
   - [x] Build the Monday first Day, Week, and Month calendar with class filters, schedule management, phone agenda, bounded history, and accessible states · AC-12, AC-14, AC-15
   - [x] Close the thread with migration evidence, concurrent overlap, clock transition, replay, tenant, contract, and browser checks · AC-1 to AC-17
-- [ ] Verify it: `$check verify recurring sessions & exceptions`
-- [ ] Test it: `$test recurring sessions & exceptions`
+- [x] Verify it: `$check verify recurring sessions & exceptions`
+- [x] Test it: `$test recurring sessions & exceptions`
 
-### 11. Student records & class rosters
+### 11. Student records & class rosters · done
 Manage students properly (name and phone number for now) and put them into classes, with a student able to sit in more than one class. Thickens the student strand that slice 1 ran narrowly.
 **Done when:** a tutor can create, edit, and remove students, add and remove them from a class, see a class roster and a student's classes, and attendance marking covers a whole roster in one pass.
-- [ ] Build it: `$develop student records & class rosters`
+spec [0011](../specs/0011-student-records-class-rosters/index.md)
+code in `services/teaching/`, `services/{billing,notifications}/internal/consumer/`, `gateway/`, `api/openapi.yaml`, `web/src/`, and `test/thread.sh`
+- [x] Design it (spec): `$architect student records & class rosters`
+- [x] Build it: `$develop student records & class rosters`
+  - [x] Prove the student record thread through the guarded migration, teaching store and handler, generated contract, gateway, and minimal Students page, then complete search, edit, archive, history, retry, concurrency, and privacy behavior · AC-1 to AC-5, AC-14 to AC-17, AC-19, AC-20
+  - [x] Add dated class roster reads and one atomic delta with overlap constraints, projection events, conflict recovery, class detail, and accessible roster management · AC-6 to AC-10, AC-14 to AC-17, AC-19, AC-20
+  - [x] Replace per student marking with one revision guarded whole roster attendance pass across teaching, events, Home, Schedule, and the attendance sheet · AC-11 to AC-15, AC-18 to AC-20
+  - [x] Close the thread with validated routes, exact cache refresh, generated types, obsolete route removal, migration reversal, tenant, replay, browser recovery, and accessibility checks · AC-2, AC-3, AC-6, AC-8 to AC-20
+- [x] Verify it: `$check verify student records & class rosters`
+- [x] Test it: `$test student records & class rosters`
 
 ## Slice 4: The money loop
 
@@ -248,6 +257,7 @@ Out of scope for this build pass, kept here so the plan stays honest.
 - **Excused absences**: a third attendance state that is not billed · needs a decision
 - **Parent portal**: parents sign in to see attendance and invoices · needs a decision
 - **Student data export & delete**: export or fully remove one student's data · needs a decision
+- **Student restoration**: restore an archived student and publish the matching cross service fact before making the record active again · from spec 0011 · needs a decision
 - **Metrics dashboards**: throughput and latency graphs across services · needs a decision
 - **Product analytics**: which features get used · needs a decision
 - **Teaching centers with several tutors**: shared students, owner and tutor roles · needs a decision
