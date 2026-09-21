@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   loadRuntimeConfig: vi.fn(async () => ({ googleAuthEnabled: false })),
   refreshSession: vi.fn(async () => null),
   render: vi.fn(),
+  subscribeSession: vi.fn(),
 }))
 
 vi.mock('react-dom/client', () => ({
@@ -11,7 +12,13 @@ vi.mock('react-dom/client', () => ({
 }))
 
 vi.mock('./api/runtime', () => ({ loadRuntimeConfig: mocks.loadRuntimeConfig }))
-vi.mock('./api/session', () => ({ refreshSession: mocks.refreshSession }))
+vi.mock('./api/session', () => ({
+  refreshSession: mocks.refreshSession,
+  sessionCoordinator: {
+    getSnapshot: () => ({ status: 'checking' }),
+    subscribe: mocks.subscribeSession,
+  },
+}))
 vi.mock('./routes', () => ({ router: {} }))
 
 async function bootAt(pathname: string) {

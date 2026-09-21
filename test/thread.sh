@@ -53,6 +53,33 @@ fi
 LOCAL_DATE=$(printf '%s' "$HOME" | jq -er '.local_date')
 CLASS_KEY="thread-class-$TUTOR"
 STUDENT_KEY="thread-student-$TUTOR"
+
+printf 'Saving and reloading the tutor invoice profile\n'
+PROFILE=$(curl -fsS "$GATEWAY/api/invoice-profile" -H "$AUTH")
+PROFILE_REVISION=$(printf '%s' "$PROFILE" | jq -er '.revision')
+BANKS=$(curl -fsS "$GATEWAY/api/banks" -H "$AUTH")
+printf '%s' "$BANKS" | jq -e 'any(.banks[]; .code == "970436" and .short_name == "Vietcombank")' >/dev/null
+PROFILE_BODY=$(jq -n --argjson revision "$PROFILE_REVISION" '{
+  expected_revision:$revision,
+  legal_name:"Thread Tutor",
+  contact_line:"thread@example.com",
+  bank_code:"970436",
+  bank_account_number:"THREAD123",
+  bank_account_holder:"THREAD TUTOR"
+}')
+SAVED_PROFILE=$(curl -fsS -X PUT "$GATEWAY/api/invoice-profile" \
+  -H "$AUTH" -H 'Content-Type: application/json' --data "$PROFILE_BODY")
+printf '%s' "$SAVED_PROFILE" | jq -e '
+  .is_complete == true and .bank_status == "active" and .bank_name == "Vietcombank"
+' >/dev/null
+RETRIED_PROFILE=$(curl -fsS -X PUT "$GATEWAY/api/invoice-profile" \
+  -H "$AUTH" -H 'Content-Type: application/json' --data "$PROFILE_BODY")
+test "$(printf '%s' "$RETRIED_PROFILE" | jq -er '.revision')" = \
+  "$(printf '%s' "$SAVED_PROFILE" | jq -er '.revision')"
+RELOADED_PROFILE=$(curl -fsS "$GATEWAY/api/invoice-profile" -H "$AUTH")
+test "$(printf '%s' "$RELOADED_PROFILE" | jq -er '.revision')" = \
+  "$(printf '%s' "$SAVED_PROFILE" | jq -er '.revision')"
+
 CLASS_BODY=$(jq -n \
   --arg name "Thread class $TUTOR" \
   --arg local_date "$LOCAL_DATE" \

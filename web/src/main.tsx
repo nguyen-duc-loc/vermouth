@@ -4,11 +4,13 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import '@fontsource-variable/montserrat'
 
+import { clearProfileClientState } from './api/profile'
 import { loadRuntimeConfig } from './api/runtime'
-import { refreshSession } from './api/session'
+import { refreshSession, sessionCoordinator } from './api/session'
 import { AppearanceProvider } from './appearance/appearance'
 import { Toaster } from './components/ui/sonner'
 import { TooltipProvider } from './components/ui/tooltip'
+import { clearAllTeachingDrafts } from './lib/teaching-draft'
 import { router } from './routes'
 import './styles.css'
 
@@ -17,6 +19,12 @@ import './styles.css'
 // guessed at (spec 0002, web app).
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 0 } },
+})
+
+sessionCoordinator.subscribe(() => {
+  if (sessionCoordinator.getSnapshot().status !== 'anonymous') return
+  clearAllTeachingDrafts()
+  void clearProfileClientState(queryClient)
 })
 
 const root = document.getElementById('root')

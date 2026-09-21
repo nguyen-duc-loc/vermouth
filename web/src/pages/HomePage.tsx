@@ -1,9 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
-import { BookOpen, CalendarDays, Home, LogOut, Plus, Sparkles, Users } from 'lucide-react'
+import { BookOpen, CalendarDays, Home, Plus, Sparkles, Users } from 'lucide-react'
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react'
 
-import { signOut } from '../api/session'
 import {
   changeClassRoster,
   createClass,
@@ -11,7 +9,7 @@ import {
   readBillingProjection,
   readHome,
 } from '../api/teaching'
-import { AppearancePanel, type AppearancePanelText } from '../components/AppearancePanel'
+import { AccountPanel } from '../components/AccountPanel'
 import { type AppDestination, AppShell } from '../components/AppShell'
 import { AttendanceSheet } from '../components/AttendanceSheet'
 import { BillingProjectionPanel } from '../components/BillingProjectionPanel'
@@ -22,29 +20,11 @@ import { TeachingSetupSheet } from '../components/TeachingSetupSheet'
 import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardHeader } from '../components/ui/card'
-import { Separator } from '../components/ui/separator'
 import { Skeleton } from '../components/ui/skeleton'
-import { clearAllTeachingDrafts } from '../lib/teaching-draft'
 
 const homeQueryFamily = ['home'] as const
 const homeQueryKey = ['home', null] as const
 const billingQueryKey = ['home', 'billing-projection'] as const
-
-const appearanceText: AppearancePanelText = {
-  title: 'Appearance',
-  themeLegend: 'Theme',
-  accentLegend: 'Accent color',
-  themes: { light: 'Light', dark: 'Dark', system: 'System' },
-  accents: {
-    red: 'Red',
-    rose: 'Rose',
-    orange: 'Orange',
-    green: 'Green',
-    blue: 'Blue',
-    yellow: 'Yellow',
-    violet: 'Violet',
-  },
-}
 
 const destinations: readonly AppDestination[] = [
   { href: '/', label: 'Home', icon: Home },
@@ -54,13 +34,11 @@ const destinations: readonly AppDestination[] = [
 
 /** Opens the tutor's local day with setup, attendance, and isolated projection progress. */
 export function HomePage() {
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [setupOpen, setSetupOpen] = useState(false)
   const [setupMessage, setSetupMessage] = useState<string>()
   const [attendanceMessage, setAttendanceMessage] = useState('')
   const [attendanceSessionID, setAttendanceSessionID] = useState<string>()
-  const [signingOut, setSigningOut] = useState(false)
   const [pollTimedOut, setPollTimedOut] = useState(false)
   const [pollCycle, setPollCycle] = useState(0)
   const [manualPolling, setManualPolling] = useState(false)
@@ -165,30 +143,6 @@ export function HomePage() {
     }) => changeClassRoster(classId, input, key),
     onSuccess: refreshHomeAndProjection,
   })
-  const accountPanel = (
-    <div className="grid gap-6">
-      <AppearancePanel text={appearanceText} />
-      <Separator />
-      <Button
-        variant="secondary"
-        loading={signingOut}
-        onClick={async () => {
-          setSigningOut(true)
-          clearAllTeachingDrafts()
-          const session = await signOut()
-          if (session.status === 'anonymous') {
-            await navigate({ to: '/signin', search: { redirect: '/' } })
-            return
-          }
-          setSigningOut(false)
-        }}
-      >
-        <LogOut aria-hidden="true" className="size-icon-sm" />
-        {signingOut ? 'Signing out…' : 'Sign out'}
-      </Button>
-    </div>
-  )
-
   const billingPanel = (
     <BillingProjectionPanel
       projection={projection}
@@ -215,7 +169,7 @@ export function HomePage() {
         closeAccount: 'Close account panel',
       }}
       primaryDestinations={destinations}
-      appearancePanel={accountPanel}
+      appearancePanel={<AccountPanel />}
       contextualPanel={firstPage ? billingPanel : undefined}
     >
       <PageEntrance className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-8 sm:px-6 md:py-10 lg:px-8">

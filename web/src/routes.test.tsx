@@ -106,6 +106,11 @@ describe('route tree', () => {
     })
   })
 
+  it('AC-1 keeps invoice profile behind the protected route tree', () => {
+    expect(routes['/profile']).toBeDefined()
+    expect(routes['/profile']?.options.beforeLoad).toBeDefined()
+  })
+
   it('waits for session checking and closes the application route when anonymous', async () => {
     const beforeLoad = routes['/']?.options.beforeLoad
     expect(beforeLoad).toBeDefined()

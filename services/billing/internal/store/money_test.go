@@ -233,10 +233,12 @@ func TestAuthoritativeReferencesRejectCrossTutorChildren(t *testing.T) {
 // is allowed to proceed.
 func saveCompleteProfile(t *testing.T, q *sqlcgen.Queries, tutorID uuid.UUID, account string) sqlcgen.InvoiceProfile {
 	t.Helper()
-	profile, err := q.SaveInvoiceProfile(t.Context(), sqlcgen.SaveInvoiceProfileParams{
-		TutorID:           tutorID,
+	require.NoError(t, q.SeedInvoiceProfile(t.Context(), tutorID))
+	profile, err := q.UpdateInvoiceProfile(t.Context(), sqlcgen.UpdateInvoiceProfileParams{
+		OwnerTutorID:      tutorID,
 		LegalName:         words("Nguyen Thi Lan"),
 		ContactLine:       words("lan@example.com"),
+		BankCode:          words("970436"),
 		BankName:          words("Vietcombank"),
 		BankAccountNumber: words(account),
 		BankAccountHolder: words("NGUYEN THI LAN"),

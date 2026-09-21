@@ -106,6 +106,9 @@ func Mux(deps Deps) http.Handler {
 	authenticated.HandleFunc("GET /api/home", readHome(deps))
 	authenticated.HandleFunc("GET /api/home/billing-projection", readHomeBillingProjection(deps))
 	authenticated.HandleFunc("GET /api/schedule", readSchedule(deps))
+	authenticated.HandleFunc("GET /api/invoice-profile", proxyGetInvoiceProfile(deps))
+	authenticated.HandleFunc("PUT /api/invoice-profile", proxyPutInvoiceProfile(deps))
+	authenticated.HandleFunc("GET /api/banks", proxyGetBanks(deps))
 
 	mux.Handle("/api/", auth.Middleware(deps.Verifier, deps.Logger, authenticated))
 
@@ -461,6 +464,9 @@ func passThrough(ctx context.Context, logger *slog.Logger, w http.ResponseWriter
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
+	if cacheControl := response.Header.Get("Cache-Control"); cacheControl != "" {
+		w.Header().Set("Cache-Control", cacheControl)
+	}
 	w.WriteHeader(response.Status)
 	_, err := w.Write(response.Body)
 	if err != nil {

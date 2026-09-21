@@ -107,6 +107,8 @@ type InvoiceProfile struct {
 	BankAccountHolder pgtype.Text
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
+	BankCode          pgtype.Text
+	Revision          int64
 	IsComplete        bool
 }
 

@@ -120,6 +120,54 @@ func (e ClassColor) Valid() bool {
 	}
 }
 
+// Defines values for InvoiceProfileBankStatus.
+const (
+	InvoiceProfileBankStatusActive   InvoiceProfileBankStatus = "active"
+	InvoiceProfileBankStatusInactive InvoiceProfileBankStatus = "inactive"
+	InvoiceProfileBankStatusMissing  InvoiceProfileBankStatus = "missing"
+)
+
+// Valid indicates whether the value is a known member of the InvoiceProfileBankStatus enum.
+func (e InvoiceProfileBankStatus) Valid() bool {
+	switch e {
+	case InvoiceProfileBankStatusActive:
+		return true
+	case InvoiceProfileBankStatusInactive:
+		return true
+	case InvoiceProfileBankStatusMissing:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InvoiceProfileMissingFields.
+const (
+	BankAccountHolder InvoiceProfileMissingFields = "bank_account_holder"
+	BankAccountNumber InvoiceProfileMissingFields = "bank_account_number"
+	BankCode          InvoiceProfileMissingFields = "bank_code"
+	ContactLine       InvoiceProfileMissingFields = "contact_line"
+	LegalName         InvoiceProfileMissingFields = "legal_name"
+)
+
+// Valid indicates whether the value is a known member of the InvoiceProfileMissingFields enum.
+func (e InvoiceProfileMissingFields) Valid() bool {
+	switch e {
+	case BankAccountHolder:
+		return true
+	case BankAccountNumber:
+		return true
+	case BankCode:
+		return true
+	case ContactLine:
+		return true
+	case LegalName:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ScheduleRuleState.
 const (
 	ScheduleRuleStateActive    ScheduleRuleState = "active"
@@ -300,6 +348,18 @@ type AttendanceStudent struct {
 	Name      string             `json:"name"`
 	State     *AttendanceState   `json:"state"`
 	StudentId openapi_types.UUID `json:"student_id"`
+}
+
+// Bank defines model for Bank.
+type Bank struct {
+	Code         string `json:"code"`
+	OfficialName string `json:"official_name"`
+	ShortName    string `json:"short_name"`
+}
+
+// BankCatalog defines model for BankCatalog.
+type BankCatalog struct {
+	Banks []Bank `json:"banks"`
 }
 
 // BillingProjection defines model for BillingProjection.
@@ -486,6 +546,26 @@ type HomeStudent struct {
 	StudentId       openapi_types.UUID `json:"student_id"`
 }
 
+// InvoiceProfile defines model for InvoiceProfile.
+type InvoiceProfile struct {
+	BankAccountHolder *string                       `json:"bank_account_holder"`
+	BankAccountNumber *string                       `json:"bank_account_number"`
+	BankCode          *string                       `json:"bank_code"`
+	BankName          *string                       `json:"bank_name"`
+	BankStatus        InvoiceProfileBankStatus      `json:"bank_status"`
+	ContactLine       *string                       `json:"contact_line"`
+	IsComplete        bool                          `json:"is_complete"`
+	LegalName         *string                       `json:"legal_name"`
+	MissingFields     []InvoiceProfileMissingFields `json:"missing_fields"`
+	Revision          int64                         `json:"revision"`
+}
+
+// InvoiceProfileBankStatus defines model for InvoiceProfile.BankStatus.
+type InvoiceProfileBankStatus string
+
+// InvoiceProfileMissingFields defines model for InvoiceProfile.MissingFields.
+type InvoiceProfileMissingFields string
+
 // LocalTime Examples: 17:30
 type LocalTime = string
 
@@ -498,6 +578,16 @@ type MoveSessionRequest struct {
 
 	// StartTime Examples: 17:30
 	StartTime LocalTime `json:"start_time"`
+}
+
+// PutInvoiceProfileRequest defines model for PutInvoiceProfileRequest.
+type PutInvoiceProfileRequest struct {
+	BankAccountHolder *string `json:"bank_account_holder"`
+	BankAccountNumber *string `json:"bank_account_number"`
+	BankCode          *string `json:"bank_code"`
+	ContactLine       *string `json:"contact_line"`
+	ExpectedRevision  int64   `json:"expected_revision"`
+	LegalName         *string `json:"legal_name"`
 }
 
 // PutScheduleRequest defines model for PutScheduleRequest.
@@ -822,6 +912,9 @@ type Conflict = Error
 // Forbidden The one error shape at the gateway boundary (spec 0001).
 type Forbidden = Error
 
+// InternalError The one error shape at the gateway boundary (spec 0001).
+type InternalError = Error
+
 // NotFound The one error shape at the gateway boundary (spec 0001).
 type NotFound = Error
 
@@ -830,6 +923,9 @@ type RateLimited = Error
 
 // Unauthenticated The one error shape at the gateway boundary (spec 0001).
 type Unauthenticated = Error
+
+// UnprocessableEntity The one error shape at the gateway boundary (spec 0001).
+type UnprocessableEntity = Error
 
 // CompleteGoogleSignInParams defines parameters for CompleteGoogleSignIn.
 type CompleteGoogleSignInParams struct {
@@ -984,6 +1080,9 @@ type PutClassScheduleJSONRequestBody = PutScheduleRequest
 
 // EndClassScheduleJSONRequestBody defines body for EndClassSchedule for application/json ContentType.
 type EndClassScheduleJSONRequestBody = EndScheduleRequest
+
+// PutInvoiceProfileJSONRequestBody defines body for PutInvoiceProfile for application/json ContentType.
+type PutInvoiceProfileJSONRequestBody = PutInvoiceProfileRequest
 
 // SaveSessionAttendanceJSONRequestBody defines body for SaveSessionAttendance for application/json ContentType.
 type SaveSessionAttendanceJSONRequestBody = SaveAttendanceRequest

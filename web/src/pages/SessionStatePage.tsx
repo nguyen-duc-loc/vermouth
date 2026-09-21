@@ -21,6 +21,9 @@ const StudentDetailPage = lazy(() =>
 const ClassDetailPage = lazy(() =>
   import('./ClassDetailPage').then((module) => ({ default: module.ClassDetailPage })),
 )
+const ProfilePage = lazy(() =>
+  import('./ProfilePage').then((module) => ({ default: module.ProfilePage })),
+)
 
 /** Keeps protected content behind the current session state. */
 export function ProtectedHomePage() {
@@ -85,6 +88,11 @@ export function ProtectedStudentDetailPage() {
 /** Keeps one class roster behind the verified session boundary. */
 export function ProtectedClassDetailPage() {
   return <ProtectedLazyPage redirectTo="/schedule" page={<ClassDetailPage />} />
+}
+
+/** Keeps private invoice identity behind the verified session boundary. */
+export function ProtectedProfilePage() {
+  return <ProtectedLazyPage redirectTo="/profile" page={<ProfilePage />} />
 }
 
 function ProtectedLazyPage({ redirectTo, page }: { redirectTo: string; page: ReactNode }) {

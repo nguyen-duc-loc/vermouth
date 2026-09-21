@@ -160,6 +160,9 @@ func TestMux_RejectsMissingBearerOnEveryTeachingRoute(t *testing.T) {
 		{http.MethodPut, "/api/sessions/018f8f7e-91b0-7cc4-bd8c-f4d9030ca423/attendance"},
 		{http.MethodGet, "/api/home"},
 		{http.MethodGet, "/api/home/billing-projection"},
+		{http.MethodGet, "/api/invoice-profile"},
+		{http.MethodPut, "/api/invoice-profile"},
+		{http.MethodGet, "/api/banks"},
 	}
 
 	for _, test := range tests {

@@ -14,6 +14,7 @@ import (
 // the health checks this service owes.
 type Deps struct {
 	Projection *handler.ProjectionReader
+	Profile    *handler.ProfileService
 	Verifier   *vermouth.Verifier
 	Logger     *slog.Logger
 	Health     vermouth.Health
@@ -24,6 +25,9 @@ func Mux(deps Deps) http.Handler {
 	mux := http.NewServeMux()
 	deps.Health.Mount(mux)
 	mux.HandleFunc("GET /projections/teaching/status", teachingProjectionStatus(deps))
+	mux.HandleFunc("GET /invoice-profile", getInvoiceProfile(deps))
+	mux.HandleFunc("PUT /invoice-profile", putInvoiceProfile(deps))
+	mux.HandleFunc("GET /banks", getBanks(deps))
 	return vermouth.RequestIDMiddleware(deps.Logger, mux)
 }
 

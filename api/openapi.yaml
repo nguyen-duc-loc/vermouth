@@ -753,6 +753,82 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /api/invoice-profile:
+    get:
+      operationId: getInvoiceProfile
+      summary: Read the signed in tutor's invoice identity and bank details
+      responses:
+        "200":
+          description: The canonical private invoice profile
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceProfile"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      operationId: putInvoiceProfile
+      summary: Save the signed in tutor's complete editable invoice profile representation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PutInvoiceProfileRequest"
+      responses:
+        "200":
+          description: The normalized canonical profile after the save
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceProfile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/banks:
+    get:
+      operationId: getBanks
+      summary: Read the active committed Vietnamese bank catalog
+      responses:
+        "200":
+          description: Every active catalog entry in stable payment code order
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: "private, max-age=86400"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankCatalog"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/home:
     get:
       operationId: getHome
@@ -883,6 +959,18 @@ components:
             $ref: "#/components/schemas/Error"
     Conflict:
       description: The requested state conflicts with committed state
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UnprocessableEntity:
+      description: The request shape is valid but one or more profile fields are invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: The owning service could not complete the request
       content:
         application/json:
           schema:
@@ -1960,6 +2048,86 @@ components:
         latest_updated_at:
           type: [string, "null"]
           format: date-time
+
+    InvoiceProfile:
+      type: object
+      additionalProperties: false
+      required:
+        [legal_name, contact_line, bank_code, bank_name, bank_account_number, bank_account_holder, revision, is_complete, missing_fields, bank_status]
+      properties:
+        legal_name:
+          type: [string, "null"]
+        contact_line:
+          type: [string, "null"]
+        bank_code:
+          type: [string, "null"]
+        bank_name:
+          type: [string, "null"]
+        bank_account_number:
+          type: [string, "null"]
+        bank_account_holder:
+          type: [string, "null"]
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+        is_complete:
+          type: boolean
+        missing_fields:
+          type: array
+          items:
+            type: string
+            enum: [legal_name, contact_line, bank_code, bank_account_number, bank_account_holder]
+        bank_status:
+          type: string
+          enum: [missing, active, inactive]
+
+    PutInvoiceProfileRequest:
+      type: object
+      additionalProperties: false
+      required:
+        [expected_revision, legal_name, contact_line, bank_code, bank_account_number, bank_account_holder]
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 0
+        legal_name:
+          type: [string, "null"]
+          maxLength: 120
+        contact_line:
+          type: [string, "null"]
+          maxLength: 200
+        bank_code:
+          type: [string, "null"]
+        bank_account_number:
+          type: [string, "null"]
+        bank_account_holder:
+          type: [string, "null"]
+          maxLength: 120
+
+    Bank:
+      type: object
+      additionalProperties: false
+      required: [code, short_name, official_name]
+      properties:
+        code:
+          type: string
+          pattern: "^[0-9]{6}$"
+        short_name:
+          type: string
+        official_name:
+          type: string
+
+    BankCatalog:
+      type: object
+      additionalProperties: false
+      required: [banks]
+      properties:
+        banks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Bank"
 
     HomeBillingProjection:
       type: object

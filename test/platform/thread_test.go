@@ -15,10 +15,11 @@ func TestThreadAcceptsCompactDevelopmentTokenJSON(t *testing.T) {
 
 	fixture := newThreadFixture(t)
 	result := runCommand(t, "", map[string]string{
-		"PATH":         fixture.path,
-		"CALL_LOG":     fixture.callLog,
-		"CURL_COUNT":   fixture.count,
-		"TOKEN_OUTPUT": `{"schema_version":1,"access_token":"token-1","token_type":"Bearer","expires_in":900,"tutor_id":"tutor-1"}`,
+		"PATH":          fixture.path,
+		"CALL_LOG":      fixture.callLog,
+		"CURL_COUNT":    fixture.count,
+		"PROFILE_STATE": fixture.profile,
+		"TOKEN_OUTPUT":  `{"schema_version":1,"access_token":"token-1","token_type":"Bearer","expires_in":900,"tutor_id":"tutor-1"}`,
 	}, []string{repoFile(t, "test", "thread.sh")})
 
 	require.NoErrorf(t, result.err, "stdout: %s\nstderr: %s", result.stdout, result.stderr)
@@ -36,6 +37,7 @@ func TestThreadRetriesATemporaryGatewayFailure(t *testing.T) {
 		"PATH":          fixture.path,
 		"CALL_LOG":      fixture.callLog,
 		"CURL_COUNT":    fixture.count,
+		"PROFILE_STATE": fixture.profile,
 		"CURL_FAILURES": "1",
 		"TOKEN_OUTPUT":  `{"schema_version": 1, "access_token": "token-1", "token_type": "Bearer", "expires_in": 900, "tutor_id": "tutor-1"}`,
 	}, []string{repoFile(t, "test", "thread.sh")})
@@ -43,7 +45,7 @@ func TestThreadRetriesATemporaryGatewayFailure(t *testing.T) {
 	require.NoErrorf(t, result.err, "stdout: %s\nstderr: %s", result.stdout, result.stderr)
 	count, err := os.ReadFile(fixture.count)
 	require.NoError(t, err)
-	require.Equal(t, "14", strings.TrimSpace(string(count)))
+	require.Equal(t, "19", strings.TrimSpace(string(count)))
 }
 
 // covers: AC-6, AC-13
@@ -55,6 +57,7 @@ func TestThreadUsesTheHostTokenAndGatewayWhenRequested(t *testing.T) {
 		"PATH":              fixture.path,
 		"CALL_LOG":          fixture.callLog,
 		"CURL_COUNT":        fixture.count,
+		"PROFILE_STATE":     fixture.profile,
 		"VERMOUTH_DEV_MODE": "host",
 		"GATEWAY_HTTP_ADDR": ":9090",
 		"TOKEN_OUTPUT":      `{"schema_version": 1, "access_token": "token-host", "token_type": "Bearer", "expires_in": 900, "tutor_id": "tutor-host"}`,
@@ -69,10 +72,11 @@ func TestThreadRejectsTokenOutputWithoutRequiredFields(t *testing.T) {
 
 	fixture := newThreadFixture(t)
 	result := runCommand(t, "", map[string]string{
-		"PATH":         fixture.path,
-		"CALL_LOG":     fixture.callLog,
-		"CURL_COUNT":   fixture.count,
-		"TOKEN_OUTPUT": `{"schema_version": 1, "tutor_id": "tutor-1"}`,
+		"PATH":          fixture.path,
+		"CALL_LOG":      fixture.callLog,
+		"CURL_COUNT":    fixture.count,
+		"PROFILE_STATE": fixture.profile,
+		"TOKEN_OUTPUT":  `{"schema_version": 1, "tutor_id": "tutor-1"}`,
 	}, []string{repoFile(t, "test", "thread.sh")})
 
 	require.Error(t, result.err)
@@ -91,6 +95,7 @@ func TestThreadStopsAfterTheBoundedGatewayWait(t *testing.T) {
 		"PATH":          fixture.path,
 		"CALL_LOG":      fixture.callLog,
 		"CURL_COUNT":    fixture.count,
+		"PROFILE_STATE": fixture.profile,
 		"CURL_FAILURES": "99",
 		"TOKEN_OUTPUT":  `{"schema_version":1,"access_token":"token-1","tutor_id":"tutor-1"}`,
 	}, []string{repoFile(t, "test", "thread.sh")})
@@ -106,6 +111,7 @@ type threadFixture struct {
 	path    string
 	callLog string
 	count   string
+	profile string
 }
 
 func newThreadFixture(t *testing.T) threadFixture {
@@ -114,7 +120,9 @@ func newThreadFixture(t *testing.T) threadFixture {
 	directory := t.TempDir()
 	callLog := filepath.Join(directory, "calls")
 	count := filepath.Join(directory, "curl-count")
+	profile := filepath.Join(directory, "profile-state")
 	require.NoError(t, os.WriteFile(count, []byte("0\n"), 0o600))
+	require.NoError(t, os.WriteFile(profile, []byte("0\n"), 0o600))
 	writeExecutable(t, directory, "task", `
 printf 'task' >>"$CALL_LOG"
 for argument in "$@"; do printf ' <%s>' "$argument" >>"$CALL_LOG"; done
@@ -131,6 +139,20 @@ printf '%s\n' "$count" >"$CURL_COUNT"
 if [ "$count" -le "${CURL_FAILURES:-0}" ]; then exit 7; fi
 calls=" $* "
 case "$calls" in
+  *" -X PUT "*"/api/invoice-profile"*)
+    printf '1\n' >"$PROFILE_STATE"
+    printf '%s\n' '{"legal_name":"Thread Tutor","contact_line":"thread@example.com","bank_code":"970436","bank_name":"Vietcombank","bank_account_number":"THREAD123","bank_account_holder":"THREAD TUTOR","revision":1,"is_complete":true,"missing_fields":[],"bank_status":"active"}'
+    ;;
+  *"/api/invoice-profile"*)
+    if [ "$(cat "$PROFILE_STATE")" = 1 ]; then
+      printf '%s\n' '{"legal_name":"Thread Tutor","contact_line":"thread@example.com","bank_code":"970436","bank_name":"Vietcombank","bank_account_number":"THREAD123","bank_account_holder":"THREAD TUTOR","revision":1,"is_complete":true,"missing_fields":[],"bank_status":"active"}'
+    else
+      printf '%s\n' '{"legal_name":null,"contact_line":null,"bank_code":null,"bank_name":null,"bank_account_number":null,"bank_account_holder":null,"revision":0,"is_complete":false,"missing_fields":["legal_name","contact_line","bank_code","bank_account_number","bank_account_holder"],"bank_status":"missing"}'
+    fi
+    ;;
+  *"/api/banks"*)
+    printf '%s\n' '{"banks":[{"code":"970436","short_name":"Vietcombank","official_name":"Ngân hàng TMCP Ngoại Thương Việt Nam"}]}'
+    ;;
   *"/schedule"*)
     printf '%s\n' '{"class":{"class_id":"class-1","schedule_revision":1},"candidate_count":1,"created_count":0,"adopted_count":1,"superseded_count":0,"preserved_count":0}'
     ;;
@@ -173,6 +195,7 @@ esac
 		path:    directory + string(os.PathListSeparator) + os.Getenv("PATH"),
 		callLog: callLog,
 		count:   count,
+		profile: profile,
 	}
 }
 
@@ -184,6 +207,8 @@ func assertThreadCalls(t *testing.T, path, tokenTask, gateway string) {
 	calls := string(content)
 	require.Contains(t, calls, "task <--silent> <"+tokenTask+">\n")
 	require.Contains(t, calls, "curl <-fsS> <"+gateway+"/api/home>")
+	require.Contains(t, calls, "<"+gateway+"/api/invoice-profile>")
+	require.Contains(t, calls, "<"+gateway+"/api/banks>")
 	require.Contains(t, calls, "<"+gateway+"/api/classes>")
 	require.Contains(t, calls, "<"+gateway+"/api/students>")
 	require.Contains(t, calls, "<"+gateway+"/api/classes/class-1/roster>")

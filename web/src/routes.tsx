@@ -16,6 +16,7 @@ import {
 import {
   ProtectedClassDetailPage,
   ProtectedHomePage,
+  ProtectedProfilePage,
   ProtectedSchedulePage,
   ProtectedStudentDetailPage,
   ProtectedStudentsPage,
@@ -133,6 +134,13 @@ const classDetailRoute = createRoute({
   beforeLoad: requireSession,
 })
 
+const profileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/profile',
+  component: ProtectedProfilePage,
+  beforeLoad: requireSession,
+})
+
 async function requireSession({
   context,
   location,
@@ -203,6 +211,7 @@ function routeTree() {
       studentsRoute,
       studentDetailRoute,
       classDetailRoute,
+      profileRoute,
       signInRoute,
       designSystemRoute,
     ])
@@ -214,6 +223,7 @@ function routeTree() {
     studentsRoute,
     studentDetailRoute,
     classDetailRoute,
+    profileRoute,
     signInRoute,
   ])
 }

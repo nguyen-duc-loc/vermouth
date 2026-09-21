@@ -204,7 +204,8 @@ func (q *Queries) GetInvoiceNumberCounter(ctx context.Context, arg GetInvoiceNum
 
 const getInvoiceProfile = `-- name: GetInvoiceProfile :one
 SELECT tutor_id, legal_name, contact_line, bank_name, bank_account_number,
-       bank_account_holder, created_at, updated_at, is_complete
+       bank_account_holder, created_at, updated_at, bank_code, revision,
+       is_complete
 FROM invoice_profiles
 WHERE tutor_id = $1
 `
@@ -226,6 +227,8 @@ func (q *Queries) GetInvoiceProfile(ctx context.Context, tutorID uuid.UUID) (Inv
 		&i.BankAccountHolder,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.BankCode,
+		&i.Revision,
 		&i.IsComplete,
 	)
 	return i, err
@@ -690,6 +693,37 @@ func (q *Queries) ListInvoicesForPeriod(ctx context.Context, arg ListInvoicesFor
 	return items, nil
 }
 
+const lockInvoiceProfile = `-- name: LockInvoiceProfile :one
+SELECT tutor_id, legal_name, contact_line, bank_name, bank_account_number,
+       bank_account_holder, created_at, updated_at, bank_code, revision,
+       is_complete
+FROM invoice_profiles
+WHERE tutor_id = $1
+FOR UPDATE
+`
+
+// LockInvoiceProfile serialises profile writers. The handler compares the five
+// normalized editable values before it checks the expected revision, which is
+// what lets an identical retry recover a lost successful response.
+func (q *Queries) LockInvoiceProfile(ctx context.Context, tutorID uuid.UUID) (InvoiceProfile, error) {
+	row := q.db.QueryRow(ctx, lockInvoiceProfile, tutorID)
+	var i InvoiceProfile
+	err := row.Scan(
+		&i.TutorID,
+		&i.LegalName,
+		&i.ContactLine,
+		&i.BankName,
+		&i.BankAccountNumber,
+		&i.BankAccountHolder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.BankCode,
+		&i.Revision,
+		&i.IsComplete,
+	)
+	return i, err
+}
+
 const markSessionCancelled = `-- name: MarkSessionCancelled :exec
 UPDATE sessions
 SET cancelled_at = $3,
@@ -796,57 +830,6 @@ func (q *Queries) RateInForceOn(ctx context.Context, arg RateInForceOnParams) (R
 	return i, err
 }
 
-const saveInvoiceProfile = `-- name: SaveInvoiceProfile :one
-INSERT INTO invoice_profiles (tutor_id, legal_name, contact_line, bank_name, bank_account_number, bank_account_holder)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (tutor_id) DO UPDATE
-SET legal_name          = excluded.legal_name,
-    contact_line        = excluded.contact_line,
-    bank_name           = excluded.bank_name,
-    bank_account_number = excluded.bank_account_number,
-    bank_account_holder = excluded.bank_account_holder,
-    updated_at          = now()
-WHERE invoice_profiles.tutor_id = excluded.tutor_id
-RETURNING tutor_id, legal_name, contact_line, bank_name, bank_account_number,
-          bank_account_holder, created_at, updated_at, is_complete
-`
-
-type SaveInvoiceProfileParams struct {
-	TutorID           uuid.UUID
-	LegalName         pgtype.Text
-	ContactLine       pgtype.Text
-	BankName          pgtype.Text
-	BankAccountNumber pgtype.Text
-	BankAccountHolder pgtype.Text
-}
-
-// SaveInvoiceProfile is the tutor's own write, from the profile screen. Every
-// field here is theirs; no event carries any of it, so bank details never reach
-// the broker.
-func (q *Queries) SaveInvoiceProfile(ctx context.Context, arg SaveInvoiceProfileParams) (InvoiceProfile, error) {
-	row := q.db.QueryRow(ctx, saveInvoiceProfile,
-		arg.TutorID,
-		arg.LegalName,
-		arg.ContactLine,
-		arg.BankName,
-		arg.BankAccountNumber,
-		arg.BankAccountHolder,
-	)
-	var i InvoiceProfile
-	err := row.Scan(
-		&i.TutorID,
-		&i.LegalName,
-		&i.ContactLine,
-		&i.BankName,
-		&i.BankAccountNumber,
-		&i.BankAccountHolder,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.IsComplete,
-	)
-	return i, err
-}
-
 const seedInvoiceProfile = `-- name: SeedInvoiceProfile :exec
 
 INSERT INTO invoice_profiles (tutor_id)
@@ -888,6 +871,62 @@ func (q *Queries) TakeNextInvoiceNumber(ctx context.Context, arg TakeNextInvoice
 	var last_sequence int32
 	err := row.Scan(&last_sequence)
 	return last_sequence, err
+}
+
+const updateInvoiceProfile = `-- name: UpdateInvoiceProfile :one
+UPDATE invoice_profiles
+SET legal_name          = $1,
+    contact_line        = $2,
+    bank_code           = $3,
+    bank_name           = $4,
+    bank_account_number = $5,
+    bank_account_holder = $6,
+    revision            = revision + 1,
+    updated_at          = now()
+WHERE tutor_id = $7
+RETURNING tutor_id, legal_name, contact_line, bank_name, bank_account_number,
+          bank_account_holder, created_at, updated_at, bank_code, revision,
+          is_complete
+`
+
+type UpdateInvoiceProfileParams struct {
+	LegalName         pgtype.Text
+	ContactLine       pgtype.Text
+	BankCode          pgtype.Text
+	BankName          pgtype.Text
+	BankAccountNumber pgtype.Text
+	BankAccountHolder pgtype.Text
+	OwnerTutorID      uuid.UUID
+}
+
+// UpdateInvoiceProfile is called only after the handler has locked the row,
+// recognized an identical retry, checked the expected revision, and validated
+// the normalized values. One changed save advances the revision exactly once.
+func (q *Queries) UpdateInvoiceProfile(ctx context.Context, arg UpdateInvoiceProfileParams) (InvoiceProfile, error) {
+	row := q.db.QueryRow(ctx, updateInvoiceProfile,
+		arg.LegalName,
+		arg.ContactLine,
+		arg.BankCode,
+		arg.BankName,
+		arg.BankAccountNumber,
+		arg.BankAccountHolder,
+		arg.OwnerTutorID,
+	)
+	var i InvoiceProfile
+	err := row.Scan(
+		&i.TutorID,
+		&i.LegalName,
+		&i.ContactLine,
+		&i.BankName,
+		&i.BankAccountNumber,
+		&i.BankAccountHolder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.BankCode,
+		&i.Revision,
+		&i.IsComplete,
+	)
+	return i, err
 }
 
 const upsertAttendance = `-- name: UpsertAttendance :exec

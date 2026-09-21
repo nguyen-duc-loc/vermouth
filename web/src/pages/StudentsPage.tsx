@@ -18,7 +18,7 @@ import {
   type StudentSummary,
   studentKeys,
 } from '../api/teaching'
-import { AppearancePanel, type AppearancePanelText } from '../components/AppearancePanel'
+import { AccountPanel } from '../components/AccountPanel'
 import { type AppDestination, AppShell } from '../components/AppShell'
 import { EmptyState } from '../components/EmptyState'
 import { ErrorState } from '../components/ErrorState'
@@ -46,22 +46,6 @@ const destinations: readonly AppDestination[] = [
   { href: '/schedule', label: 'Schedule', icon: CalendarDays },
   { href: '/students', label: 'Students', icon: Users },
 ]
-
-const appearanceText: AppearancePanelText = {
-  title: 'Appearance',
-  themeLegend: 'Theme',
-  accentLegend: 'Accent color',
-  themes: { light: 'Light', dark: 'Dark', system: 'System' },
-  accents: {
-    red: 'Red',
-    rose: 'Rose',
-    orange: 'Orange',
-    green: 'Green',
-    blue: 'Blue',
-    yellow: 'Yellow',
-    violet: 'Violet',
-  },
-}
 
 /** Gives the tutor a searchable, durable student record workspace. */
 export function StudentsPage() {
@@ -133,7 +117,7 @@ export function StudentsPage() {
         closeAccount: 'Close account panel',
       }}
       primaryDestinations={destinations}
-      appearancePanel={<AppearancePanel text={appearanceText} />}
+      appearancePanel={<AccountPanel />}
     >
       <PageEntrance className="mx-auto grid w-full max-w-7xl gap-7 px-4 py-8 sm:px-6 md:py-10 lg:px-8">
         <header

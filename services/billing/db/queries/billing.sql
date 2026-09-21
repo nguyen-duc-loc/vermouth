@@ -242,22 +242,34 @@ INSERT INTO invoice_profiles (tutor_id)
 VALUES ($1)
 ON CONFLICT (tutor_id) DO NOTHING;
 
--- SaveInvoiceProfile is the tutor's own write, from the profile screen. Every
--- field here is theirs; no event carries any of it, so bank details never reach
--- the broker.
--- name: SaveInvoiceProfile :one
-INSERT INTO invoice_profiles (tutor_id, legal_name, contact_line, bank_name, bank_account_number, bank_account_holder)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (tutor_id) DO UPDATE
-SET legal_name          = excluded.legal_name,
-    contact_line        = excluded.contact_line,
-    bank_name           = excluded.bank_name,
-    bank_account_number = excluded.bank_account_number,
-    bank_account_holder = excluded.bank_account_holder,
+-- LockInvoiceProfile serialises profile writers. The handler compares the five
+-- normalized editable values before it checks the expected revision, which is
+-- what lets an identical retry recover a lost successful response.
+-- name: LockInvoiceProfile :one
+SELECT tutor_id, legal_name, contact_line, bank_name, bank_account_number,
+       bank_account_holder, created_at, updated_at, bank_code, revision,
+       is_complete
+FROM invoice_profiles
+WHERE tutor_id = $1
+FOR UPDATE;
+
+-- UpdateInvoiceProfile is called only after the handler has locked the row,
+-- recognized an identical retry, checked the expected revision, and validated
+-- the normalized values. One changed save advances the revision exactly once.
+-- name: UpdateInvoiceProfile :one
+UPDATE invoice_profiles
+SET legal_name          = sqlc.arg(legal_name),
+    contact_line        = sqlc.arg(contact_line),
+    bank_code           = sqlc.arg(bank_code),
+    bank_name           = sqlc.arg(bank_name),
+    bank_account_number = sqlc.arg(bank_account_number),
+    bank_account_holder = sqlc.arg(bank_account_holder),
+    revision            = revision + 1,
     updated_at          = now()
-WHERE invoice_profiles.tutor_id = excluded.tutor_id
+WHERE tutor_id = sqlc.arg(owner_tutor_id)
 RETURNING tutor_id, legal_name, contact_line, bank_name, bank_account_number,
-          bank_account_holder, created_at, updated_at, is_complete;
+          bank_account_holder, created_at, updated_at, bank_code, revision,
+          is_complete;
 
 -- GetInvoiceProfile returns is_complete beside the fields, so the month end
 -- refusal and the profile screen read the one gate rather than each testing its
@@ -266,7 +278,8 @@ RETURNING tutor_id, legal_name, contact_line, bank_name, bank_account_number,
 -- The column order is the table's own, so sqlc hands back the one
 -- invoice_profiles row type rather than a second shape of the same row.
 SELECT tutor_id, legal_name, contact_line, bank_name, bank_account_number,
-       bank_account_holder, created_at, updated_at, is_complete
+       bank_account_holder, created_at, updated_at, bank_code, revision,
+       is_complete
 FROM invoice_profiles
 WHERE tutor_id = $1;
 

@@ -349,6 +349,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/invoice-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the signed in tutor's invoice identity and bank details */
+        get: operations["getInvoiceProfile"];
+        /** Save the signed in tutor's complete editable invoice profile representation */
+        put: operations["putInvoiceProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/banks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the active committed Vietnamese bank catalog */
+        get: operations["getBanks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/home": {
         parameters: {
             query?: never;
@@ -883,6 +918,37 @@ export interface components {
             /** Format: date-time */
             latest_updated_at: string | null;
         };
+        InvoiceProfile: {
+            legal_name: string | null;
+            contact_line: string | null;
+            bank_code: string | null;
+            bank_name: string | null;
+            bank_account_number: string | null;
+            bank_account_holder: string | null;
+            /** Format: int64 */
+            revision: number;
+            is_complete: boolean;
+            missing_fields: ("legal_name" | "contact_line" | "bank_code" | "bank_account_number" | "bank_account_holder")[];
+            /** @enum {string} */
+            bank_status: "missing" | "active" | "inactive";
+        };
+        PutInvoiceProfileRequest: {
+            /** Format: int64 */
+            expected_revision: number;
+            legal_name: string | null;
+            contact_line: string | null;
+            bank_code: string | null;
+            bank_account_number: string | null;
+            bank_account_holder: string | null;
+        };
+        Bank: {
+            code: string;
+            short_name: string;
+            official_name: string;
+        };
+        BankCatalog: {
+            banks: components["schemas"]["Bank"][];
+        };
         HomeBillingProjection: {
             billing_projection: components["schemas"]["BillingProjection"] | null;
             billing_projection_unavailable: string | null;
@@ -932,6 +998,24 @@ export interface components {
         };
         /** @description The requested state conflicts with committed state */
         Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The request shape is valid but one or more profile fields are invalid */
+        UnprocessableEntity: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The owning service could not complete the request */
+        InternalError: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1730,6 +1814,82 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    getInvoiceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The canonical private invoice profile */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceProfile"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    putInvoiceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutInvoiceProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description The normalized canonical profile after the save */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceProfile"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getBanks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every active catalog entry in stable payment code order */
+            200: {
+                headers: {
+                    "Cache-Control": "private, max-age=86400";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankCatalog"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            500: components["responses"]["InternalError"];
         };
     };
     getHome: {

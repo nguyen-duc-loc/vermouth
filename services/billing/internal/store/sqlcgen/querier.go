@@ -65,6 +65,10 @@ type Querier interface {
 	ListBillableSessions(ctx context.Context, arg ListBillableSessionsParams) ([]ListBillableSessionsRow, error)
 	ListInvoiceLines(ctx context.Context, arg ListInvoiceLinesParams) ([]InvoiceLine, error)
 	ListInvoicesForPeriod(ctx context.Context, arg ListInvoicesForPeriodParams) ([]ListInvoicesForPeriodRow, error)
+	// LockInvoiceProfile serialises profile writers. The handler compares the five
+	// normalized editable values before it checks the expected revision, which is
+	// what lets an identical retry recover a lost successful response.
+	LockInvoiceProfile(ctx context.Context, tutorID uuid.UUID) (InvoiceProfile, error)
 	MarkSessionCancelled(ctx context.Context, arg MarkSessionCancelledParams) error
 	// MarkStudentRemoved stamps the end from the envelope occurred_at, because
 	// teaching.student.removed carries no timestamp of its own (INV-4). The first end
@@ -75,10 +79,6 @@ type Querier interface {
 	// already orders: a backwards scan of one index, no extra descending index. An
 	// absent row is what the run turns into rate_missing.
 	RateInForceOn(ctx context.Context, arg RateInForceOnParams) (RateInForceOnRow, error)
-	// SaveInvoiceProfile is the tutor's own write, from the profile screen. Every
-	// field here is theirs; no event carries any of it, so bank details never reach
-	// the broker.
-	SaveInvoiceProfile(ctx context.Context, arg SaveInvoiceProfileParams) (InvoiceProfile, error)
 	// ------------------------------------------------------- authoritative records
 	// No replay may rewrite anything below this line (AC-8).
 	// SeedInvoiceProfile is the one statement a consumer runs on an authoritative
@@ -91,6 +91,10 @@ type Querier interface {
 	// invoices, because a voided invoice keeps its number spent. Two concurrent
 	// takes serialise on the row and can never return the same sequence.
 	TakeNextInvoiceNumber(ctx context.Context, arg TakeNextInvoiceNumberParams) (int32, error)
+	// UpdateInvoiceProfile is called only after the handler has locked the row,
+	// recognized an identical retry, checked the expected revision, and validated
+	// the normalized values. One changed save advances the revision exactly once.
+	UpdateInvoiceProfile(ctx context.Context, arg UpdateInvoiceProfileParams) (InvoiceProfile, error)
 	UpsertAttendance(ctx context.Context, arg UpsertAttendanceParams) error
 	UpsertClass(ctx context.Context, arg UpsertClassParams) error
 	// UpsertClassRate appends the dated history billing owns. teaching.class.created
