@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
@@ -36,6 +37,7 @@ type Querier interface {
 	// coverage predicate as every home and billing read.
 	GetAttendanceWriteContext(ctx context.Context, arg GetAttendanceWriteContextParams) (GetAttendanceWriteContextRow, error)
 	GetCommandReceipt(ctx context.Context, arg GetCommandReceiptParams) (CommandReceipt, error)
+	GetEarliestRetainedClassSessionDate(ctx context.Context, arg GetEarliestRetainedClassSessionDateParams) (pgtype.Date, error)
 	GetFirstUpcomingClassSession(ctx context.Context, arg GetFirstUpcomingClassSessionParams) (GetFirstUpcomingClassSessionRow, error)
 	GetOwnedClass(ctx context.Context, arg GetOwnedClassParams) (GetOwnedClassRow, error)
 	GetOwnedLatestScheduleRule(ctx context.Context, arg GetOwnedLatestScheduleRuleParams) (ScheduleRule, error)
@@ -103,6 +105,10 @@ type Querier interface {
 	RestoreOwnedSession(ctx context.Context, arg RestoreOwnedSessionParams) (RestoreOwnedSessionRow, error)
 	RetireScheduleRule(ctx context.Context, arg RetireScheduleRuleParams) (ScheduleRule, error)
 	SetClassScheduleRevision(ctx context.Context, arg SetClassScheduleRevisionParams) (SetClassScheduleRevisionRow, error)
+	// SetOwnedClassRate always advances the monotonic rate revision. A backdated
+	// correction changes history through its event but changes current class rate
+	// only when its date is at least the current effective date.
+	SetOwnedClassRate(ctx context.Context, arg SetOwnedClassRateParams) (SetOwnedClassRateRow, error)
 	SupersedeUntouchedScheduleSessions(ctx context.Context, arg SupersedeUntouchedScheduleSessionsParams) ([]SupersedeUntouchedScheduleSessionsRow, error)
 	UpdateStudentRecord(ctx context.Context, arg UpdateStudentRecordParams) (Student, error)
 	// UpsertAttendance keeps at most one row per session and student, so a

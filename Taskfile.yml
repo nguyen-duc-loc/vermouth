@@ -135,6 +135,11 @@ tasks:
           cp pkg/vermouth/ddl/00001_vermouth_kit.sql services/$svc/db/migrations/00001_vermouth_kit.sql
           echo "synced services/$svc/db/migrations/00001_vermouth_kit.sql"
         done
+        cp pkg/vermouth/ddl/00002_consumer_recovery.sql services/identity/db/migrations/00005_consumer_recovery.sql
+        cp pkg/vermouth/ddl/00002_consumer_recovery.sql services/teaching/db/migrations/00008_consumer_recovery.sql
+        cp pkg/vermouth/ddl/00002_consumer_recovery.sql services/billing/db/migrations/00005_consumer_recovery.sql
+        cp pkg/vermouth/ddl/00002_consumer_recovery.sql services/notifications/db/migrations/00004_consumer_recovery.sql
+        echo "synced additive consumer recovery migrations"
 
   migrate:up:
     desc: Apply every service's migrations (STK-21, run before services start, never from main.go)
@@ -217,13 +222,13 @@ tasks:
         done
 
   test:
-    desc: Run the Go tests in every module
+    desc: Run the Go tests, including the real billing protocol suite, in every module
     cmds:
       - |
         set -e
         for module in {{.MODULES}}; do
           echo "==> $module"
-          (cd $module && go test ./...)
+          (cd $module && go test -tags=integration ./...)
         done
 
   test:auth-rate-limit:
@@ -361,6 +366,69 @@ tasks:
           -service notifications -consumer recipients -topics identity.events
       - task: svc:start
         vars: { CLI_ARGS: notifications }
+
+  replay:billing:teaching:
+    desc: Start a new uncertified billing teaching projection generation
+    cmds:
+      - task: svc:stop
+        vars: { CLI_ARGS: billing }
+      - |
+        set -e
+        REPLAY_DATABASE_URL="$BILLING_DATABASE_URL" go run ./pkg/vermouth/cmd/replay \
+          -service billing -consumer teaching -topics teaching.events \
+          -projection-tables attendance,roster_periods,class_rates,sessions,students,classes
+      - task: svc:start
+        vars: { CLI_ARGS: billing }
+      - echo "billing.teaching is replaying; run task consumer:certify -- billing teaching after it reaches the captured ends"
+
+  consumer:failures:list:
+    desc: List safe unresolved consumer failure coordinates, for example billing teaching
+    cmds:
+      - |
+        set -e
+        set -- {{.CLI_ARGS}}
+        svc=$1
+        consumer=$2
+        if [ -z "$svc" ] || [ -z "$consumer" ]; then
+          echo "name a service and consumer, for example: task consumer:failures:list -- billing teaching"
+          exit 1
+        fi
+        url=$(printenv "$(echo "$svc" | tr '[:lower:]' '[:upper:]')_DATABASE_URL")
+        CONSUMER_FAILURES_DATABASE_URL="$url" go run ./pkg/vermouth/cmd/consumerfailures list \
+          -service "$svc" -consumer "$consumer"
+
+  consumer:failures:acknowledge:
+    desc: Acknowledge one repaired decode failure after the service and consumer arguments
+    cmds:
+      - |
+        set -e
+        set -- {{.CLI_ARGS}}
+        svc=$1
+        consumer=$2
+        shift 2
+        if [ -z "$svc" ] || [ -z "$consumer" ]; then
+          echo "name a service and consumer before the source coordinate flags"
+          exit 1
+        fi
+        url=$(printenv "$(echo "$svc" | tr '[:lower:]' '[:upper:]')_DATABASE_URL")
+        CONSUMER_FAILURES_DATABASE_URL="$url" go run ./pkg/vermouth/cmd/consumerfailures acknowledge \
+          -service "$svc" -consumer "$consumer" "$@"
+
+  consumer:certify:
+    desc: Certify one completed retained history replay, for example billing teaching
+    cmds:
+      - |
+        set -e
+        set -- {{.CLI_ARGS}}
+        svc=$1
+        consumer=$2
+        if [ -z "$svc" ] || [ -z "$consumer" ]; then
+          echo "name a service and consumer, for example: task consumer:certify -- billing teaching"
+          exit 1
+        fi
+        url=$(printenv "$(echo "$svc" | tr '[:lower:]' '[:upper:]')_DATABASE_URL")
+        CONSUMER_FAILURES_DATABASE_URL="$url" go run ./pkg/vermouth/cmd/consumerfailures certify \
+          -service "$svc" -consumer "$consumer"
 
   dev:token:host:
     desc: "Create a tutor and print a token for it, with no browser and no Google (AC-13)"

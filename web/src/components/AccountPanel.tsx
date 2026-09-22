@@ -3,6 +3,7 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { Landmark, LogOut } from 'lucide-react'
 import { useState } from 'react'
 
+import { cancelBillingClientRequests, clearBillingClientState } from '../api/billing'
 import {
   cancelProfileClientRequests,
   clearProfileClientState,
@@ -55,9 +56,12 @@ export function AccountPanel({ beforeSignOut }: AccountPanelProps) {
     if ((await beforeSignOut?.()) === false) return
     setSigningOut(true)
     clearAllTeachingDrafts()
-    await cancelProfileClientRequests(queryClient)
+    await Promise.all([
+      cancelProfileClientRequests(queryClient),
+      cancelBillingClientRequests(queryClient),
+    ])
     const session = await signOut()
-    await clearProfileClientState(queryClient)
+    await Promise.all([clearProfileClientState(queryClient), clearBillingClientState(queryClient)])
     if (session.status === 'anonymous') {
       await navigate({ to: '/signin', search: { redirect: '/' } })
       return

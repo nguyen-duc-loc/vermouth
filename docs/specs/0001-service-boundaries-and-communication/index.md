@@ -79,9 +79,9 @@ Fat events: each event carries the fields its consumers need, named here. Consum
 
 | Event | Key | Fields | Consumers |
 |---|---|---|---|
-| `teaching.class.created` | `class_id` | `class_id`, `tutor_id`, `name`, `rate_amount`, `currency`, `rate_effective_from` | `billing` stores the class label and the first row of rate history. `notifications` stores the class label. |
+| `teaching.class.created` | `class_id` | `class_id`, `tutor_id`, `name`, `rate_amount`, `currency`, `rate_effective_from`, optional `rate_revision` added by spec [0013](../0013-tuition-rate-monthly-calculation/index.md) for compatibility with retained events | `billing` stores the class label and the first row of rate history. `notifications` stores the class label. |
 | `teaching.class.changed` | `class_id` | `class_id`, `tutor_id`, `name` | `billing` and `notifications` update the class label. |
-| `teaching.class.rate.changed` | `class_id` | `class_id`, `tutor_id`, `rate_amount`, `currency`, `effective_from` | `billing` appends a rate history row. Never updates an existing one. |
+| `teaching.class.rate.changed` | `class_id` | `class_id`, `tutor_id`, `rate_amount`, `currency`, `effective_from`, optional `rate_revision` added by spec [0013](../0013-tuition-rate-monthly-calculation/index.md) for compatibility with retained events | `billing` appends a dated rate or corrects the row for the same effective date only when the event revision is newer. |
 | `teaching.session.scheduled` | `session_id` | `session_id`, `class_id`, `tutor_id`, `starts_at`, `ends_at`, `local_date` | `billing` stores a session row. `notifications` stores a today's session row. |
 | `teaching.session.moved` | `session_id` | `session_id`, `class_id`, `tutor_id`, `starts_at`, `ends_at`, `local_date` | `billing` and `notifications` update the session row. A move across a month boundary moves the billing month with it while that month is not yet invoiced; once it is, see flow 1 step 10. |
 | `teaching.session.cancelled` | `session_id` | `session_id`, `class_id`, `tutor_id` | `billing` marks the session cancelled, so it is never billable. `notifications` drops it from the digest. |

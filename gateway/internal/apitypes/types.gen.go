@@ -54,6 +54,114 @@ func (e AttendanceState) Valid() bool {
 	}
 }
 
+// Defines values for BillingBlockerCode.
+const (
+	AttendanceIncomplete BillingBlockerCode = "attendance_incomplete"
+	ProfileIncomplete    BillingBlockerCode = "profile_incomplete"
+	RateMissing          BillingBlockerCode = "rate_missing"
+)
+
+// Valid indicates whether the value is a known member of the BillingBlockerCode enum.
+func (e BillingBlockerCode) Valid() bool {
+	switch e {
+	case AttendanceIncomplete:
+		return true
+	case ProfileIncomplete:
+		return true
+	case RateMissing:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BillingLineCurrency.
+const (
+	BillingLineCurrencyVND BillingLineCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the BillingLineCurrency enum.
+func (e BillingLineCurrency) Valid() bool {
+	switch e {
+	case BillingLineCurrencyVND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BillingPeriodDefaultMinimumYear.
+const (
+	N2000 BillingPeriodDefaultMinimumYear = 2000
+)
+
+// Valid indicates whether the value is a known member of the BillingPeriodDefaultMinimumYear enum.
+func (e BillingPeriodDefaultMinimumYear) Valid() bool {
+	switch e {
+	case N2000:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BillingPeriodStateStatus.
+const (
+	BillingPeriodStateStatusAlreadyIssued BillingPeriodStateStatus = "already_issued"
+	BillingPeriodStateStatusUnissued      BillingPeriodStateStatus = "unissued"
+)
+
+// Valid indicates whether the value is a known member of the BillingPeriodStateStatus enum.
+func (e BillingPeriodStateStatus) Valid() bool {
+	switch e {
+	case BillingPeriodStateStatusAlreadyIssued:
+		return true
+	case BillingPeriodStateStatusUnissued:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BillingPreviewCurrency.
+const (
+	BillingPreviewCurrencyVND BillingPreviewCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the BillingPreviewCurrency enum.
+func (e BillingPreviewCurrency) Valid() bool {
+	switch e {
+	case BillingPreviewCurrencyVND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BillingPreviewStatus.
+const (
+	BillingPreviewStatusAlreadyIssued BillingPreviewStatus = "already_issued"
+	BillingPreviewStatusBlocked       BillingPreviewStatus = "blocked"
+	BillingPreviewStatusEmpty         BillingPreviewStatus = "empty"
+	BillingPreviewStatusReady         BillingPreviewStatus = "ready"
+)
+
+// Valid indicates whether the value is a known member of the BillingPreviewStatus enum.
+func (e BillingPreviewStatus) Valid() bool {
+	switch e {
+	case BillingPreviewStatusAlreadyIssued:
+		return true
+	case BillingPreviewStatusBlocked:
+		return true
+	case BillingPreviewStatusEmpty:
+		return true
+	case BillingPreviewStatusReady:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BillingProjectionState.
 const (
 	BillingProjectionStateActive  BillingProjectionState = "active"
@@ -72,15 +180,45 @@ func (e BillingProjectionState) Valid() bool {
 	}
 }
 
+// Defines values for BillingRunCurrency.
+const (
+	BillingRunCurrencyVND BillingRunCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the BillingRunCurrency enum.
+func (e BillingRunCurrency) Valid() bool {
+	switch e {
+	case BillingRunCurrencyVND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BillingStudentTotalCurrency.
+const (
+	BillingStudentTotalCurrencyVND BillingStudentTotalCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the BillingStudentTotalCurrency enum.
+func (e BillingStudentTotalCurrency) Valid() bool {
+	switch e {
+	case BillingStudentTotalCurrencyVND:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ClassCurrency.
 const (
-	VND ClassCurrency = "VND"
+	ClassCurrencyVND ClassCurrency = "VND"
 )
 
 // Valid indicates whether the value is a known member of the ClassCurrency enum.
 func (e ClassCurrency) Valid() bool {
 	switch e {
-	case VND:
+	case ClassCurrencyVND:
 		return true
 	default:
 		return false
@@ -114,6 +252,27 @@ func (e ClassColor) Valid() bool {
 	case Violet:
 		return true
 	case Yellow:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClassRatesHistoryState.
+const (
+	Synced      ClassRatesHistoryState = "synced"
+	Syncing     ClassRatesHistoryState = "syncing"
+	Unavailable ClassRatesHistoryState = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the ClassRatesHistoryState enum.
+func (e ClassRatesHistoryState) Valid() bool {
+	switch e {
+	case Synced:
+		return true
+	case Syncing:
+		return true
+	case Unavailable:
 		return true
 	default:
 		return false
@@ -162,6 +321,96 @@ func (e InvoiceProfileMissingFields) Valid() bool {
 	case ContactLine:
 		return true
 	case LegalName:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssuedInvoiceCurrency.
+const (
+	IssuedInvoiceCurrencyVND IssuedInvoiceCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the IssuedInvoiceCurrency enum.
+func (e IssuedInvoiceCurrency) Valid() bool {
+	switch e {
+	case IssuedInvoiceCurrencyVND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProjectedClassRateCurrency.
+const (
+	ProjectedClassRateCurrencyVND ProjectedClassRateCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the ProjectedClassRateCurrency enum.
+func (e ProjectedClassRateCurrency) Valid() bool {
+	switch e {
+	case ProjectedClassRateCurrencyVND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PutClassRateResponseCurrency.
+const (
+	PutClassRateResponseCurrencyVND PutClassRateResponseCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the PutClassRateResponseCurrency enum.
+func (e PutClassRateResponseCurrency) Valid() bool {
+	switch e {
+	case PutClassRateResponseCurrencyVND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PutClassRateResponseHistoryState.
+const (
+	Pending PutClassRateResponseHistoryState = "pending"
+)
+
+// Valid indicates whether the value is a known member of the PutClassRateResponseHistoryState enum.
+func (e PutClassRateResponseHistoryState) Valid() bool {
+	switch e {
+	case Pending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PutClassRateResponseIssuedInvoicesUnchanged.
+const (
+	True PutClassRateResponseIssuedInvoicesUnchanged = true
+)
+
+// Valid indicates whether the value is a known member of the PutClassRateResponseIssuedInvoicesUnchanged enum.
+func (e PutClassRateResponseIssuedInvoicesUnchanged) Valid() bool {
+	switch e {
+	case True:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RateCurrentCurrency.
+const (
+	RateCurrentCurrencyVND RateCurrentCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the RateCurrentCurrency enum.
+func (e RateCurrentCurrency) Valid() bool {
+	switch e {
+	case RateCurrentCurrencyVND:
 		return true
 	default:
 		return false
@@ -362,6 +611,80 @@ type BankCatalog struct {
 	Banks []Bank `json:"banks"`
 }
 
+// BillingBlocker defines model for BillingBlocker.
+type BillingBlocker struct {
+	ClassId     *openapi_types.UUID        `json:"class_id"`
+	Code        BillingBlockerCode         `json:"code"`
+	Destination BillingRecoveryDestination `json:"destination"`
+	Field       *string                    `json:"field"`
+	LocalDate   *openapi_types.Date        `json:"local_date"`
+	SessionId   *openapi_types.UUID        `json:"session_id"`
+	StudentId   *openapi_types.UUID        `json:"student_id"`
+}
+
+// BillingBlockerCode defines model for BillingBlocker.Code.
+type BillingBlockerCode string
+
+// BillingLine defines model for BillingLine.
+type BillingLine struct {
+	Amount     int64               `json:"amount"`
+	ClassId    *openapi_types.UUID `json:"class_id"`
+	ClassName  string              `json:"class_name"`
+	Currency   BillingLineCurrency `json:"currency"`
+	LocalDate  openapi_types.Date  `json:"local_date"`
+	RateAmount int64               `json:"rate_amount"`
+	SessionId  openapi_types.UUID  `json:"session_id"`
+}
+
+// BillingLineCurrency defines model for BillingLine.Currency.
+type BillingLineCurrency string
+
+// BillingPeriod defines model for BillingPeriod.
+type BillingPeriod struct {
+	Month int `json:"month"`
+	Year  int `json:"year"`
+}
+
+// BillingPeriodDefault defines model for BillingPeriodDefault.
+type BillingPeriodDefault struct {
+	MinimumYear BillingPeriodDefaultMinimumYear `json:"minimum_year"`
+	Month       int                             `json:"month"`
+	ServerDate  openapi_types.Date              `json:"server_date"`
+	Timezone    string                          `json:"timezone"`
+	Year        int                             `json:"year"`
+}
+
+// BillingPeriodDefaultMinimumYear defines model for BillingPeriodDefault.MinimumYear.
+type BillingPeriodDefaultMinimumYear int
+
+// BillingPeriodState defines model for BillingPeriodState.
+type BillingPeriodState struct {
+	Period BillingPeriod            `json:"period"`
+	Run    *BillingRun              `json:"run"`
+	Status BillingPeriodStateStatus `json:"status"`
+}
+
+// BillingPeriodStateStatus defines model for BillingPeriodState.Status.
+type BillingPeriodStateStatus string
+
+// BillingPreview defines model for BillingPreview.
+type BillingPreview struct {
+	Blockers           []BillingBlocker       `json:"blockers"`
+	Currency           BillingPreviewCurrency `json:"currency"`
+	GrandTotal         int64                  `json:"grand_total"`
+	Period             BillingPeriod          `json:"period"`
+	PreviewFingerprint *string                `json:"preview_fingerprint"`
+	Run                *BillingRun            `json:"run"`
+	Status             BillingPreviewStatus   `json:"status"`
+	Students           []BillingStudentTotal  `json:"students"`
+}
+
+// BillingPreviewCurrency defines model for BillingPreview.Currency.
+type BillingPreviewCurrency string
+
+// BillingPreviewStatus defines model for BillingPreview.Status.
+type BillingPreviewStatus string
+
 // BillingProjection defines model for BillingProjection.
 type BillingProjection struct {
 	AttendanceCount int64                  `json:"attendance_count"`
@@ -375,6 +698,41 @@ type BillingProjection struct {
 
 // BillingProjectionState defines model for BillingProjection.State.
 type BillingProjectionState string
+
+// BillingRecoveryDestination defines model for BillingRecoveryDestination.
+type BillingRecoveryDestination struct {
+	ClassId   *openapi_types.UUID `json:"class_id"`
+	Date      *openapi_types.Date `json:"date"`
+	RateDate  *openapi_types.Date `json:"rate_date"`
+	Route     string              `json:"route"`
+	SessionId *openapi_types.UUID `json:"session_id"`
+}
+
+// BillingRun defines model for BillingRun.
+type BillingRun struct {
+	BillingRunId openapi_types.UUID `json:"billing_run_id"`
+	CreatedAt    time.Time          `json:"created_at"`
+	Currency     BillingRunCurrency `json:"currency"`
+	Generation   int                `json:"generation"`
+	GrandTotal   int64              `json:"grand_total"`
+	Invoices     []IssuedInvoice    `json:"invoices"`
+	Period       BillingPeriod      `json:"period"`
+}
+
+// BillingRunCurrency defines model for BillingRun.Currency.
+type BillingRunCurrency string
+
+// BillingStudentTotal defines model for BillingStudentTotal.
+type BillingStudentTotal struct {
+	Currency    BillingStudentTotalCurrency `json:"currency"`
+	Lines       []BillingLine               `json:"lines"`
+	StudentId   openapi_types.UUID          `json:"student_id"`
+	StudentName string                      `json:"student_name"`
+	TotalAmount int64                       `json:"total_amount"`
+}
+
+// BillingStudentTotalCurrency defines model for BillingStudentTotal.Currency.
+type BillingStudentTotalCurrency string
 
 // CanonicalSession defines model for CanonicalSession.
 type CanonicalSession struct {
@@ -412,6 +770,7 @@ type Class struct {
 	Name              string             `json:"name"`
 	RateAmount        int64              `json:"rate_amount"`
 	RateEffectiveFrom openapi_types.Date `json:"rate_effective_from"`
+	RateRevision      int64              `json:"rate_revision"`
 	ScheduleRevision  int64              `json:"schedule_revision"`
 }
 
@@ -420,6 +779,20 @@ type ClassCurrency string
 
 // ClassColor defines model for ClassColor.
 type ClassColor string
+
+// ClassRates defines model for ClassRates.
+type ClassRates struct {
+	AllowedRange      RateAllowedRange       `json:"allowed_range"`
+	Archived          bool                   `json:"archived"`
+	ClassId           openapi_types.UUID     `json:"class_id"`
+	Current           RateCurrent            `json:"current"`
+	HistoryState      ClassRatesHistoryState `json:"history_state"`
+	ProjectedRevision int64                  `json:"projected_revision"`
+	Rates             []ProjectedClassRate   `json:"rates"`
+}
+
+// ClassRatesHistoryState defines model for ClassRates.HistoryState.
+type ClassRatesHistoryState string
 
 // ClassReference defines model for ClassReference.
 type ClassReference struct {
@@ -566,6 +939,26 @@ type InvoiceProfileBankStatus string
 // InvoiceProfileMissingFields defines model for InvoiceProfile.MissingFields.
 type InvoiceProfileMissingFields string
 
+// IssueBillingRequest defines model for IssueBillingRequest.
+type IssueBillingRequest struct {
+	PreviewFingerprint string `json:"preview_fingerprint"`
+}
+
+// IssuedInvoice defines model for IssuedInvoice.
+type IssuedInvoice struct {
+	Currency      IssuedInvoiceCurrency `json:"currency"`
+	InvoiceId     openapi_types.UUID    `json:"invoice_id"`
+	InvoiceNumber string                `json:"invoice_number"`
+	IssuedAt      time.Time             `json:"issued_at"`
+	Lines         []BillingLine         `json:"lines"`
+	StudentId     openapi_types.UUID    `json:"student_id"`
+	StudentName   string                `json:"student_name"`
+	TotalAmount   int64                 `json:"total_amount"`
+}
+
+// IssuedInvoiceCurrency defines model for IssuedInvoice.Currency.
+type IssuedInvoiceCurrency string
+
 // LocalTime Examples: 17:30
 type LocalTime = string
 
@@ -579,6 +972,44 @@ type MoveSessionRequest struct {
 	// StartTime Examples: 17:30
 	StartTime LocalTime `json:"start_time"`
 }
+
+// ProjectedClassRate defines model for ProjectedClassRate.
+type ProjectedClassRate struct {
+	Currency      ProjectedClassRateCurrency `json:"currency"`
+	EffectiveFrom openapi_types.Date         `json:"effective_from"`
+	RateAmount    int64                      `json:"rate_amount"`
+	RateRevision  int64                      `json:"rate_revision"`
+}
+
+// ProjectedClassRateCurrency defines model for ProjectedClassRate.Currency.
+type ProjectedClassRateCurrency string
+
+// PutClassRateRequest defines model for PutClassRateRequest.
+type PutClassRateRequest struct {
+	RateAmount int64 `json:"rate_amount"`
+}
+
+// PutClassRateResponse defines model for PutClassRateResponse.
+type PutClassRateResponse struct {
+	AllowedRange            RateAllowedRange                            `json:"allowed_range"`
+	ClassId                 openapi_types.UUID                          `json:"class_id"`
+	Currency                PutClassRateResponseCurrency                `json:"currency"`
+	Current                 RateCurrent                                 `json:"current"`
+	EffectiveFrom           openapi_types.Date                          `json:"effective_from"`
+	HistoryState            PutClassRateResponseHistoryState            `json:"history_state"`
+	IssuedInvoicesUnchanged PutClassRateResponseIssuedInvoicesUnchanged `json:"issued_invoices_unchanged"`
+	RateAmount              int64                                       `json:"rate_amount"`
+	RateRevision            int64                                       `json:"rate_revision"`
+}
+
+// PutClassRateResponseCurrency defines model for PutClassRateResponse.Currency.
+type PutClassRateResponseCurrency string
+
+// PutClassRateResponseHistoryState defines model for PutClassRateResponse.HistoryState.
+type PutClassRateResponseHistoryState string
+
+// PutClassRateResponseIssuedInvoicesUnchanged defines model for PutClassRateResponse.IssuedInvoicesUnchanged.
+type PutClassRateResponseIssuedInvoicesUnchanged bool
 
 // PutInvoiceProfileRequest defines model for PutInvoiceProfileRequest.
 type PutInvoiceProfileRequest struct {
@@ -609,6 +1040,23 @@ type PutScheduleResponse struct {
 	Rule            ScheduleRuleSummary `json:"rule"`
 	SupersededCount int                 `json:"superseded_count"`
 }
+
+// RateAllowedRange defines model for RateAllowedRange.
+type RateAllowedRange struct {
+	From    openapi_types.Date `json:"from"`
+	Through openapi_types.Date `json:"through"`
+}
+
+// RateCurrent defines model for RateCurrent.
+type RateCurrent struct {
+	Currency      RateCurrentCurrency `json:"currency"`
+	EffectiveFrom openapi_types.Date  `json:"effective_from"`
+	RateAmount    int64               `json:"rate_amount"`
+	RateRevision  int64               `json:"rate_revision"`
+}
+
+// RateCurrentCurrency defines model for RateCurrent.Currency.
+type RateCurrentCurrency string
 
 // Readiness defines model for Readiness.
 type Readiness struct {
@@ -876,6 +1324,12 @@ type WeeklyScheduleSlotInput struct {
 	Weekday   int       `json:"weekday"`
 }
 
+// BillingMonth defines model for BillingMonth.
+type BillingMonth = int
+
+// BillingYear defines model for BillingYear.
+type BillingYear = int
+
 // ClassId defines model for ClassId.
 type ClassId = openapi_types.UUID
 
@@ -917,6 +1371,9 @@ type InternalError = Error
 
 // NotFound The one error shape at the gateway boundary (spec 0001).
 type NotFound = Error
+
+// ProjectionUnavailable The one error shape at the gateway boundary (spec 0001).
+type ProjectionUnavailable = Error
 
 // RateLimited The one error shape at the gateway boundary (spec 0001).
 type RateLimited = Error
@@ -974,6 +1431,12 @@ type SignOutParams struct {
 
 // CreateClassParams defines parameters for CreateClass.
 type CreateClassParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PutClassRateParams defines parameters for PutClassRate.
+type PutClassRateParams struct {
 	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
@@ -1069,8 +1532,14 @@ type UpdateStudentParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// IssueBillingPeriodJSONRequestBody defines body for IssueBillingPeriod for application/json ContentType.
+type IssueBillingPeriodJSONRequestBody = IssueBillingRequest
+
 // CreateClassJSONRequestBody defines body for CreateClass for application/json ContentType.
 type CreateClassJSONRequestBody = CreateClassRequest
+
+// PutClassRateJSONRequestBody defines body for PutClassRate for application/json ContentType.
+type PutClassRateJSONRequestBody = PutClassRateRequest
 
 // ChangeClassRosterJSONRequestBody defines body for ChangeClassRoster for application/json ContentType.
 type ChangeClassRosterJSONRequestBody = ChangeRosterRequest

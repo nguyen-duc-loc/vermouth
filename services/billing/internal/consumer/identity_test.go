@@ -27,7 +27,7 @@ func TestIdentity_DeclaresRegistrationConsumerAndRejectsConflictingTutor(t *test
 	)
 	require.NoError(t, err)
 
-	err = handleIdentityEvent(t.Context(), nil, envelope)
+	err = handleIdentityEvent(t.Context(), nil, envelope, vermouth.SourcePosition{})
 	var conflict *vermouth.TutorIDConflictError
 	require.ErrorAs(t, err, &conflict)
 }
@@ -43,5 +43,5 @@ func TestIdentity_IgnoresUnknownFactsWithoutTouchingATransaction(t *testing.T) {
 		map[string]any{"tutor_id": tutorID},
 	)
 	require.NoError(t, err)
-	require.NoError(t, handleIdentityEvent(t.Context(), nil, envelope))
+	require.NoError(t, handleIdentityEvent(t.Context(), nil, envelope, vermouth.SourcePosition{}))
 }

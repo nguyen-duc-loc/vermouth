@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search } from 'lucide-react'
 import { type RefObject, useMemo, useRef, useState } from 'react'
-
+import { billingKeys } from '../api/billing'
 import {
   type ClassRoster,
   changeClassRoster,
@@ -110,6 +110,7 @@ export function RosterManagementSheet({
       setAdditions(new Set())
       setRemovals(new Set())
       setBoundaryError(undefined)
+      await queryClient.invalidateQueries({ queryKey: billingKeys.all })
       onSaved(saved)
       onOpenChange(false)
     },

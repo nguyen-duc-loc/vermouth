@@ -28,7 +28,12 @@ func Identity() vermouth.Consumer {
 	}
 }
 
-func handleIdentityEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) error {
+func handleIdentityEvent(
+	ctx context.Context,
+	tx pgx.Tx,
+	env vermouth.Envelope,
+	_ vermouth.SourcePosition,
+) error {
 	if env.EventName != vermouth.EventTutorRegistered {
 		return nil
 	}

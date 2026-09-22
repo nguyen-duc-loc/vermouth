@@ -89,6 +89,8 @@ func Mux(deps Deps) http.Handler {
 	})
 
 	authenticated.HandleFunc("POST /api/classes", proxyCreateClass(deps))
+	authenticated.HandleFunc("GET /api/classes/{class_id}/rates", readClassRates(deps))
+	authenticated.HandleFunc("PUT /api/classes/{class_id}/rates/{effective_date}", putClassRate(deps))
 	authenticated.HandleFunc("PUT /api/classes/{class_id}/schedule", proxyPutSchedule(deps))
 	authenticated.HandleFunc("POST /api/classes/{class_id}/schedule/end", proxyEndSchedule(deps))
 	authenticated.HandleFunc("POST /api/sessions/{session_id}/move", proxyMoveSession(deps))
@@ -109,6 +111,10 @@ func Mux(deps Deps) http.Handler {
 	authenticated.HandleFunc("GET /api/invoice-profile", proxyGetInvoiceProfile(deps))
 	authenticated.HandleFunc("PUT /api/invoice-profile", proxyPutInvoiceProfile(deps))
 	authenticated.HandleFunc("GET /api/banks", proxyGetBanks(deps))
+	authenticated.HandleFunc("GET /api/billing-periods/default", proxyBillingPeriodDefault(deps))
+	authenticated.HandleFunc("GET /api/billing-periods/{year}/{month}", proxyGetBillingPeriod(deps))
+	authenticated.HandleFunc("POST /api/billing-periods/{year}/{month}/preview", proxyPreviewBillingPeriod(deps))
+	authenticated.HandleFunc("POST /api/billing-periods/{year}/{month}/issue", proxyIssueBillingPeriod(deps))
 
 	mux.Handle("/api/", auth.Middleware(deps.Verifier, deps.Logger, authenticated))
 
@@ -211,10 +217,19 @@ func proxyPutSchedule(deps Deps) http.HandlerFunc {
 
 func proxyCreateClass(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var input apitypes.CreateClassRequest
+		var input struct {
+			apitypes.CreateClassRequest
+
+			RateAmount *int64 `json:"rate_amount"`
+		}
 		if !decodeJSONBody(w, r, &input) {
 			return
 		}
+		if input.RateAmount == nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "rate_amount must be an integer")
+			return
+		}
+		input.CreateClassRequest.RateAmount = *input.RateAmount
 		response, err := deps.Client.CallWithHeaders(
 			r.Context(),
 			http.MethodPost,
@@ -222,7 +237,7 @@ func proxyCreateClass(deps Deps) http.HandlerFunc {
 			"/classes",
 			vermouth.BearerToken(r),
 			http.Header{idempotencyHeader: []string{r.Header.Get(idempotencyHeader)}},
-			input,
+			input.CreateClassRequest,
 		)
 		if err != nil {
 			upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)

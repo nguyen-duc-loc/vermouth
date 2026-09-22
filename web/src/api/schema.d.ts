@@ -191,6 +191,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/classes/{class_id}/rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read authoritative current rate and projected dated history */
+        get: operations["getClassRates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/classes/{class_id}/rates/{effective_date}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Create or correct one dated class rate */
+        put: operations["putClassRate"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/classes/{class_id}/schedule/end": {
         parameters: {
             query?: never;
@@ -384,6 +418,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/billing-periods/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the server derived most recent completed month */
+        get: operations["getBillingPeriodDefault"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing-periods/{year}/{month}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read an unissued month or its immutable issued run */
+        get: operations["getBillingPeriod"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing-periods/{year}/{month}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Calculate one completed month after proving projection readiness */
+        post: operations["previewBillingPeriod"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing-periods/{year}/{month}/issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue one immutable invoice per billable student */
+        post: operations["issueBillingPeriod"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/home": {
         parameters: {
             query?: never;
@@ -511,6 +613,8 @@ export interface components {
             rate_effective_from: string;
             /** Format: int64 */
             schedule_revision: number;
+            /** Format: int64 */
+            rate_revision: number;
         };
         TeachingSession: {
             /** Format: uuid */
@@ -949,6 +1053,179 @@ export interface components {
         BankCatalog: {
             banks: components["schemas"]["Bank"][];
         };
+        RateCurrent: {
+            /** Format: int64 */
+            rate_amount: number;
+            /** @constant */
+            currency: "VND";
+            /** Format: date */
+            effective_from: string;
+            /** Format: int64 */
+            rate_revision: number;
+        };
+        RateAllowedRange: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            through: string;
+        };
+        ProjectedClassRate: {
+            /** Format: date */
+            effective_from: string;
+            /** Format: int64 */
+            rate_amount: number;
+            /** @constant */
+            currency: "VND";
+            /** Format: int64 */
+            rate_revision: number;
+        };
+        ClassRates: {
+            /** Format: uuid */
+            class_id: string;
+            current: components["schemas"]["RateCurrent"];
+            allowed_range: components["schemas"]["RateAllowedRange"];
+            archived: boolean;
+            rates: components["schemas"]["ProjectedClassRate"][];
+            /** Format: int64 */
+            projected_revision: number;
+            /** @enum {string} */
+            history_state: "synced" | "syncing" | "unavailable";
+        };
+        PutClassRateRequest: {
+            /** Format: int64 */
+            rate_amount: number;
+        };
+        PutClassRateResponse: {
+            /** Format: uuid */
+            class_id: string;
+            /** Format: date */
+            effective_from: string;
+            /** Format: int64 */
+            rate_amount: number;
+            /** @constant */
+            currency: "VND";
+            /** Format: int64 */
+            rate_revision: number;
+            current: components["schemas"]["RateCurrent"];
+            allowed_range: components["schemas"]["RateAllowedRange"];
+            /** @constant */
+            issued_invoices_unchanged: true;
+            /** @constant */
+            history_state: "pending";
+        };
+        BillingPeriod: {
+            year: number;
+            month: number;
+        };
+        BillingPeriodDefault: {
+            /** Format: date */
+            server_date: string;
+            timezone: string;
+            year: number;
+            month: number;
+            /** @constant */
+            minimum_year: 2000;
+        };
+        BillingRecoveryDestination: {
+            route: string;
+            /** Format: date */
+            date: string | null;
+            /** Format: uuid */
+            session_id: string | null;
+            /** Format: uuid */
+            class_id: string | null;
+            /** Format: date */
+            rate_date: string | null;
+        };
+        BillingBlocker: {
+            /** @enum {string} */
+            code: "profile_incomplete" | "attendance_incomplete" | "rate_missing";
+            /** Format: uuid */
+            student_id: string | null;
+            /** Format: uuid */
+            session_id: string | null;
+            /** Format: uuid */
+            class_id: string | null;
+            /** Format: date */
+            local_date: string | null;
+            field: string | null;
+            destination: components["schemas"]["BillingRecoveryDestination"];
+        };
+        BillingLine: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            class_id: string | null;
+            class_name: string;
+            /** Format: date */
+            local_date: string;
+            /** Format: int64 */
+            rate_amount: number;
+            /** Format: int64 */
+            amount: number;
+            /** @constant */
+            currency: "VND";
+        };
+        BillingStudentTotal: {
+            /** Format: uuid */
+            student_id: string;
+            student_name: string;
+            lines: components["schemas"]["BillingLine"][];
+            /** Format: int64 */
+            total_amount: number;
+            /** @constant */
+            currency: "VND";
+        };
+        IssuedInvoice: {
+            /** Format: uuid */
+            invoice_id: string;
+            /** Format: uuid */
+            student_id: string;
+            student_name: string;
+            invoice_number: string;
+            /** Format: int64 */
+            total_amount: number;
+            /** @constant */
+            currency: "VND";
+            /** Format: date-time */
+            issued_at: string;
+            lines: components["schemas"]["BillingLine"][];
+        };
+        BillingRun: {
+            /** Format: uuid */
+            billing_run_id: string;
+            period: components["schemas"]["BillingPeriod"];
+            generation: number;
+            /** Format: date-time */
+            created_at: string;
+            invoices: components["schemas"]["IssuedInvoice"][];
+            /** Format: int64 */
+            grand_total: number;
+            /** @constant */
+            currency: "VND";
+        };
+        BillingPeriodState: {
+            /** @enum {string} */
+            status: "unissued" | "already_issued";
+            period: components["schemas"]["BillingPeriod"];
+            run: components["schemas"]["BillingRun"] | null;
+        };
+        BillingPreview: {
+            /** @enum {string} */
+            status: "ready" | "blocked" | "empty" | "already_issued";
+            period: components["schemas"]["BillingPeriod"];
+            students: components["schemas"]["BillingStudentTotal"][];
+            blockers: components["schemas"]["BillingBlocker"][];
+            /** Format: int64 */
+            grand_total: number;
+            /** @constant */
+            currency: "VND";
+            preview_fingerprint: string | null;
+            run: components["schemas"]["BillingRun"] | null;
+        };
+        IssueBillingRequest: {
+            preview_fingerprint: string;
+        };
         HomeBillingProjection: {
             billing_projection: components["schemas"]["BillingProjection"] | null;
             billing_projection_unavailable: string | null;
@@ -1045,11 +1322,24 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The projection cannot yet prove the requested published cut */
+        ProjectionUnavailable: {
+            headers: {
+                "Retry-After"?: number;
+                "Cache-Control": "no-store";
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
     parameters: {
         /** @description One browser generated UUID, retained until this create step succeeds. */
         IdempotencyKey: string;
         ClassId: string;
+        BillingYear: number;
+        BillingMonth: number;
         SessionId: string;
         StudentId: string;
         /** @description Case insensitive name or literal phone fragment, trimmed by teaching. */
@@ -1381,6 +1671,67 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PutScheduleResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getClassRates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                class_id: components["parameters"]["ClassId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current rate, allowed correction range, and complete dated history */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassRates"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    putClassRate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                class_id: components["parameters"]["ClassId"];
+                effective_date: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutClassRateRequest"];
+            };
+        };
+        responses: {
+            /** @description The committed dated rate or its original retry response */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PutClassRateResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -1890,6 +2241,125 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    getBillingPeriodDefault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verified timezone and default completed period */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPeriodDefault"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    getBillingPeriod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year: components["parameters"]["BillingYear"];
+                month: components["parameters"]["BillingMonth"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current authoritative period state */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPeriodState"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    previewBillingPeriod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year: components["parameters"]["BillingYear"];
+                month: components["parameters"]["BillingMonth"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ready, blocked, empty, or already issued month */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["ProjectionUnavailable"];
+        };
+    };
+    issueBillingPeriod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year: components["parameters"]["BillingYear"];
+                month: components["parameters"]["BillingMonth"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueBillingRequest"];
+            };
+        };
+        responses: {
+            /** @description The existing run returned for a retry */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingRun"];
+                };
+            };
+            /** @description The new run and every immutable invoice */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingRun"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ProjectionUnavailable"];
         };
     };
     getHome: {

@@ -28,7 +28,7 @@ today's sessions is a projection kept current by its consumers and rebuildable b
 ## Commands
 
 ```bash
-task replay:notifications:recipients   # stop, reset the group, delete handled_events rows, restart
+task replay:notifications:recipients   # stop, record a replay generation, reset offsets and handled rows, restart
 task svc:start -- notifications
 task logs -- notifications
 ```
@@ -48,8 +48,9 @@ task logs -- notifications
 - Exactly one replica while the scheduler is an in process ticker (STK-23). The unique constraint on
   `(tutor_id, local_date)` makes a repeated tick harmless but cannot serialise two replicas, so a
   second one means two digests on the same morning. Feature 5 owns the advisory lock that fixes this.
-- A replay is only correct as the pair: reset the offsets and delete that consumer's
-  `handled_events` rows. Either half alone is a silent no operation.
+- A replay goes through the shared tool, which records the broker identity, partition set, captured
+  ends, and a new projection generation before it resets offsets and handled rows. A partial manual
+  reset bypasses that evidence and is not a valid replay.
 
 ## Agent skills
 

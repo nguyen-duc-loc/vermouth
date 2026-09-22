@@ -26,7 +26,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 10 | Recurring sessions & exceptions | Slice 3 | done |
 | 11 | Student records & class rosters | Slice 3 | done |
 | 12 | Tutor profile & bank details | Slice 4 | done |
-| 13 | Tuition rate & monthly calculation | Slice 4 | planned |
+| 13 | Tuition rate & monthly calculation | Slice 4 | in-progress |
 | 14 | Invoice PDF with payment QR | Slice 4 | planned |
 | 15 | Invoice list, share & mark paid | Slice 4 | planned |
 | 21 | Rate limit the auth endpoints | Slice 5 | done |
@@ -185,10 +185,22 @@ code in `services/billing/`, `gateway/`, `api/openapi.yaml`, `web/src/`, and `te
   - [x] Close the thread with migration reversal, generated contracts, tenant and replay safety, private logging, browser cleanup, accessibility evidence, and `task thread` · AC-2, AC-4, AC-6, AC-7, AC-9 to AC-14
 - [x] Verify it: `$check verify tutor profile & bank details`
 
-### 13. Tuition rate & monthly calculation · needs a decision · GA
+### 13. Tuition rate & monthly calculation · in-progress · GA
 A rate per session lives on the class, and at month end the system counts each student's Present sessions and works out what they owe. This is where a silent error sends a wrong bill to a parent, so it gets the heaviest treatment in the project.
 **Done when:** a class carries a rate per session, a month end run produces a per student total from Present sessions only, absent and cancelled sessions are excluded, a rate change does not rewrite an already issued invoice, and running the calculation twice does not produce two invoices.
-- [ ] Design it (spec): `$architect tuition rate & monthly calculation`
+spec [0013](../specs/0013-tuition-rate-monthly-calculation/index.md)
+- [x] Design it (spec): `$architect tuition rate & monthly calculation`
+- [x] Build it: `$develop tuition rate & monthly calculation`
+  - [x] Establish the shared failure ledger, replay certification, projection generations, safe operator recovery, and additive migrations · AC-8 to AC-11, AC-23, AC-24
+  - [x] Prove one dated rate through teaching, Redpanda, billing, preview, issue, generated contracts, and the browser, then complete revisions, history, archived corrections, and retry behavior · AC-1 to AC-4, AC-8, AC-12 to AC-17, AC-19, AC-21 to AC-24
+  - [x] Complete monthly eligibility, blockers, empty and zero rate cases, checked totals, volume bounds, detailed review, and accessible recovery destinations · AC-4 to AC-7, AC-11 to AC-13, AC-20 to AC-24
+  - [x] Harden fixed broker barriers, certification, dead letters, stale previews, transaction rollback, issue races, lost responses, degraded reads, privacy, and immutable invoice evidence · AC-8 to AC-19, AC-23, AC-24
+  - [x] Regenerate every contract, close the real Postgres and Redpanda thread, add browser component coverage, and record GA evidence for the whole feature · AC-1 to AC-24
+code in `pkg/vermouth/`, `services/teaching/`, `services/billing/`, `gateway/`, `api/openapi.yaml`, `web/src/`, and `test/`
+- [x] Verify it: `$check verify tuition rate & monthly calculation`
+- [x] Test it: `$test tuition rate & monthly calculation`
+- [x] Review it (fresh model): `$check review tuition rate & monthly calculation`
+- [ ] Document it: `$document tuition rate & monthly calculation`
 
 ### 14. Invoice PDF with payment QR · needs a decision
 Turn a calculated total into a PDF a parent will take seriously: the student's name, the sessions attended with dates, the rate, the total, and a payment QR carrying the tutor's bank details with the amount already filled in. This is the professionalism the product promises.
@@ -268,6 +280,7 @@ Out of scope for this build pass, kept here so the plan stays honest.
 - **Student restoration**: restore an archived student and publish the matching cross service fact before making the record active again · from spec 0011 · needs a decision
 - **Metrics dashboards**: throughput and latency graphs across services · needs a decision
 - **Product analytics**: which features get used · needs a decision
+- **Teaching outbox fence for billing**: prove that billing includes every committed teaching write, not only every event published through a captured broker cut, if friend testing shows reviewed causal syncing is not enough · from spec 0013 · needs a decision
 - **Teaching centers with several tutors**: shared students, owner and tutor roles · needs a decision
 - **Vermouth subscription plans**: charging tutors to use the product · needs a decision
 - **Session level student count snapshot**: carry the roster count on the session events if the digest count drifts, instead of `notifications` counting roster events · from spec 0001

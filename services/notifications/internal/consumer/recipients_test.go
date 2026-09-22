@@ -35,7 +35,7 @@ func TestHandleTutorEventRejectsAConflictingPayloadTenant(t *testing.T) {
 	require.NoError(t, err)
 
 	var tx pgx.Tx
-	err = consumer.Recipients().Handle(t.Context(), tx, env)
+	err = consumer.Recipients().Handle(t.Context(), tx, env, vermouth.SourcePosition{})
 	require.ErrorAs(t, err, new(*vermouth.TutorIDConflictError))
 }
 
@@ -62,6 +62,6 @@ func TestHandleTutorEventRejectsAMissingEnvelopeTenant(t *testing.T) {
 	require.NoError(t, err)
 
 	var tx pgx.Tx
-	err = consumer.Recipients().Handle(t.Context(), tx, env)
+	err = consumer.Recipients().Handle(t.Context(), tx, env, vermouth.SourcePosition{})
 	require.ErrorContains(t, err, "tutor_id is required")
 }

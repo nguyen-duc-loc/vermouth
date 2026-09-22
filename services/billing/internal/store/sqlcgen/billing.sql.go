@@ -13,6 +13,79 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const applyClassRateFact = `-- name: ApplyClassRateFact :exec
+INSERT INTO class_rates (
+    class_id,
+    effective_from,
+    tutor_id,
+    rate_amount,
+    currency,
+    rate_revision,
+    source_partition,
+    source_offset
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8
+)
+ON CONFLICT (class_id, effective_from) DO UPDATE
+SET rate_amount = excluded.rate_amount,
+    currency = excluded.currency,
+    rate_revision = excluded.rate_revision,
+    source_partition = excluded.source_partition,
+    source_offset = excluded.source_offset,
+    updated_at = now()
+WHERE class_rates.tutor_id = excluded.tutor_id
+  AND (
+      excluded.rate_revision > class_rates.rate_revision
+      OR (
+          excluded.rate_revision = 0
+          AND class_rates.rate_revision = 0
+          AND (
+              class_rates.source_partition IS NULL
+              OR (
+                  class_rates.source_partition = excluded.source_partition
+                  AND class_rates.source_offset < excluded.source_offset
+              )
+          )
+      )
+  )
+`
+
+type ApplyClassRateFactParams struct {
+	ClassID         uuid.UUID
+	EffectiveFrom   pgtype.Date
+	TutorID         uuid.UUID
+	RateAmount      int64
+	Currency        string
+	RateRevision    int64
+	SourcePartition pgtype.Int4
+	SourceOffset    pgtype.Int8
+}
+
+// ApplyClassRateFact accepts positive revisions only when they advance the
+// stored date. Revision zero keeps retained event compatibility and uses the
+// original source coordinate to make replay order deterministic.
+func (q *Queries) ApplyClassRateFact(ctx context.Context, arg ApplyClassRateFactParams) error {
+	_, err := q.db.Exec(ctx, applyClassRateFact,
+		arg.ClassID,
+		arg.EffectiveFrom,
+		arg.TutorID,
+		arg.RateAmount,
+		arg.Currency,
+		arg.RateRevision,
+		arg.SourcePartition,
+		arg.SourceOffset,
+	)
+	return err
+}
+
 const closeRosterPeriod = `-- name: CloseRosterPeriod :exec
 UPDATE roster_periods
 SET effective_to = $4,
@@ -103,6 +176,25 @@ func (q *Queries) GetBillingRun(ctx context.Context, arg GetBillingRunParams) (B
 		&i.SupersededAt,
 	)
 	return i, err
+}
+
+const getBillingTransactionTimestamp = `-- name: GetBillingTransactionTimestamp :one
+SELECT transaction_timestamp()::timestamptz
+FROM billing_runs
+WHERE tutor_id = $1
+  AND billing_run_id = $2
+`
+
+type GetBillingTransactionTimestampParams struct {
+	TutorID      uuid.UUID
+	BillingRunID uuid.UUID
+}
+
+func (q *Queries) GetBillingTransactionTimestamp(ctx context.Context, arg GetBillingTransactionTimestampParams) (time.Time, error) {
+	row := q.db.QueryRow(ctx, getBillingTransactionTimestamp, arg.TutorID, arg.BillingRunID)
+	var column_1 time.Time
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const getClassRateBookkeeping = `-- name: GetClassRateBookkeeping :one
@@ -230,6 +322,37 @@ func (q *Queries) GetInvoiceProfile(ctx context.Context, tutorID uuid.UUID) (Inv
 		&i.BankCode,
 		&i.Revision,
 		&i.IsComplete,
+	)
+	return i, err
+}
+
+const getLiveBillingRunForPeriod = `-- name: GetLiveBillingRunForPeriod :one
+SELECT billing_run_id, tutor_id, period_year, period_month, generation,
+       created_at, superseded_at
+FROM billing_runs
+WHERE tutor_id = $1
+  AND period_year = $2
+  AND period_month = $3
+  AND superseded_at IS NULL
+`
+
+type GetLiveBillingRunForPeriodParams struct {
+	TutorID     uuid.UUID
+	PeriodYear  int32
+	PeriodMonth int32
+}
+
+func (q *Queries) GetLiveBillingRunForPeriod(ctx context.Context, arg GetLiveBillingRunForPeriodParams) (BillingRun, error) {
+	row := q.db.QueryRow(ctx, getLiveBillingRunForPeriod, arg.TutorID, arg.PeriodYear, arg.PeriodMonth)
+	var i BillingRun
+	err := row.Scan(
+		&i.BillingRunID,
+		&i.TutorID,
+		&i.PeriodYear,
+		&i.PeriodMonth,
+		&i.Generation,
+		&i.CreatedAt,
+		&i.SupersededAt,
 	)
 	return i, err
 }
@@ -584,6 +707,124 @@ func (q *Queries) ListBillableSessions(ctx context.Context, arg ListBillableSess
 	return items, nil
 }
 
+const listBillingCandidates = `-- name: ListBillingCandidates :many
+SELECT s.session_id,
+       s.class_id,
+       coverage.student_id,
+       s.local_date,
+       coverage.coverage_count,
+       c.name AS class_name,
+       st.name AS student_name,
+       a.state AS attendance_state,
+       a.marked_at,
+       (rate.rate_amount IS NOT NULL)::boolean AS rate_known,
+       coalesce(rate.rate_amount, 0)::bigint AS rate_amount,
+       coalesce(rate.currency, '')::text AS currency,
+       coalesce(rate.effective_from, DATE '1970-01-01')::date AS rate_effective_from,
+       coalesce(rate.rate_revision, 0)::bigint AS rate_revision
+FROM sessions s
+JOIN LATERAL (
+    SELECT rp.student_id, count(*)::bigint AS coverage_count
+    FROM roster_periods rp
+    WHERE rp.class_id = s.class_id
+      AND rp.tutor_id = s.tutor_id
+      AND rp.effective_from <= s.local_date
+      AND (rp.effective_to IS NULL OR s.local_date <= rp.effective_to)
+    GROUP BY rp.student_id
+) coverage ON true
+LEFT JOIN classes c
+  ON c.class_id = s.class_id
+ AND c.tutor_id = s.tutor_id
+LEFT JOIN students st
+  ON st.student_id = coverage.student_id
+ AND st.tutor_id = s.tutor_id
+LEFT JOIN attendance a
+  ON a.session_id = s.session_id
+ AND a.student_id = coverage.student_id
+ AND a.tutor_id = s.tutor_id
+LEFT JOIN LATERAL (
+    SELECT cr.rate_amount, cr.currency, cr.effective_from, cr.rate_revision
+    FROM class_rates cr
+    WHERE cr.class_id = s.class_id
+      AND cr.tutor_id = s.tutor_id
+      AND cr.effective_from <= s.local_date
+    ORDER BY cr.effective_from DESC
+    LIMIT 1
+) rate ON true
+WHERE s.tutor_id = $1
+  AND s.local_date >= $2
+  AND s.local_date <= $3
+  AND s.cancelled_at IS NULL
+ORDER BY coverage.student_id, s.local_date, s.session_id
+LIMIT $4
+`
+
+type ListBillingCandidatesParams struct {
+	OwnerTutorID uuid.UUID
+	PeriodStart  pgtype.Date
+	PeriodEnd    pgtype.Date
+	RowLimit     int32
+}
+
+type ListBillingCandidatesRow struct {
+	SessionID         uuid.UUID
+	ClassID           uuid.UUID
+	StudentID         uuid.UUID
+	LocalDate         pgtype.Date
+	CoverageCount     int64
+	ClassName         pgtype.Text
+	StudentName       pgtype.Text
+	AttendanceState   pgtype.Text
+	MarkedAt          pgtype.Timestamptz
+	RateKnown         bool
+	RateAmount        int64
+	Currency          string
+	RateEffectiveFrom pgtype.Date
+	RateRevision      int64
+}
+
+// ListBillingCandidates begins with every session and covered roster student.
+// Outer joins keep missing labels, attendance, and rates visible as blockers.
+func (q *Queries) ListBillingCandidates(ctx context.Context, arg ListBillingCandidatesParams) ([]ListBillingCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listBillingCandidates,
+		arg.OwnerTutorID,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListBillingCandidatesRow{}
+	for rows.Next() {
+		var i ListBillingCandidatesRow
+		if err := rows.Scan(
+			&i.SessionID,
+			&i.ClassID,
+			&i.StudentID,
+			&i.LocalDate,
+			&i.CoverageCount,
+			&i.ClassName,
+			&i.StudentName,
+			&i.AttendanceState,
+			&i.MarkedAt,
+			&i.RateKnown,
+			&i.RateAmount,
+			&i.Currency,
+			&i.RateEffectiveFrom,
+			&i.RateRevision,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listInvoiceLines = `-- name: ListInvoiceLines :many
 SELECT invoice_line_id, invoice_id, tutor_id, session_id, session_date, class_name,
        rate_amount, amount
@@ -600,6 +841,52 @@ type ListInvoiceLinesParams struct {
 
 func (q *Queries) ListInvoiceLines(ctx context.Context, arg ListInvoiceLinesParams) ([]InvoiceLine, error) {
 	rows, err := q.db.Query(ctx, listInvoiceLines, arg.TutorID, arg.InvoiceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []InvoiceLine{}
+	for rows.Next() {
+		var i InvoiceLine
+		if err := rows.Scan(
+			&i.InvoiceLineID,
+			&i.InvoiceID,
+			&i.TutorID,
+			&i.SessionID,
+			&i.SessionDate,
+			&i.ClassName,
+			&i.RateAmount,
+			&i.Amount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInvoiceLinesForRun = `-- name: ListInvoiceLinesForRun :many
+SELECT il.invoice_line_id, il.invoice_id, il.tutor_id, il.session_id,
+       il.session_date, il.class_name, il.rate_amount, il.amount
+FROM invoice_lines il
+JOIN invoices i
+  ON i.invoice_id = il.invoice_id
+ AND i.tutor_id = il.tutor_id
+WHERE il.tutor_id = $1
+  AND i.billing_run_id = $2
+ORDER BY i.invoice_number, il.session_date, il.session_id
+`
+
+type ListInvoiceLinesForRunParams struct {
+	TutorID      uuid.UUID
+	BillingRunID uuid.UUID
+}
+
+func (q *Queries) ListInvoiceLinesForRun(ctx context.Context, arg ListInvoiceLinesForRunParams) ([]InvoiceLine, error) {
+	rows, err := q.db.Query(ctx, listInvoiceLinesForRun, arg.TutorID, arg.BillingRunID)
 	if err != nil {
 		return nil, err
 	}
@@ -682,6 +969,123 @@ func (q *Queries) ListInvoicesForPeriod(ctx context.Context, arg ListInvoicesFor
 			&i.PaidAt,
 			&i.VoidedAt,
 			&i.StudentName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInvoicesForRun = `-- name: ListInvoicesForRun :many
+SELECT invoice_id, tutor_id, billing_run_id, student_id, invoice_number, period_year,
+       period_month, total_amount, currency, issued_at, pdf_location, paid_at, voided_at,
+       void_reason, replaces_invoice_id, student_name, payee_legal_name, payee_contact_line,
+       payee_bank_name, payee_bank_account_number, payee_bank_account_holder, updated_at
+FROM invoices
+WHERE tutor_id = $1
+  AND billing_run_id = $2
+ORDER BY invoice_number
+`
+
+type ListInvoicesForRunParams struct {
+	TutorID      uuid.UUID
+	BillingRunID uuid.UUID
+}
+
+func (q *Queries) ListInvoicesForRun(ctx context.Context, arg ListInvoicesForRunParams) ([]Invoice, error) {
+	rows, err := q.db.Query(ctx, listInvoicesForRun, arg.TutorID, arg.BillingRunID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Invoice{}
+	for rows.Next() {
+		var i Invoice
+		if err := rows.Scan(
+			&i.InvoiceID,
+			&i.TutorID,
+			&i.BillingRunID,
+			&i.StudentID,
+			&i.InvoiceNumber,
+			&i.PeriodYear,
+			&i.PeriodMonth,
+			&i.TotalAmount,
+			&i.Currency,
+			&i.IssuedAt,
+			&i.PdfLocation,
+			&i.PaidAt,
+			&i.VoidedAt,
+			&i.VoidReason,
+			&i.ReplacesInvoiceID,
+			&i.StudentName,
+			&i.PayeeLegalName,
+			&i.PayeeContactLine,
+			&i.PayeeBankName,
+			&i.PayeeBankAccountNumber,
+			&i.PayeeBankAccountHolder,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnedClassRates = `-- name: ListOwnedClassRates :many
+SELECT class_id, effective_from, tutor_id, rate_amount, currency, rate_revision,
+       source_partition, source_offset, recorded_at, updated_at
+FROM class_rates
+WHERE tutor_id = $1
+  AND class_id = $2
+ORDER BY effective_from DESC
+`
+
+type ListOwnedClassRatesParams struct {
+	TutorID uuid.UUID
+	ClassID uuid.UUID
+}
+
+type ListOwnedClassRatesRow struct {
+	ClassID         uuid.UUID
+	EffectiveFrom   pgtype.Date
+	TutorID         uuid.UUID
+	RateAmount      int64
+	Currency        string
+	RateRevision    int64
+	SourcePartition pgtype.Int4
+	SourceOffset    pgtype.Int8
+	RecordedAt      time.Time
+	UpdatedAt       time.Time
+}
+
+func (q *Queries) ListOwnedClassRates(ctx context.Context, arg ListOwnedClassRatesParams) ([]ListOwnedClassRatesRow, error) {
+	rows, err := q.db.Query(ctx, listOwnedClassRates, arg.TutorID, arg.ClassID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOwnedClassRatesRow{}
+	for rows.Next() {
+		var i ListOwnedClassRatesRow
+		if err := rows.Scan(
+			&i.ClassID,
+			&i.EffectiveFrom,
+			&i.TutorID,
+			&i.RateAmount,
+			&i.Currency,
+			&i.RateRevision,
+			&i.SourcePartition,
+			&i.SourceOffset,
+			&i.RecordedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -33,6 +33,8 @@ func Mux(deps Deps) http.Handler {
 	mux := http.NewServeMux()
 	deps.Health.Mount(mux)
 	mux.HandleFunc("POST /classes", createClass(deps))
+	mux.HandleFunc("GET /classes/{class_id}/rates", readClassRates(deps))
+	mux.HandleFunc("PUT /classes/{class_id}/rates/{effective_date}", putClassRate(deps))
 	mux.HandleFunc("PUT /classes/{class_id}/schedule", putSchedule(deps))
 	mux.HandleFunc("POST /classes/{class_id}/schedule/end", endSchedule(deps))
 	mux.HandleFunc("POST /sessions/{session_id}/move", moveSession(deps))
@@ -50,6 +52,68 @@ func Mux(deps Deps) http.Handler {
 	mux.HandleFunc("GET /home", readHome(deps))
 	mux.HandleFunc("GET /schedule", readSchedule(deps))
 	return vermouth.RequestIDMiddleware(deps.Logger, mux)
+}
+
+func readClassRates(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := verifiedClaims(deps, w, r)
+		if !ok {
+			return
+		}
+		classID, err := uuid.Parse(r.PathValue("class_id"))
+		if err != nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "class_id must be a UUID")
+			return
+		}
+		result, err := deps.Handler.ReadClassRateState(
+			r.Context(), claims.TutorID, classID, claims.Timezone,
+		)
+		if err != nil {
+			writeHandlerError(deps, w, r, "Read class rates", err)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		vermouth.WriteJSON(r.Context(), deps.Logger, w, http.StatusOK, result)
+	}
+}
+
+func putClassRate(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := verifiedClaims(deps, w, r)
+		if !ok {
+			return
+		}
+		classID, err := uuid.Parse(r.PathValue("class_id"))
+		if err != nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "class_id must be a UUID")
+			return
+		}
+		var input struct {
+			RateAmount *int64 `json:"rate_amount"`
+		}
+		if !decodeJSON(w, r, &input) {
+			return
+		}
+		if input.RateAmount == nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "rate_amount must be an integer")
+			return
+		}
+		result, status, err := deps.Handler.PutClassRate(
+			r.Context(),
+			claims.TutorID,
+			classID,
+			claims.Timezone,
+			r.Header.Get("Idempotency-Key"),
+			r.PathValue("effective_date"),
+			handler.PutClassRateInput{RateAmount: *input.RateAmount},
+		)
+		if err != nil {
+			writeHandlerError(deps, w, r, "Put class rate", err)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		vermouth.WriteJSON(r.Context(), deps.Logger, w, status, result)
+	}
 }
 
 func endSchedule(deps Deps) http.HandlerFunc {
@@ -219,16 +283,25 @@ func createClass(deps Deps) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		var input handler.CreateClassInput
+		var input struct {
+			handler.CreateClassInput
+
+			RateAmount *int64 `json:"rate_amount"`
+		}
 		if !decodeJSON(w, r, &input) {
 			return
 		}
+		if input.RateAmount == nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "rate_amount must be an integer")
+			return
+		}
+		input.CreateClassInput.RateAmount = *input.RateAmount
 		result, created, err := deps.Handler.CreateClass(
 			r.Context(),
 			claims.TutorID,
 			claims.Timezone,
 			r.Header.Get("Idempotency-Key"),
-			input,
+			input.CreateClassInput,
 		)
 		if err != nil {
 			writeHandlerError(deps, w, r, "Create class", err)

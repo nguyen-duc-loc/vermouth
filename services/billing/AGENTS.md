@@ -7,9 +7,8 @@ details, invoices, invoice lines, invoice numbers, voids, paid state, and the re
 must never own attendance truth, the schedule, student management, or email sending. This is the one
 service where the difference between a projection and an authoritative record decides correctness.
 
-The teaching projection path, versioned invoice profile editor, and committed bank catalog exist.
-Features 13 to 15 build the month end calculation, invoice records, PDF rendering, sharing, and paid
-state.
+The teaching projection path, versioned invoice profile editor, committed bank catalog, and certified
+month end preview and issue flow exist. Features 14 and 15 add PDF rendering, sharing, and paid state.
 
 ## Stack
 
@@ -25,10 +24,12 @@ state.
 | `cmd/billing/main.go` | Startup, including `EnsureTopics` and the relay |
 | `internal/http/routes.go` | Routing only |
 | `internal/http/profile_routes.go` | Private profile and committed bank catalog endpoints |
+| `internal/http/billing_period_routes.go` | Completed month metadata, period reads, preview, and issue endpoints |
 | `internal/consumer/identity.go` | Idempotent empty profile seeding from tutor registration facts |
 | `internal/consumer/teaching.go` | The only writer of teaching projections, including students, roster periods, attendance, and session state |
 | `internal/store/store.go`, `internal/handler/projection.go`, `internal/handler/profile.go`, `internal/handler/banks.go` | Typed database access, projections, invoice profile rules, and the stable bank catalog |
-| `db/migrations/00001_vermouth_kit.sql` through `00004_tutor_profile_bank_details.sql` | Shared machinery, billing entities, integrity constraints, and versioned bank details |
+| `internal/handler/billing_periods.go` | Fixed broker barriers, repeatable previews, checked totals, and atomic immutable invoice issue |
+| `db/migrations/00001_vermouth_kit.sql` through `00006_tuition_rate_and_invoice_constraints.sql` | Shared machinery, profiles, recovery evidence, dated rates, run constraints, and immutable invoice records |
 
 ## Conventions
 
@@ -44,6 +45,10 @@ state.
   An identical valid retry succeeds without increasing the revision.
 * Billing derives `bank_name` from the committed catalog. Requests supply only `bank_code`, and a
   retired saved code remains readable until the tutor selects an active replacement.
+* Preview and issue capture a fixed published broker cut, require a certified projection with no
+  relevant unresolved failure, and calculate inside one repeatable read snapshot.
+* Issue writes the run, invoice numbers, invoices, frozen lines, and outbox facts in one transaction.
+  A repeated or losing concurrent request reads the one live run instead of creating another.
 
 ## Gotchas
 
@@ -71,5 +76,6 @@ The repo wide skills in the root file all apply here. These are the ones that ea
 * [0010 recurring sessions and exceptions](../../docs/specs/0010-recurring-sessions-exceptions/index.md) (session move, cancellation, restoration, and invoice immutability)
 * [0011 student records and class rosters](../../docs/specs/0011-student-records-class-rosters/index.md) (student labels, dated membership, attendance, and issued invoice immutability)
 * [0012 tutor profile and bank details](../../docs/specs/0012-tutor-profile-bank-details/index.md) (versioned profile saves, bank catalog, privacy, and replay safe seeding)
+* [0013 tuition rate and monthly calculation](../../docs/specs/0013-tuition-rate-monthly-calculation/index.md) (certified projections, monthly preview, and atomic immutable issue)
 
 _Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

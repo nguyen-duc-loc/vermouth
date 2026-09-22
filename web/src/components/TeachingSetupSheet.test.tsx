@@ -21,6 +21,7 @@ const classResult = {
     currency: 'VND' as const,
     rate_effective_from: '2026-08-30',
     schedule_revision: 0,
+    rate_revision: 1,
   },
   first_session: {
     session_id: 'session-1',

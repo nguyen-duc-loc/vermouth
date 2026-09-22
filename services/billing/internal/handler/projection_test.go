@@ -69,7 +69,7 @@ func applyProjectionEvent(t *testing.T, pool *pgxpool.Pool, envelope vermouth.En
 	tx, err := pool.Begin(t.Context())
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
-	require.NoError(t, consumer.Teaching().Handle(t.Context(), tx, envelope))
+	require.NoError(t, consumer.Teaching().Handle(t.Context(), tx, envelope, vermouth.SourcePosition{}))
 	require.NoError(t, tx.Commit(t.Context()))
 }
 

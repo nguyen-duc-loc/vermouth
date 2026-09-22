@@ -42,7 +42,12 @@ func Teaching() vermouth.Consumer {
 }
 
 //nolint:funlen // The catalogue switch keeps every tolerant projection write explicit.
-func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) error {
+func handleTeachingEvent(
+	ctx context.Context,
+	tx pgx.Tx,
+	env vermouth.Envelope,
+	_ vermouth.SourcePosition,
+) error {
 	switch env.EventName {
 	case vermouth.EventClassCreated,
 		vermouth.EventSessionScheduled,

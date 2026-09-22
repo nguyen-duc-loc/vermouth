@@ -81,7 +81,7 @@ func TestProfileService_NormalizesRetriesConflictsAndCompletes(t *testing.T) {
 	tx, err := pool.Begin(t.Context())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tx.Rollback(context.Background()) }) //nolint:usetesting // Cleanup outlives the test context.
-	require.NoError(t, consumer.Identity().Handle(t.Context(), tx, envelope))
+	require.NoError(t, consumer.Identity().Handle(t.Context(), tx, envelope, vermouth.SourcePosition{}))
 	require.NoError(t, tx.Commit(t.Context()))
 	afterReplay, err := profiles.Read(t.Context(), tutorID)
 	require.NoError(t, err)

@@ -172,8 +172,157 @@ while [ $i -lt 40 ]; do
           any(.students[]; .student_id == $student_id and .attendance_state == "Present"))
       ' >/dev/null 2>&1; then
       ELAPSED=$(( $(date +%s) - START ))
-      printf '\n\nThe teaching thread is complete after about %ss.\n' "$ELAPSED"
-      printf 'class_id %s\nsession_id %s\nstudent_id %s\n' "$CLASS_ID" "$SESSION_ID" "$STUDENT_ID"
+      printf '\nThe teaching thread is complete after about %ss.\n' "$ELAPSED"
+      printf 'Driving one dated rate through monthly preview, issue, retry, and immutable reload\n'
+
+      DEFAULT_PERIOD=$(curl -fsS "$GATEWAY/api/billing-periods/default" -H "$AUTH")
+      BILLING_YEAR=$(printf '%s' "$DEFAULT_PERIOD" | jq -er '.year')
+      BILLING_MONTH=$(printf '%s' "$DEFAULT_PERIOD" | jq -er '.month')
+      BILLING_DATE=$(printf '%04d-%02d-15' "$BILLING_YEAR" "$BILLING_MONTH")
+
+      BILLING_CLASS_BODY=$(jq -n \
+        --arg name "Billing thread class $TUTOR" \
+        --arg local_date "$BILLING_DATE" \
+        '{name:$name,color:"green",rate_amount:150000,first_session:{local_date:$local_date,start_time:"10:00",end_time:"11:00"}}')
+      BILLING_CLASS_RESULT=$(curl -fsS -X POST "$GATEWAY/api/classes" \
+        -H "$AUTH" -H 'Content-Type: application/json' \
+        -H "Idempotency-Key: billing-class-$TUTOR" --data "$BILLING_CLASS_BODY")
+      BILLING_CLASS_ID=$(printf '%s' "$BILLING_CLASS_RESULT" | jq -er '.class.class_id')
+      BILLING_SESSION_ID=$(printf '%s' "$BILLING_CLASS_RESULT" | jq -er '.first_session.session_id')
+
+      RATE_RESULT=$(curl -fsS -X PUT \
+        "$GATEWAY/api/classes/$BILLING_CLASS_ID/rates/$BILLING_DATE" \
+        -H "$AUTH" -H 'Content-Type: application/json' \
+        -H "Idempotency-Key: billing-rate-$TUTOR" --data '{"rate_amount":175000}')
+      RATE_REVISION=$(printf '%s' "$RATE_RESULT" | jq -er '.rate_revision')
+      test "$(printf '%s' "$RATE_RESULT" | jq -er '.issued_invoices_unchanged')" = true
+
+      BILLING_STUDENT_RESULT=$(curl -fsS -X POST "$GATEWAY/api/students" \
+        -H "$AUTH" -H 'Content-Type: application/json' \
+        -H "Idempotency-Key: billing-student-$TUTOR" \
+        --data "$(jq -n --arg name "Billing student $TUTOR" '{name:$name,phone:null}')")
+      BILLING_STUDENT_ID=$(printf '%s' "$BILLING_STUDENT_RESULT" | jq -er '.student_id')
+      curl -fsS -X PUT "$GATEWAY/api/classes/$BILLING_CLASS_ID/roster" \
+        -H "$AUTH" -H 'Content-Type: application/json' \
+        -H "Idempotency-Key: billing-roster-$TUTOR" \
+        --data "$(jq -n --arg student "$BILLING_STUDENT_ID" --arg date "$BILLING_DATE" \
+          '{change_date:$date,additions:[$student],removals:[]}')" >/dev/null
+      BILLING_ATTENDANCE=$(curl -fsS "$GATEWAY/api/sessions/$BILLING_SESSION_ID/attendance" -H "$AUTH")
+      BILLING_ATTENDANCE_REVISION=$(printf '%s' "$BILLING_ATTENDANCE" | jq -er '.revision')
+      curl -fsS -X PUT "$GATEWAY/api/sessions/$BILLING_SESSION_ID/attendance" \
+        -H "$AUTH" -H 'Content-Type: application/json' \
+        -H "Idempotency-Key: billing-attendance-$TUTOR" \
+        --data "$(jq -n --arg revision "$BILLING_ATTENDANCE_REVISION" --arg student "$BILLING_STUDENT_ID" \
+          '{revision:$revision,marks:[{student_id:$student,state:"Present"}]}')" >/dev/null
+
+      printf 'Waiting for the exact dated rate revision to reach billing'
+      j=0
+      while [ $j -lt 20 ]; do
+        RATE_HISTORY=$(curl -fsS "$GATEWAY/api/classes/$BILLING_CLASS_ID/rates" -H "$AUTH")
+        if printf '%s' "$RATE_HISTORY" | jq -e \
+          --arg date "$BILLING_DATE" --argjson revision "$RATE_REVISION" '
+            .history_state == "synced" and
+            any(.rates[]; .effective_from == $date and .rate_revision >= $revision)
+          ' >/dev/null 2>&1; then
+          printf '\n'
+          break
+        fi
+        printf '.'
+        j=$((j + 1))
+        sleep 1
+      done
+      if [ $j -ge 20 ]; then
+        printf '\nThe dated rate did not reach billing.\n'
+        exit 1
+      fi
+
+      printf 'Waiting for the complete monthly preview'
+      j=0
+      PREVIEW=
+      while [ $j -lt 20 ]; do
+        if PREVIEW=$(curl -fsS -X POST \
+          "$GATEWAY/api/billing-periods/$BILLING_YEAR/$BILLING_MONTH/preview" -H "$AUTH"); then
+          if printf '%s' "$PREVIEW" | jq -e \
+            --arg student "$BILLING_STUDENT_ID" --arg session "$BILLING_SESSION_ID" '
+              .status == "ready" and .grand_total == 175000 and
+              (.blockers | length) == 0 and
+              any(.students[];
+                .student_id == $student and .total_amount == 175000 and
+                any(.lines[]; .session_id == $session and .amount == 175000))
+            ' >/dev/null 2>&1; then
+            printf '\n'
+            break
+          fi
+        fi
+        printf '.'
+        j=$((j + 1))
+        sleep 1
+      done
+      if [ $j -ge 20 ]; then
+        printf '\nThe complete monthly preview did not become ready. The last answer was:\n%s\n' "$PREVIEW"
+        exit 1
+      fi
+      FINGERPRINT=$(printf '%s' "$PREVIEW" | jq -er '.preview_fingerprint')
+      ISSUE_BODY=$(jq -n --arg fingerprint "$FINGERPRINT" '{preview_fingerprint:$fingerprint}')
+
+      RATE_BEFORE_ISSUE=$(curl -fsS -X PUT "$GATEWAY/api/classes/$BILLING_CLASS_ID/rates/$BILLING_DATE" \
+        -H "$AUTH" -H 'Content-Type: application/json' \
+        -H "Idempotency-Key: billing-rate-before-issue-$TUTOR" \
+        --data '{"rate_amount":180000}')
+      RATE_BEFORE_ISSUE_REVISION=$(printf '%s' "$RATE_BEFORE_ISSUE" | jq -er '.rate_revision')
+      j=0
+      while [ $j -lt 20 ]; do
+        RATE_HISTORY=$(curl -fsS "$GATEWAY/api/classes/$BILLING_CLASS_ID/rates" -H "$AUTH")
+        if printf '%s' "$RATE_HISTORY" | jq -e \
+          --arg date "$BILLING_DATE" --argjson revision "$RATE_BEFORE_ISSUE_REVISION" '
+            any(.rates[]; .effective_from == $date and .rate_revision >= $revision)
+          ' >/dev/null 2>&1; then
+          break
+        fi
+        j=$((j + 1))
+        sleep 1
+      done
+      if [ $j -ge 20 ]; then
+        echo "The changed rate did not reach billing before the stale preview check."
+        exit 1
+      fi
+      STALE_STATUS=$(curl -sS -o .tmp/thread-stale-preview.json -w '%{http_code}' -X POST \
+        "$GATEWAY/api/billing-periods/$BILLING_YEAR/$BILLING_MONTH/issue" \
+        -H "$AUTH" -H 'Content-Type: application/json' --data "$ISSUE_BODY")
+      test "$STALE_STATUS" = 409
+      jq -e '.error.code == "preview_stale"' .tmp/thread-stale-preview.json >/dev/null
+
+      PREVIEW=$(curl -fsS -X POST \
+        "$GATEWAY/api/billing-periods/$BILLING_YEAR/$BILLING_MONTH/preview" -H "$AUTH")
+      printf '%s' "$PREVIEW" | jq -e '.status == "ready" and .grand_total == 180000' >/dev/null
+      FINGERPRINT=$(printf '%s' "$PREVIEW" | jq -er '.preview_fingerprint')
+      ISSUE_BODY=$(jq -n --arg fingerprint "$FINGERPRINT" '{preview_fingerprint:$fingerprint}')
+      ISSUED=$(curl -fsS -X POST \
+        "$GATEWAY/api/billing-periods/$BILLING_YEAR/$BILLING_MONTH/issue" \
+        -H "$AUTH" -H 'Content-Type: application/json' --data "$ISSUE_BODY")
+      RUN_ID=$(printf '%s' "$ISSUED" | jq -er '.billing_run_id')
+      printf '%s' "$ISSUED" | jq -e '.invoices | length == 1' >/dev/null
+
+      RETRIED_ISSUE=$(curl -fsS -X POST \
+        "$GATEWAY/api/billing-periods/$BILLING_YEAR/$BILLING_MONTH/issue" \
+        -H "$AUTH" -H 'Content-Type: application/json' --data "$ISSUE_BODY")
+      test "$(printf '%s' "$RETRIED_ISSUE" | jq -er '.billing_run_id')" = "$RUN_ID"
+
+      curl -fsS -X PUT "$GATEWAY/api/classes/$BILLING_CLASS_ID/rates/$BILLING_DATE" \
+        -H "$AUTH" -H 'Content-Type: application/json' \
+        -H "Idempotency-Key: billing-rate-after-issue-$TUTOR" \
+        --data '{"rate_amount":200000}' >/dev/null
+      RELOADED_RUN=$(curl -fsS \
+        "$GATEWAY/api/billing-periods/$BILLING_YEAR/$BILLING_MONTH" -H "$AUTH")
+      printf '%s' "$RELOADED_RUN" | jq -e \
+        --arg run "$RUN_ID" '
+          .status == "already_issued" and .run.billing_run_id == $run and
+          .run.grand_total == 180000 and .run.invoices[0].lines[0].amount == 180000
+        ' >/dev/null
+
+      printf '\nThe money thread is complete.\n'
+      printf 'class_id %s\nsession_id %s\nstudent_id %s\nbilling_run_id %s\n' \
+        "$BILLING_CLASS_ID" "$BILLING_SESSION_ID" "$BILLING_STUDENT_ID" "$RUN_ID"
       exit 0
     fi
   fi

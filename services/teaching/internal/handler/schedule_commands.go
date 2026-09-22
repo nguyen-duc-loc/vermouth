@@ -238,6 +238,7 @@ func (h *Handler) PutSchedule(
 			RateAmount: updatedClass.RateAmount, Currency: updatedClass.Currency,
 			RateEffectiveFrom: updatedClass.RateEffectiveFrom.Time.Format(dateLayout),
 			ScheduleRevision:  updatedClass.ScheduleRevision,
+			RateRevision:      updatedClass.RateRevision,
 		},
 		Rule: ScheduleRuleSummary{
 			ScheduleRuleID: ruleID, ClassID: classID, Revision: nextRevision,

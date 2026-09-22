@@ -105,7 +105,7 @@ func classFromLocked(row sqlcgen.LockOwnedClassRow) Class {
 	return Class{
 		ClassID: row.ClassID, Name: row.Name, Color: row.Color, RateAmount: row.RateAmount,
 		Currency: row.Currency, RateEffectiveFrom: row.RateEffectiveFrom.Time.Format(dateLayout),
-		ScheduleRevision: row.ScheduleRevision,
+		ScheduleRevision: row.ScheduleRevision, RateRevision: row.RateRevision,
 	}
 }
 

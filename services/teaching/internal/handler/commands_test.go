@@ -199,6 +199,126 @@ func testClassInput() CreateClassInput {
 	}
 }
 
+// covers: AC-1, AC-2, AC-3, AC-19, AC-23
+func TestPutClassRate_RevisesEveryCommandAndReplaysOnlyTheReceipt(t *testing.T) {
+	t.Parallel()
+
+	pool := teachingTestPool(t)
+	tutorID := uuid.Must(uuid.NewV7())
+	cleanTeachingTutor(t, pool, tutorID)
+	commandTime := time.Date(2026, time.September, 5, 2, 0, 0, 0, time.UTC)
+	work := newTeachingHandler(t, pool, commandTime)
+	ctx := vermouth.WithRequestID(t.Context(), "request-class-rate")
+	created, _, err := work.CreateClass(
+		ctx, tutorID, "Asia/Ho_Chi_Minh", "class-with-rate", testClassInput(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), created.Class.RateRevision)
+
+	first, status, err := work.PutClassRate(
+		ctx,
+		tutorID,
+		created.Class.ClassID,
+		"Asia/Ho_Chi_Minh",
+		"rate-september",
+		"2026-09-01",
+		PutClassRateInput{RateAmount: 300_000},
+	)
+	require.NoError(t, err)
+	require.Equal(t, 200, status)
+	require.Equal(t, int64(2), first.RateRevision)
+	require.Equal(t, "2026-09-01", first.Current.EffectiveFrom)
+	require.True(t, first.IssuedInvoicesUnchanged)
+
+	sameAmount, sameAmountStatus, err := work.PutClassRate(
+		ctx,
+		tutorID,
+		created.Class.ClassID,
+		"Asia/Ho_Chi_Minh",
+		"rate-september-again",
+		"2026-09-01",
+		PutClassRateInput{RateAmount: 300_000},
+	)
+	require.NoError(t, err)
+	require.Equal(t, 200, sameAmountStatus)
+	require.Equal(t, int64(3), sameAmount.RateRevision)
+
+	replayed, replayStatus, err := work.PutClassRate(
+		ctx,
+		tutorID,
+		created.Class.ClassID,
+		"UTC",
+		"rate-september",
+		"2026-09-01",
+		PutClassRateInput{RateAmount: 300_000},
+	)
+	require.NoError(t, err)
+	require.Equal(t, status, replayStatus)
+	require.Equal(t, first, replayed)
+	_, _, err = work.PutClassRate(
+		ctx,
+		tutorID,
+		created.Class.ClassID,
+		"Asia/Ho_Chi_Minh",
+		"rate-september",
+		"2026-09-01",
+		PutClassRateInput{RateAmount: 301_000},
+	)
+	require.ErrorIs(t, err, ErrIdempotencyConflict)
+
+	backdated, _, err := work.PutClassRate(
+		ctx,
+		tutorID,
+		created.Class.ClassID,
+		"Asia/Ho_Chi_Minh",
+		"rate-august-correction",
+		"2026-08-30",
+		PutClassRateInput{RateAmount: 275_000},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(4), backdated.RateRevision)
+	require.Equal(t, "2026-09-01", backdated.Current.EffectiveFrom)
+	require.Equal(t, int64(300_000), backdated.Current.RateAmount)
+
+	strangerID := uuid.Must(uuid.NewV7())
+	_, err = work.ReadClassRateState(
+		ctx,
+		strangerID,
+		created.Class.ClassID,
+		"Asia/Ho_Chi_Minh",
+	)
+	require.ErrorIs(t, err, ErrNotFound)
+
+	var eventCount int
+	require.NoError(t, pool.QueryRow(t.Context(), `
+		SELECT count(*)
+		FROM outbox
+		WHERE tutor_id = $1 AND event_name = $2
+	`, tutorID, vermouth.EventClassRateChanged).Scan(&eventCount))
+	require.Equal(t, 3, eventCount, "receipt replay must not write a second event")
+
+	_, err = pool.Exec(t.Context(), `
+		DELETE FROM sessions WHERE tutor_id = $1 AND class_id = $2
+	`, tutorID, created.Class.ClassID)
+	require.NoError(t, err)
+	_, err = pool.Exec(t.Context(), `
+		UPDATE classes SET archived_at = $3 WHERE tutor_id = $1 AND class_id = $2
+	`, tutorID, created.Class.ClassID, commandTime)
+	require.NoError(t, err)
+	_, _, err = work.PutClassRate(
+		ctx,
+		tutorID,
+		created.Class.ClassID,
+		"Asia/Ho_Chi_Minh",
+		"archived-no-session",
+		"2026-09-01",
+		PutClassRateInput{RateAmount: 300_000},
+	)
+	var conflict *ConflictError
+	require.ErrorAs(t, err, &conflict)
+	require.Equal(t, "archived_class_has_no_sessions", conflict.Code)
+}
+
 // covers: AC-2, AC-3, AC-10, AC-11, AC-12
 func TestCreateClass_ConcurrentRetryReturnsOneCommittedAggregate(t *testing.T) {
 	t.Parallel()

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useBlocker } from '@tanstack/react-router'
-import { CalendarDays, CheckCircle2, Home, Landmark, Save, Users } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Home, Landmark, ReceiptText, Save, Users } from 'lucide-react'
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
-
+import { billingKeys } from '../api/billing'
 import {
   bankKeys,
   type InvoiceProfile,
@@ -37,6 +37,7 @@ const destinations: readonly AppDestination[] = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/schedule', label: 'Schedule', icon: CalendarDays },
   { href: '/students', label: 'Students', icon: Users },
+  { href: '/billing', label: 'Billing', icon: ReceiptText },
 ]
 
 const fieldLabels = {
@@ -154,6 +155,7 @@ export function ProfilePage() {
       setConflictProfile(undefined)
       setAnnouncement('Profile saved.')
       toast.success('Profile saved')
+      void queryClient.invalidateQueries({ queryKey: billingKeys.all })
     },
     onError: async (error) => {
       if (error instanceof ProfileApiError && error.body.error.code === 'invalid_profile') {

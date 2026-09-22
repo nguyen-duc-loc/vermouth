@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi, Link } from '@tanstack/react-router'
-import { CalendarDays, Home, Plus, Search, UserRoundPlus, Users } from 'lucide-react'
+import { CalendarDays, Home, Plus, ReceiptText, Search, UserRoundPlus, Users } from 'lucide-react'
 import {
   type FormEvent,
   type MouseEvent as ReactMouseEvent,
@@ -45,6 +45,7 @@ const destinations: readonly AppDestination[] = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/schedule', label: 'Schedule', icon: CalendarDays },
   { href: '/students', label: 'Students', icon: Users },
+  { href: '/billing', label: 'Billing', icon: ReceiptText },
 ]
 
 /** Gives the tutor a searchable, durable student record workspace. */

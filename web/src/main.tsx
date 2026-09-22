@@ -4,6 +4,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import '@fontsource-variable/montserrat'
 
+import { clearBillingClientState } from './api/billing'
 import { clearProfileClientState } from './api/profile'
 import { loadRuntimeConfig } from './api/runtime'
 import { refreshSession, sessionCoordinator } from './api/session'
@@ -24,7 +25,7 @@ const queryClient = new QueryClient({
 sessionCoordinator.subscribe(() => {
   if (sessionCoordinator.getSnapshot().status !== 'anonymous') return
   clearAllTeachingDrafts()
-  void clearProfileClientState(queryClient)
+  void Promise.all([clearProfileClientState(queryClient), clearBillingClientState(queryClient)])
 })
 
 const root = document.getElementById('root')

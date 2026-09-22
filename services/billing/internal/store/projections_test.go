@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nguyen-duc-loc/vermouth/services/billing/internal/store"
@@ -521,4 +522,92 @@ func TestAMissingRateIsNotAFreeLesson(t *testing.T) {
 	require.Len(t, billable, 1)
 	require.True(t, billable[0].RateKnown, "a free lesson has a rate, and it is zero")
 	require.Zero(t, billable[0].RateAmount)
+}
+
+// TestBillingCandidatesKeepBlockersVisible proves the monthly read begins from
+// sessions and roster coverage rather than from Present attendance.
+// covers: AC-5, AC-6, AC-7, AC-11, AC-20
+func TestBillingCandidatesKeepBlockersVisible(t *testing.T) {
+	t.Parallel()
+	q := queries(t)
+	ctx := t.Context()
+	tutorID := newTutor(t)
+	classID, studentID, sessionID := newID(t), newID(t), newID(t)
+	seedClassAndStudent(t, q, tutorID, classID, studentID)
+	starts := time.Date(2026, time.September, 9, 3, 0, 0, 0, time.UTC)
+	require.NoError(t, q.UpsertSession(ctx, sqlcgen.UpsertSessionParams{
+		SessionID: sessionID, ClassID: classID, TutorID: tutorID,
+		StartsAt: starts, EndsAt: starts.Add(90 * time.Minute), LocalDate: day(time.September, 9),
+	}))
+
+	params := sqlcgen.ListBillingCandidatesParams{
+		RowLimit: 10_001, OwnerTutorID: tutorID,
+		PeriodStart: day(time.September, 1), PeriodEnd: day(time.September, 30),
+	}
+	candidates, err := q.ListBillingCandidates(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.False(t, candidates[0].AttendanceState.Valid, "unmarked attendance must remain visible")
+	require.True(t, candidates[0].RateKnown)
+	require.Equal(t, int64(250_000), candidates[0].RateAmount)
+	require.Equal(t, int64(1), candidates[0].CoverageCount)
+
+	require.NoError(t, q.UpsertAttendance(ctx, sqlcgen.UpsertAttendanceParams{
+		SessionID: sessionID, StudentID: studentID, TutorID: tutorID,
+		State: "Absent", MarkedAt: starts,
+	}))
+	candidates, err = q.ListBillingCandidates(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, "Absent", candidates[0].AttendanceState.String)
+
+	require.NoError(t, q.MarkSessionCancelled(ctx, sqlcgen.MarkSessionCancelledParams{
+		TutorID: tutorID, SessionID: sessionID,
+		CancelledAt: pgtype.Timestamptz{Time: starts.Add(time.Hour), Valid: true},
+	}))
+	candidates, err = q.ListBillingCandidates(ctx, params)
+	require.NoError(t, err)
+	require.Empty(t, candidates, "cancelled sessions must not become candidates")
+}
+
+// TestRevisionedRateProjectionRejectsStaleFacts holds last committed command
+// wins even when Redpanda delivery is repeated or reordered.
+// covers: AC-2, AC-6, AC-19, AC-24
+func TestRevisionedRateProjectionRejectsStaleFacts(t *testing.T) {
+	t.Parallel()
+	q := queries(t)
+	ctx := t.Context()
+	tutorID := newTutor(t)
+	classID := newID(t)
+	require.NoError(t, q.ApplyClassRateFact(ctx, sqlcgen.ApplyClassRateFactParams{
+		ClassID: classID, EffectiveFrom: day(time.September, 1), TutorID: tutorID,
+		RateAmount: 300_000, Currency: "VND", RateRevision: 3,
+		SourcePartition: pgtype.Int4{Int32: 1, Valid: true},
+		SourceOffset:    pgtype.Int8{Int64: 20, Valid: true},
+	}))
+	require.NoError(t, q.ApplyClassRateFact(ctx, sqlcgen.ApplyClassRateFactParams{
+		ClassID: classID, EffectiveFrom: day(time.September, 1), TutorID: tutorID,
+		RateAmount: 200_000, Currency: "VND", RateRevision: 2,
+		SourcePartition: pgtype.Int4{Int32: 1, Valid: true},
+		SourceOffset:    pgtype.Int8{Int64: 21, Valid: true},
+	}))
+	rates, err := q.ListOwnedClassRates(ctx, sqlcgen.ListOwnedClassRatesParams{
+		TutorID: tutorID, ClassID: classID,
+	})
+	require.NoError(t, err)
+	require.Len(t, rates, 1)
+	require.Equal(t, int64(3), rates[0].RateRevision)
+	require.Equal(t, int64(300_000), rates[0].RateAmount)
+
+	require.NoError(t, q.ApplyClassRateFact(ctx, sqlcgen.ApplyClassRateFactParams{
+		ClassID: classID, EffectiveFrom: day(time.September, 1), TutorID: tutorID,
+		RateAmount: 350_000, Currency: "VND", RateRevision: 4,
+		SourcePartition: pgtype.Int4{Int32: 1, Valid: true},
+		SourceOffset:    pgtype.Int8{Int64: 22, Valid: true},
+	}))
+	rates, err = q.ListOwnedClassRates(ctx, sqlcgen.ListOwnedClassRatesParams{
+		TutorID: tutorID, ClassID: classID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(4), rates[0].RateRevision)
+	require.Equal(t, int64(350_000), rates[0].RateAmount)
 }

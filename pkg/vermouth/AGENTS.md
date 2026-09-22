@@ -22,19 +22,20 @@ services importing it (STK-24), which is the reason for one repository.
 | `catalogue.go` | Spec 0001's topic and event names as constants, so one name means one value everywhere |
 | `outbox.go` | The outbox writer, called inside the caller's `pgx.Tx` next to the business write (STK-4) |
 | `relay.go` | The relay goroutine: a ticker, `SELECT ... FOR UPDATE SKIP LOCKED`, publish and mark one row at a time (STK-18) |
-| `consumer.go` | The consumer loop, the `handled_events` idempotency check, version gating (STK-20), bounded retry, and the `.dlq` park (STK-13) |
+| `consumer.go`, `consumer_failure.go` | The consumer loop, idempotency, version gating, durable failure ledger, bounded retry, and the `.dlq` park (STK-13) |
 | `broker.go` | Producer and consumer construction, plus `EnsureTopics` with 3 partitions and `retention.ms=-1` (STK-16, STK-17) |
 | `config.go` | The typed configuration loaded once from the environment, `MissingEnvError` when a required variable is absent (STK-8) |
 | `token.go` | Ed25519 verification against the public keys held in configuration, keyed by `kid`, never over the network (STK-14) |
 | `db.go`, `serve.go`, `health.go`, `logging.go`, `errors.go` | The pool, the HTTP server lifecycle, health and readiness, `log/slog` in JSON with `request_id`, and the one `APIError` shape |
 | `ddl/00001_vermouth_kit.sql` | The canonical DDL for `outbox` and `handled_events`, copied into each service by `task migrate:sync-kit` |
-| `cmd/devkeys`, `cmd/replay` | The development key pair generator, and the replay tool behind `task replay:<service>:<consumer>` |
+| `ddl/00002_consumer_recovery.sql` | The canonical additive DDL for failure coordinates, replay generations, and certification evidence |
+| `cmd/devkeys`, `cmd/replay`, `cmd/consumerfailures` | Development keys, certified projection replay, and safe failure listing, acknowledgement, and certification |
 
 ## Conventions
 
 - A change here lands in four services at once. Read the callers before changing a signature.
-- The DDL is canonical here and copied outward. Edit `ddl/00001_vermouth_kit.sql`, then run
-  `task migrate:sync-kit`, never a service's copy directly.
+- The DDL is canonical here and copied outward. Edit `ddl/*.sql`, then run `task migrate:sync-kit`.
+  The task maps additive shared DDL to each service's next migration number.
 - Consumer group names are `<consuming service>.<consumer name>` and match the `consumer_name` in
   `handled_events` (STK-12), so a reset and a row delete are one visible pair.
 - Every event gets one test asserting its key is the field spec 0001's catalogue names for it (STK-19).
@@ -49,6 +50,10 @@ services importing it (STK-24), which is the reason for one repository.
   are never rewritten by one.
 - Redpanda has no native dead letter path, so the retry budget, the failure reason, and the park are
   code here rather than broker configuration. Budget and delay are configuration, never literals.
+* A parked record writes its safe source coordinate before the offset commits. The dead letter keeps
+  arbitrary source bytes as explicit base64, so unreadable JSON can never stall the consumer.
+* A projection replay starts a new generation and remains uncertified until its captured broker ends,
+  topic identity, partition set, and completed offsets all agree.
 - `LISTEN/NOTIFY` may later shorten the relay wait on top of the poll, never replace it: a dropped
   connection loses a notification while the outbox row survives (STK-18).
 

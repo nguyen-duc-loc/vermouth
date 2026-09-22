@@ -25,6 +25,7 @@ type teachingFacts struct {
 	SessionID         uuid.UUID `json:"session_id"`
 	Name              string    `json:"name"`
 	RateAmount        int64     `json:"rate_amount"`
+	RateRevision      int64     `json:"rate_revision"`
 	Currency          string    `json:"currency"`
 	RateEffectiveFrom string    `json:"rate_effective_from"`
 	EffectiveFrom     string    `json:"effective_from"`
@@ -48,9 +49,15 @@ func Teaching() vermouth.Consumer {
 }
 
 //nolint:funlen,gocognit // The event catalogue switch is deliberately explicit so each projection write stays easy to audit.
-func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) error {
+func handleTeachingEvent(
+	ctx context.Context,
+	tx pgx.Tx,
+	env vermouth.Envelope,
+	source vermouth.SourcePosition,
+) error {
 	switch env.EventName {
 	case vermouth.EventClassCreated,
+		vermouth.EventClassRateChanged,
 		vermouth.EventSessionScheduled,
 		vermouth.EventSessionMoved,
 		vermouth.EventSessionCancelled,
@@ -87,12 +94,31 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 		if err != nil {
 			return err
 		}
-		err = queries.UpsertClassRate(ctx, sqlcgen.UpsertClassRateParams{
+		err = queries.ApplyClassRateFact(ctx, sqlcgen.ApplyClassRateFactParams{
 			ClassID: facts.ClassID, EffectiveFrom: effectiveFrom, TutorID: tutorID,
 			RateAmount: facts.RateAmount, Currency: facts.Currency,
+			RateRevision:    facts.RateRevision,
+			SourcePartition: pgtype.Int4{Int32: source.Partition, Valid: true},
+			SourceOffset:    pgtype.Int8{Int64: source.Offset, Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("project first class rate: %w", err)
+		}
+		return nil
+	case vermouth.EventClassRateChanged:
+		effectiveFrom, err := parseDay(facts.EffectiveFrom)
+		if err != nil {
+			return err
+		}
+		err = queries.ApplyClassRateFact(ctx, sqlcgen.ApplyClassRateFactParams{
+			ClassID: facts.ClassID, EffectiveFrom: effectiveFrom, TutorID: tutorID,
+			RateAmount: facts.RateAmount, Currency: facts.Currency,
+			RateRevision:    facts.RateRevision,
+			SourcePartition: pgtype.Int4{Int32: source.Partition, Valid: true},
+			SourceOffset:    pgtype.Int8{Int64: source.Offset, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("project class rate: %w", err)
 		}
 		return nil
 	case vermouth.EventSessionScheduled, vermouth.EventSessionMoved:

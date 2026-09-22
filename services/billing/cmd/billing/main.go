@@ -83,6 +83,7 @@ func run() error {
 	mux := billinghttp.Mux(billinghttp.Deps{
 		Projection: handler.NewProjectionReader(pool),
 		Profile:    handler.NewProfileService(pool),
+		Billing:    handler.NewBillingService(pool, producer, logger, cfg.PublishTopic),
 		Verifier:   verifier,
 		Logger:     logger,
 		Health:     health,

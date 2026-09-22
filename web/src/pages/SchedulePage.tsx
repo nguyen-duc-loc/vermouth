@@ -8,6 +8,7 @@ import {
   History,
   Home,
   Plus,
+  ReceiptText,
   RefreshCw,
   Repeat2,
   Users,
@@ -21,7 +22,7 @@ import {
   useRef,
   useState,
 } from 'react'
-
+import { billingKeys } from '../api/billing'
 import {
   cancelSession,
   endSchedule,
@@ -71,6 +72,7 @@ const destinations: readonly AppDestination[] = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/schedule', label: 'Schedule', icon: CalendarDays },
   { href: '/students', label: 'Students', icon: Users },
+  { href: '/billing', label: 'Billing', icon: ReceiptText },
 ]
 
 const weekdays = [
@@ -190,7 +192,10 @@ export function SchedulePage() {
   const moveWindow = (direction: number) =>
     changeSearch({ date: addDates(visibleDate, direction * stepForView(view)) })
   const invalidateSchedule = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['schedule', tutor?.tutor_id] })
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['schedule', tutor?.tutor_id] }),
+      queryClient.invalidateQueries({ queryKey: billingKeys.all }),
+    ])
   }
   const openSession = (session: ScheduleSession, trigger: HTMLButtonElement) => {
     sessionReturnFocusRef.current = trigger

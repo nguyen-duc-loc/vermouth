@@ -17,7 +17,7 @@ prove complete paths through the real stack.
 | `compose.test.yaml` | Four Postgres 18 instances and one Redpanda node, tuned small, under the compose project name `vermouth` |
 | `start-service.sh` | Start one binary from `bin/`, record its pid under `.tmp/run`, and confirm it stayed up |
 | `stop-service.sh` | Stop one service and wait until it is really gone, forcing it after 20 seconds |
-| `thread.sh` | Drive tutor setup, invoice profile save and reload, recurrence, one session exception, attendance, and projection convergence through the gateway and Redpanda |
+| `thread.sh` | Drive tutor setup, profile, recurrence, attendance, a dated rate, monthly preview, stale refusal, issue retry, and immutable invoice evidence through the gateway and Redpanda |
 | `verify-recurring.sh` | Prove recurring schedules, projection replay, controlled clock behavior, overlap guards, and invoice immutability on the host stack |
 | `e2e/` | Empty. Playwright for the money path lands here when `$test` sets the runners up |
 
@@ -29,6 +29,7 @@ task infra:ps            # what is running
 task infra:logs          # follow the infra logs
 task infra:down          # stop it, keeping the data
 task infra:clean         # stop it and delete the data (it asks first)
+task test                # every Go module, including the tagged real billing protocol suite
 task start               # every service in the background, logs under .tmp/logs
 task svc:start -- identity
 task svc:stop -- identity
@@ -76,5 +77,6 @@ The gateway on 8080, then the services on 8081 to 8084.
 * [0010 recurring sessions and exceptions](../docs/specs/0010-recurring-sessions-exceptions/index.md) (the recurring verification script and replay evidence)
 * [0011 student records and class rosters](../docs/specs/0011-student-records-class-rosters/index.md) (the student, roster, attendance, and projection thread)
 * [0012 tutor profile and bank details](../docs/specs/0012-tutor-profile-bank-details/index.md) (the profile save, identical retry, and reload in the end to end thread)
+* [0013 tuition rate and monthly calculation](../docs/specs/0013-tuition-rate-monthly-calculation/index.md) (the real rate, replay, preview, issue, and immutable invoice thread)
 
 _Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

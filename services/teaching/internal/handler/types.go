@@ -78,6 +78,7 @@ type Class struct {
 	Currency          string    `json:"currency"`
 	RateEffectiveFrom string    `json:"rate_effective_from"`
 	ScheduleRevision  int64     `json:"schedule_revision"`
+	RateRevision      int64     `json:"rate_revision"`
 }
 
 // Session is teaching's boundary view of one concrete session.

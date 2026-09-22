@@ -21,10 +21,15 @@ const api = vi.hoisted(() => ({
   readAttendance: vi.fn(),
   readHome: vi.fn(),
   saveAttendance: vi.fn(),
+  search: { date: undefined as string | undefined, session: undefined as string | undefined },
   signOut: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
+  getRouteApi: () => ({
+    useNavigate: () => api.navigate,
+    useSearch: () => api.search,
+  }),
   Link: ({ to, children, ...props }: MockLinkProps) => (
     <a href={to} {...props}>
       {children}
@@ -133,6 +138,8 @@ function renderHome(): QueryClient {
 beforeEach(() => {
   installMatchMedia(true)
   window.sessionStorage.clear()
+  api.search.date = undefined
+  api.search.session = undefined
   api.navigate.mockReset()
   api.readHome.mockReset()
   api.readBillingProjection.mockReset()
@@ -236,6 +243,45 @@ describe('HomePage', () => {
       '018f8f7e-91b0-7cc4-bd8c-f4d9030ca422',
     )
     expect(await screen.findByText('Attendance saved for the whole roster.')).toBeInTheDocument()
+  })
+
+  // covers: spec 0013 AC-7, AC-21, AC-22
+  it('opens attendance from a billing recovery link and clears recovery search on close', async () => {
+    const user = userEvent.setup()
+    api.search.date = '2026-08-30'
+    api.search.session = 'session-1'
+    api.readHome.mockResolvedValue(home({ sessions: [teachingSession()] }))
+    api.readAttendance.mockResolvedValue({
+      session: {
+        session_id: 'session-1',
+        class_id: 'class-1',
+        class_name: 'Maths 9A',
+        class_color: 'blue',
+        starts_at: '2026-08-30T03:00:00Z',
+        ends_at: '2026-08-30T04:00:00Z',
+        local_date: '2026-08-30',
+        state: 'active',
+      },
+      eligible: true,
+      ineligible_reason: null,
+      revision: 'revision-1',
+      students: [
+        {
+          student_id: 'student-1',
+          name: 'Mai',
+          archived: false,
+          state: null,
+          marked_at: null,
+        },
+      ],
+    })
+    renderHome()
+
+    expect(await screen.findByRole('dialog', { name: 'Maths 9A' })).toBeVisible()
+    expect(screen.getByRole('radio', { name: 'Present' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Close attendance' }))
+
+    expect(api.navigate).toHaveBeenCalledWith({ to: '/', search: {} })
   })
 
   it('loads each opaque cursor page without replacing earlier sessions', async () => {

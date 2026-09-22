@@ -6,11 +6,16 @@ package sqlcgen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 type Querier interface {
+	// ApplyClassRateFact accepts positive revisions only when they advance the
+	// stored date. Revision zero keeps retained event compatibility and uses the
+	// original source coordinate to make replay order deterministic.
+	ApplyClassRateFact(ctx context.Context, arg ApplyClassRateFactParams) error
 	// A replay may see an old leave after a later rejoin is already open in the
 	// projection. The event end date excludes that later period from the target.
 	CloseRosterPeriod(ctx context.Context, arg CloseRosterPeriodParams) error
@@ -21,6 +26,7 @@ type Querier interface {
 	// yet, so the next generation is 1.
 	CurrentBillingRunGeneration(ctx context.Context, arg CurrentBillingRunGenerationParams) (CurrentBillingRunGenerationRow, error)
 	GetBillingRun(ctx context.Context, arg GetBillingRunParams) (BillingRun, error)
+	GetBillingTransactionTimestamp(ctx context.Context, arg GetBillingTransactionTimestampParams) (time.Time, error)
 	// GetClassRateBookkeeping exposes the consumer transaction clock for the model
 	// regression tests. Business code reads rates through RateInForceOn instead.
 	GetClassRateBookkeeping(ctx context.Context, arg GetClassRateBookkeepingParams) (GetClassRateBookkeepingRow, error)
@@ -32,6 +38,7 @@ type Querier interface {
 	// The column order is the table's own, so sqlc hands back the one
 	// invoice_profiles row type rather than a second shape of the same row.
 	GetInvoiceProfile(ctx context.Context, tutorID uuid.UUID) (InvoiceProfile, error)
+	GetLiveBillingRunForPeriod(ctx context.Context, arg GetLiveBillingRunForPeriodParams) (BillingRun, error)
 	// Projection status is diagnostic progress only. Each count is scoped to the
 	// trusted tutor, and latest_updated_at covers every teaching projection table,
 	// including the rate history that is not itself a displayed count.
@@ -63,8 +70,14 @@ type Querier interface {
 	// stays plain int64 dong and rate_known is the only place the question "was there
 	// a rate at all" is answered.
 	ListBillableSessions(ctx context.Context, arg ListBillableSessionsParams) ([]ListBillableSessionsRow, error)
+	// ListBillingCandidates begins with every session and covered roster student.
+	// Outer joins keep missing labels, attendance, and rates visible as blockers.
+	ListBillingCandidates(ctx context.Context, arg ListBillingCandidatesParams) ([]ListBillingCandidatesRow, error)
 	ListInvoiceLines(ctx context.Context, arg ListInvoiceLinesParams) ([]InvoiceLine, error)
+	ListInvoiceLinesForRun(ctx context.Context, arg ListInvoiceLinesForRunParams) ([]InvoiceLine, error)
 	ListInvoicesForPeriod(ctx context.Context, arg ListInvoicesForPeriodParams) ([]ListInvoicesForPeriodRow, error)
+	ListInvoicesForRun(ctx context.Context, arg ListInvoicesForRunParams) ([]Invoice, error)
+	ListOwnedClassRates(ctx context.Context, arg ListOwnedClassRatesParams) ([]ListOwnedClassRatesRow, error)
 	// LockInvoiceProfile serialises profile writers. The handler compares the five
 	// normalized editable values before it checks the expected revision, which is
 	// what lets an identical retry recover a lost successful response.

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,9 +21,20 @@ import (
 // so one oversized body cannot take the gateway's memory with it.
 const maxUpstreamBody = 4 << 20
 
-// upstreamTimeout is shared by every identity, teaching, and billing call. It
-// is code rather than deployment state because this feature adds no setting.
+// upstreamTimeout bounds ordinary service calls. Monthly billing gets a
+// separate budget for its projection barrier and calculation.
 const upstreamTimeout = 5 * time.Second
+
+// Billing must finish its five second barrier and bounded calculation before
+// the gateway cancels. Its largest supported month has 10,000 lines and 500
+// students. Even JSON escaped 120 character class names and 160 character
+// student names fit inside 16 MiB.
+const (
+	billingTimeout = 30 * time.Second
+	maxBillingBody = 16 << 20
+)
+
+var errUpstreamBodyTooLarge = errors.New("upstream response exceeds the allowed size")
 
 // Upstreams are the services the gateway may call. It is the only caller
 // allowed (INV-1), and it holds no database of its own.
@@ -38,6 +50,7 @@ type Upstreams struct {
 type Client struct {
 	http      *http.Client
 	upstreams Upstreams
+	maxBody   int64
 }
 
 // NewClient builds the one bounded client the gateway uses for every service.
@@ -53,6 +66,7 @@ func NewClient(upstreams Upstreams) *Client {
 			},
 		},
 		upstreams: upstreams,
+		maxBody:   maxUpstreamBody,
 	}
 }
 
@@ -72,6 +86,17 @@ type Response struct {
 // Call makes one request to one service.
 func (c *Client) Call(ctx context.Context, method, baseURL, path, bearer string, body any) (Response, error) {
 	return c.CallWithHeaders(ctx, method, baseURL, path, bearer, nil, body)
+}
+
+// CallBilling preserves the full supported monthly response and gives billing
+// time to return its barrier outcome while retaining caller cancellation.
+func (c *Client) CallBilling(ctx context.Context, method, path, bearer string, body any) (Response, error) {
+	client := *c
+	httpClient := *c.http
+	httpClient.Timeout = billingTimeout
+	client.http = &httpClient
+	client.maxBody = maxBillingBody
+	return client.Call(ctx, method, c.upstreams.Billing, path, bearer, body)
 }
 
 // CallWithHeaders makes one service request with the narrow extra headers a
@@ -119,7 +144,7 @@ func (c *Client) CallWithHeaders(
 	}
 	defer func() { _ = response.Body.Close() }()
 
-	payload, err := io.ReadAll(io.LimitReader(response.Body, maxUpstreamBody))
+	payload, err := readUpstreamBody(response.Body, c.maxBody)
 	if err != nil {
 		return Response{}, fmt.Errorf("read answer from %s: %w", baseURL+path, err)
 	}
@@ -164,9 +189,20 @@ func (c *Client) Forward(ctx context.Context, r *http.Request, baseURL, path str
 	}
 	defer func() { _ = response.Body.Close() }()
 
-	payload, err := io.ReadAll(io.LimitReader(response.Body, maxUpstreamBody))
+	payload, err := readUpstreamBody(response.Body, c.maxBody)
 	if err != nil {
 		return Response{}, fmt.Errorf("read answer from %s: %w", baseURL+path, err)
 	}
 	return Response{Status: response.StatusCode, Header: response.Header, Body: payload}, nil
+}
+
+func readUpstreamBody(body io.Reader, limit int64) ([]byte, error) {
+	payload, err := io.ReadAll(io.LimitReader(body, limit+1))
+	if err != nil {
+		return nil, fmt.Errorf("read upstream body: %w", err)
+	}
+	if int64(len(payload)) > limit {
+		return nil, errUpstreamBodyTooLarge
+	}
+	return payload, nil
 }

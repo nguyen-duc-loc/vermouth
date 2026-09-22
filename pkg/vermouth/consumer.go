@@ -24,11 +24,20 @@ const (
 	pollMaxRecords = 50
 )
 
+// SourcePosition is the immutable broker coordinate of one consumed event.
+// Projection code uses it only where replay ordering needs evidence stronger
+// than event arrival order.
+type SourcePosition struct {
+	Topic     string
+	Partition int32
+	Offset    int64
+}
+
 // Handle does one consumer's work for one event, inside the transaction that
 // also records the event as handled. Taking the transaction is what makes
 // idempotency real rather than hopeful (INV-5): the handled_events row and the
 // projection write commit together, or neither does.
-type Handle func(ctx context.Context, tx pgx.Tx, env Envelope) error
+type Handle func(ctx context.Context, tx pgx.Tx, env Envelope, source SourcePosition) error
 
 // Consumer is one named consumer inside a service. Its group name is
 // <service>.<name> and matches the consumer_name in handled_events (STK-12),
@@ -154,8 +163,11 @@ type drain struct {
 // the consumer should keep polling.
 func drainRecords(ctx context.Context, d drain, records []*kgo.Record) bool {
 	for _, record := range records {
-		err := handleRecord(ctx, d.pool, d.producer, d.log, d.cfg, d.group, d.consumer, record)
-		if err != nil {
+		for {
+			err := handleRecord(ctx, d.pool, d.producer, d.log, d.cfg, d.group, d.consumer, record)
+			if err == nil {
+				break
+			}
 			if ctx.Err() != nil {
 				return false
 			}
@@ -166,10 +178,13 @@ func drainRecords(ctx context.Context, d drain, records []*kgo.Record) bool {
 				slog.String("error", err.Error()),
 				slog.Int64("offset", record.Offset),
 			)
-			time.Sleep(d.cfg.RetryBaseDelay)
-			continue
+			select {
+			case <-ctx.Done():
+				return false
+			case <-time.After(d.cfg.RetryBaseDelay):
+			}
 		}
-		err = d.client.CommitRecords(ctx, record)
+		err := d.client.CommitRecords(ctx, record)
 		if err != nil && ctx.Err() == nil {
 			d.log.ErrorContext(ctx, "Commit offset", slog.String("error", err.Error()))
 		}
@@ -182,7 +197,18 @@ func handleRecord(ctx context.Context, pool *pgxpool.Pool, producer *kgo.Client,
 	err := json.Unmarshal(record.Value, &env)
 	if err != nil {
 		// Undecodable bytes will never decode, so retrying is pointless.
-		return park(ctx, producer, log, group, record, env, fmt.Errorf("envelope did not decode: %w", err), 0)
+		return park(
+			ctx,
+			pool,
+			producer,
+			log,
+			group,
+			record,
+			env,
+			fmt.Errorf("envelope did not decode: %w", err),
+			FailureDecode,
+			0,
+		)
 	}
 
 	ctx = WithRequestID(ctx, env.RequestID)
@@ -194,7 +220,7 @@ func handleRecord(ctx context.Context, pool *pgxpool.Pool, producer *kgo.Client,
 
 	var lastErr error
 	for attempt := 1; attempt <= cfg.RetryMax; attempt++ {
-		handled, err := handleOnce(ctx, pool, group, consumer, env)
+		handled, err := handleOnce(ctx, pool, group, consumer, env, record)
 		if err == nil {
 			if handled {
 				log.InfoContext(ctx, "Event handled")
@@ -208,7 +234,7 @@ func handleRecord(ctx context.Context, pool *pgxpool.Pool, producer *kgo.Client,
 		// An event_version this consumer does not recognise is the one failure
 		// no retry can fix, so it is parked at once (INV-12, STK-20).
 		if _, ok := errors.AsType[*UnknownVersionError](err); ok {
-			return park(ctx, producer, log, group, record, env, err, attempt)
+			return park(ctx, pool, producer, log, group, record, env, err, FailureVersion, attempt)
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -217,7 +243,7 @@ func handleRecord(ctx context.Context, pool *pgxpool.Pool, producer *kgo.Client,
 		log.WarnContext(ctx, "Handler failed, retrying",
 			slog.Int("attempt", attempt),
 			slog.Int("retry_max", cfg.RetryMax),
-			slog.String("error", err.Error()),
+			slog.String("failure_category", string(FailureHandler)),
 		)
 		if attempt < cfg.RetryMax {
 			select {
@@ -227,13 +253,20 @@ func handleRecord(ctx context.Context, pool *pgxpool.Pool, producer *kgo.Client,
 			}
 		}
 	}
-	return park(ctx, producer, log, group, record, env, lastErr, cfg.RetryMax)
+	return park(ctx, pool, producer, log, group, record, env, lastErr, FailureHandler, cfg.RetryMax)
 }
 
 // handleOnce records the event as handled and does the work in one
 // transaction. It reports false when the event was already handled, which is
 // what makes handling the same message twice change nothing (INV-5).
-func handleOnce(ctx context.Context, pool *pgxpool.Pool, group string, consumer Consumer, env Envelope) (bool, error) {
+func handleOnce(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	group string,
+	consumer Consumer,
+	env Envelope,
+	record *kgo.Record,
+) (bool, error) {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return false, err
@@ -248,11 +281,27 @@ func handleOnce(ctx context.Context, pool *pgxpool.Pool, group string, consumer 
 	if err != nil {
 		return false, fmt.Errorf("record handled event: %w", err)
 	}
+	source := failureSource{
+		Consumer:  group,
+		Topic:     record.Topic,
+		Partition: record.Partition,
+		Offset:    record.Offset,
+	}
 	if tag.RowsAffected() == 0 {
+		err = resolveConsumerFailure(ctx, tx, source)
+		if err != nil {
+			return false, err
+		}
 		return false, tx.Commit(ctx)
 	}
 
-	err = consumer.Handle(ctx, tx, env)
+	err = consumer.Handle(ctx, tx, env, SourcePosition{
+		Topic: record.Topic, Partition: record.Partition, Offset: record.Offset,
+	})
+	if err != nil {
+		return false, err
+	}
+	err = resolveConsumerFailure(ctx, tx, source)
 	if err != nil {
 		return false, err
 	}
@@ -266,26 +315,50 @@ func handleOnce(ctx context.Context, pool *pgxpool.Pool, group string, consumer 
 // DeadLetter is what a parked message looks like: the reason it failed and the
 // envelope exactly as it arrived, so a replay has everything it needs.
 type DeadLetter struct {
-	FailedAt  time.Time       `json:"failed_at"`
-	Consumer  string          `json:"consumer"`
-	Reason    string          `json:"reason"`
-	Attempts  int             `json:"attempts"`
-	Topic     string          `json:"source_topic"`
-	Partition int32           `json:"source_partition"`
-	Offset    int64           `json:"source_offset"`
-	Envelope  json.RawMessage `json:"envelope"`
+	FailedAt         time.Time `json:"failed_at"`
+	Consumer         string    `json:"consumer"`
+	Reason           string    `json:"reason"`
+	Attempts         int       `json:"attempts"`
+	Topic            string    `json:"source_topic"`
+	Partition        int32     `json:"source_partition"`
+	Offset           int64     `json:"source_offset"`
+	EnvelopeEncoding string    `json:"envelope_encoding"`
+	Envelope         []byte    `json:"envelope"`
 }
 
-func park(ctx context.Context, producer *kgo.Client, log *slog.Logger, group string, record *kgo.Record, env Envelope, cause error, attempts int) error {
-	letter := DeadLetter{
-		FailedAt:  time.Now().UTC(),
+func park(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	producer *kgo.Client,
+	log *slog.Logger,
+	group string,
+	record *kgo.Record,
+	env Envelope,
+	cause error,
+	category FailureCategory,
+	attempts int,
+) error {
+	source := failureSource{
 		Consumer:  group,
-		Reason:    cause.Error(),
-		Attempts:  attempts,
 		Topic:     record.Topic,
 		Partition: record.Partition,
 		Offset:    record.Offset,
-		Envelope:  record.Value,
+	}
+	err := recordConsumerFailure(ctx, pool, source, env, category)
+	if err != nil {
+		return err
+	}
+
+	letter := DeadLetter{
+		FailedAt:         time.Now().UTC(),
+		Consumer:         group,
+		Reason:           cause.Error(),
+		Attempts:         attempts,
+		Topic:            record.Topic,
+		Partition:        record.Partition,
+		Offset:           record.Offset,
+		EnvelopeEncoding: "base64",
+		Envelope:         record.Value,
 	}
 	body, err := json.Marshal(letter)
 	if err != nil {
@@ -303,7 +376,7 @@ func park(ctx context.Context, producer *kgo.Client, log *slog.Logger, group str
 	log.ErrorContext(ctx, "Message parked in dead letter topic",
 		slog.String("dlq_topic", dlq),
 		slog.Int("attempts", attempts),
-		slog.String("reason", cause.Error()),
+		slog.String("failure_category", string(category)),
 	)
 	return nil
 }

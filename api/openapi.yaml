@@ -360,6 +360,73 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /api/classes/{class_id}/rates:
+    get:
+      operationId: getClassRates
+      summary: Read authoritative current rate and projected dated history
+      parameters:
+        - $ref: "#/components/parameters/ClassId"
+      responses:
+        "200":
+          description: Current rate, allowed correction range, and complete dated history
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClassRates"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /api/classes/{class_id}/rates/{effective_date}:
+    put:
+      operationId: putClassRate
+      summary: Create or correct one dated class rate
+      parameters:
+        - $ref: "#/components/parameters/ClassId"
+        - name: effective_date
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PutClassRateRequest"
+      responses:
+        "200":
+          description: The committed dated rate or its original retry response
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PutClassRateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/classes/{class_id}/schedule/end:
     post:
       operationId: endClassSchedule
@@ -829,6 +896,129 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/billing-periods/default:
+    get:
+      operationId: getBillingPeriodDefault
+      summary: Read the server derived most recent completed month
+      responses:
+        "200":
+          description: Verified timezone and default completed period
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingPeriodDefault"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /api/billing-periods/{year}/{month}:
+    get:
+      operationId: getBillingPeriod
+      summary: Read an unissued month or its immutable issued run
+      parameters:
+        - $ref: "#/components/parameters/BillingYear"
+        - $ref: "#/components/parameters/BillingMonth"
+      responses:
+        "200":
+          description: The current authoritative period state
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingPeriodState"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /api/billing-periods/{year}/{month}/preview:
+    post:
+      operationId: previewBillingPeriod
+      summary: Calculate one completed month after proving projection readiness
+      parameters:
+        - $ref: "#/components/parameters/BillingYear"
+        - $ref: "#/components/parameters/BillingMonth"
+      responses:
+        "200":
+          description: Ready, blocked, empty, or already issued month
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingPreview"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          $ref: "#/components/responses/ProjectionUnavailable"
+
+  /api/billing-periods/{year}/{month}/issue:
+    post:
+      operationId: issueBillingPeriod
+      summary: Issue one immutable invoice per billable student
+      parameters:
+        - $ref: "#/components/parameters/BillingYear"
+        - $ref: "#/components/parameters/BillingMonth"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueBillingRequest"
+      responses:
+        "200":
+          description: The existing run returned for a retry
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingRun"
+        "201":
+          description: The new run and every immutable invoice
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingRun"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ProjectionUnavailable"
+
   /api/home:
     get:
       operationId: getHome
@@ -881,6 +1071,21 @@ components:
       schema:
         type: string
         format: uuid
+    BillingYear:
+      name: year
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 2000
+    BillingMonth:
+      name: month
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 12
     SessionId:
       name: session_id
       in: path
@@ -993,6 +1198,23 @@ components:
         Cache-Control:
           required: true
           description: Prevents a refusal from being stored by browsers or intermediaries.
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ProjectionUnavailable:
+      description: The projection cannot yet prove the requested published cut
+      headers:
+        Retry-After:
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        Cache-Control:
+          required: true
           schema:
             type: string
             const: no-store
@@ -1156,7 +1378,7 @@ components:
     Class:
       type: object
       required:
-        [class_id, name, color, rate_amount, currency, rate_effective_from, schedule_revision]
+        [class_id, name, color, rate_amount, currency, rate_effective_from, schedule_revision, rate_revision]
       properties:
         class_id:
           type: string
@@ -1175,6 +1397,10 @@ components:
           type: string
           format: date
         schedule_revision:
+          type: integer
+          format: int64
+          minimum: 0
+        rate_revision:
           type: integer
           format: int64
           minimum: 0
@@ -2128,6 +2354,370 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Bank"
+
+    RateCurrent:
+      type: object
+      additionalProperties: false
+      required: [rate_amount, currency, effective_from, rate_revision]
+      properties:
+        rate_amount:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1000000000
+        currency:
+          type: string
+          const: VND
+        effective_from:
+          type: string
+          format: date
+        rate_revision:
+          type: integer
+          format: int64
+          minimum: 0
+
+    RateAllowedRange:
+      type: object
+      additionalProperties: false
+      required: [from, through]
+      properties:
+        from:
+          type: string
+          format: date
+        through:
+          type: string
+          format: date
+
+    ProjectedClassRate:
+      type: object
+      additionalProperties: false
+      required: [effective_from, rate_amount, currency, rate_revision]
+      properties:
+        effective_from:
+          type: string
+          format: date
+        rate_amount:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1000000000
+        currency:
+          type: string
+          const: VND
+        rate_revision:
+          type: integer
+          format: int64
+          minimum: 0
+
+    ClassRates:
+      type: object
+      additionalProperties: false
+      required: [class_id, current, allowed_range, archived, rates, projected_revision, history_state]
+      properties:
+        class_id:
+          type: string
+          format: uuid
+        current:
+          $ref: "#/components/schemas/RateCurrent"
+        allowed_range:
+          $ref: "#/components/schemas/RateAllowedRange"
+        archived:
+          type: boolean
+        rates:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectedClassRate"
+        projected_revision:
+          type: integer
+          format: int64
+          minimum: 0
+        history_state:
+          type: string
+          enum: [synced, syncing, unavailable]
+
+    PutClassRateRequest:
+      type: object
+      additionalProperties: false
+      required: [rate_amount]
+      properties:
+        rate_amount:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1000000000
+
+    PutClassRateResponse:
+      type: object
+      additionalProperties: false
+      required:
+        [class_id, effective_from, rate_amount, currency, rate_revision, current, allowed_range, issued_invoices_unchanged, history_state]
+      properties:
+        class_id:
+          type: string
+          format: uuid
+        effective_from:
+          type: string
+          format: date
+        rate_amount:
+          type: integer
+          format: int64
+        currency:
+          type: string
+          const: VND
+        rate_revision:
+          type: integer
+          format: int64
+          minimum: 1
+        current:
+          $ref: "#/components/schemas/RateCurrent"
+        allowed_range:
+          $ref: "#/components/schemas/RateAllowedRange"
+        issued_invoices_unchanged:
+          type: boolean
+          const: true
+        history_state:
+          type: string
+          const: pending
+
+    BillingPeriod:
+      type: object
+      additionalProperties: false
+      required: [year, month]
+      properties:
+        year:
+          type: integer
+          minimum: 2000
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+
+    BillingPeriodDefault:
+      type: object
+      additionalProperties: false
+      required: [server_date, timezone, year, month, minimum_year]
+      properties:
+        server_date:
+          type: string
+          format: date
+        timezone:
+          type: string
+        year:
+          type: integer
+          minimum: 2000
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        minimum_year:
+          type: integer
+          const: 2000
+
+    BillingRecoveryDestination:
+      type: object
+      additionalProperties: false
+      required: [route, date, session_id, class_id, rate_date]
+      properties:
+        route:
+          type: string
+        date:
+          type: [string, "null"]
+          format: date
+        session_id:
+          type: [string, "null"]
+          format: uuid
+        class_id:
+          type: [string, "null"]
+          format: uuid
+        rate_date:
+          type: [string, "null"]
+          format: date
+
+    BillingBlocker:
+      type: object
+      additionalProperties: false
+      required: [code, student_id, session_id, class_id, local_date, field, destination]
+      properties:
+        code:
+          type: string
+          enum: [profile_incomplete, attendance_incomplete, rate_missing]
+        student_id:
+          type: [string, "null"]
+          format: uuid
+        session_id:
+          type: [string, "null"]
+          format: uuid
+        class_id:
+          type: [string, "null"]
+          format: uuid
+        local_date:
+          type: [string, "null"]
+          format: date
+        field:
+          type: [string, "null"]
+        destination:
+          $ref: "#/components/schemas/BillingRecoveryDestination"
+
+    BillingLine:
+      type: object
+      additionalProperties: false
+      required: [session_id, class_id, class_name, local_date, rate_amount, amount, currency]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        class_id:
+          type: [string, "null"]
+          format: uuid
+        class_name:
+          type: string
+        local_date:
+          type: string
+          format: date
+        rate_amount:
+          type: integer
+          format: int64
+        amount:
+          type: integer
+          format: int64
+        currency:
+          type: string
+          const: VND
+
+    BillingStudentTotal:
+      type: object
+      additionalProperties: false
+      required: [student_id, student_name, lines, total_amount, currency]
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        student_name:
+          type: string
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/BillingLine"
+        total_amount:
+          type: integer
+          format: int64
+        currency:
+          type: string
+          const: VND
+
+    IssuedInvoice:
+      type: object
+      additionalProperties: false
+      required:
+        [invoice_id, student_id, student_name, invoice_number, total_amount, currency, issued_at, lines]
+      properties:
+        invoice_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        student_name:
+          type: string
+        invoice_number:
+          type: string
+        total_amount:
+          type: integer
+          format: int64
+        currency:
+          type: string
+          const: VND
+        issued_at:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/BillingLine"
+
+    BillingRun:
+      type: object
+      additionalProperties: false
+      required: [billing_run_id, period, generation, created_at, invoices, grand_total, currency]
+      properties:
+        billing_run_id:
+          type: string
+          format: uuid
+        period:
+          $ref: "#/components/schemas/BillingPeriod"
+        generation:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        invoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/IssuedInvoice"
+        grand_total:
+          type: integer
+          format: int64
+        currency:
+          type: string
+          const: VND
+
+    BillingPeriodState:
+      type: object
+      additionalProperties: false
+      required: [status, period, run]
+      properties:
+        status:
+          type: string
+          enum: [unissued, already_issued]
+        period:
+          $ref: "#/components/schemas/BillingPeriod"
+        run:
+          oneOf:
+            - $ref: "#/components/schemas/BillingRun"
+            - type: "null"
+
+    BillingPreview:
+      type: object
+      additionalProperties: false
+      required: [status, period, students, blockers, grand_total, currency, preview_fingerprint, run]
+      properties:
+        status:
+          type: string
+          enum: [ready, blocked, empty, already_issued]
+        period:
+          $ref: "#/components/schemas/BillingPeriod"
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/BillingStudentTotal"
+        blockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/BillingBlocker"
+        grand_total:
+          type: integer
+          format: int64
+        currency:
+          type: string
+          const: VND
+        preview_fingerprint:
+          type: [string, "null"]
+        run:
+          oneOf:
+            - $ref: "#/components/schemas/BillingRun"
+            - type: "null"
+
+    IssueBillingRequest:
+      type: object
+      additionalProperties: false
+      required: [preview_fingerprint]
+      properties:
+        preview_fingerprint:
+          type: string
+          minLength: 1
 
     HomeBillingProjection:
       type: object

@@ -15,6 +15,7 @@ import (
 type Deps struct {
 	Projection *handler.ProjectionReader
 	Profile    *handler.ProfileService
+	Billing    *handler.BillingService
 	Verifier   *vermouth.Verifier
 	Logger     *slog.Logger
 	Health     vermouth.Health
@@ -28,6 +29,11 @@ func Mux(deps Deps) http.Handler {
 	mux.HandleFunc("GET /invoice-profile", getInvoiceProfile(deps))
 	mux.HandleFunc("PUT /invoice-profile", putInvoiceProfile(deps))
 	mux.HandleFunc("GET /banks", getBanks(deps))
+	mux.HandleFunc("GET /classes/{class_id}/rates", getProjectedClassRates(deps))
+	mux.HandleFunc("GET /billing-periods/default", getBillingPeriodDefault(deps))
+	mux.HandleFunc("GET /billing-periods/{year}/{month}", getBillingPeriod(deps))
+	mux.HandleFunc("POST /billing-periods/{year}/{month}/preview", previewBillingPeriod(deps))
+	mux.HandleFunc("POST /billing-periods/{year}/{month}/issue", issueBillingPeriod(deps))
 	return vermouth.RequestIDMiddleware(deps.Logger, mux)
 }
 

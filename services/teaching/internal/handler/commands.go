@@ -63,6 +63,16 @@ type classCreatedFields struct {
 	RateAmount        int64     `json:"rate_amount"`
 	Currency          string    `json:"currency"`
 	RateEffectiveFrom string    `json:"rate_effective_from"`
+	RateRevision      int64     `json:"rate_revision"`
+}
+
+type classRateChangedFields struct {
+	ClassID       uuid.UUID `json:"class_id"`
+	TutorID       uuid.UUID `json:"tutor_id"`
+	EffectiveFrom string    `json:"effective_from"`
+	RateAmount    int64     `json:"rate_amount"`
+	Currency      string    `json:"currency"`
+	RateRevision  int64     `json:"rate_revision"`
 }
 
 type sessionScheduledFields struct {
@@ -262,6 +272,7 @@ func (h *Handler) CreateClass(
 			ClassID: classID, TutorID: tutorID, Name: validated.name,
 			RateAmount: validated.rateAmount, Currency: currencyVND,
 			RateEffectiveFrom: rateEffectiveFrom.Format(dateLayout),
+			RateRevision:      classRow.RateRevision,
 		},
 	})
 	if err != nil {
@@ -312,6 +323,7 @@ func (h *Handler) CreateClass(
 			RateAmount: classRow.RateAmount, Currency: classRow.Currency,
 			RateEffectiveFrom: classRow.RateEffectiveFrom.Time.Format(dateLayout),
 			ScheduleRevision:  classRow.ScheduleRevision,
+			RateRevision:      classRow.RateRevision,
 		},
 		Rule: rule, CandidateCount: len(occurrences), CreatedCount: len(inserted),
 	}
@@ -413,6 +425,7 @@ func (h *Handler) replayClass(
 			RateAmount: classRow.RateAmount, Currency: classRow.Currency,
 			RateEffectiveFrom: classRow.RateEffectiveFrom.Time.Format(dateLayout),
 			ScheduleRevision:  classRow.ScheduleRevision,
+			RateRevision:      classRow.RateRevision,
 		},
 		CandidateCount: len(sessions), CreatedCount: len(sessions),
 	}

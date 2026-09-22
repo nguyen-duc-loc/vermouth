@@ -28,8 +28,9 @@ handler keeps each aggregate write and its outbox facts inside one transaction.
 | `internal/http/routes.go` | Routing only |
 | `internal/handler/commands.go`, `schedule*.go`, `session_commands.go` | Teaching commands and reads, including immutable command replay and schedule state guards |
 | `internal/handler/student_records.go`, `class_rosters.go`, `session_attendance.go` | Student resources, atomic dated roster deltas, and whole roster attendance passes |
+| `internal/handler/class_rates.go` | Revision guarded dated rate commands, immutable receipts, and rate facts for billing |
 | `internal/store/store.go`, `db/queries/*.sql` | The only database path and its hand written queries |
-| `db/migrations/00002_teaching_model.sql` through `00007_student_records_class_rosters.sql` | Teaching entities, tenant references, the core loop, recurring rules, overlap constraints, and complete student and roster integrity |
+| `db/migrations/00002_teaching_model.sql` through `00010_tuition_rate_receipts.sql` | Teaching entities, recurring rules, student and roster integrity, consumer recovery, and dated rate revisions and receipts |
 
 ## Commands
 
@@ -42,7 +43,8 @@ task schedule:conflicts   # report active overlaps in stable JSON without writin
 - Event names, keys, and fields come from spec 0001's catalogue verbatim. Do not invent one here.
 - `local_date` is computed once by this service, in the tutor's timezone, and carried on the event, so
   no consumer has to recompute it.
-- The rate on a class is the current one here. Dated rate history belongs to `billing`, fed by
+- Teaching owns the authoritative current rate and accepts dated rate commands with monotonic
+  revisions. The complete replayable history belongs to `billing`, fed by
   `teaching.class.rate.changed`.
 * Weekly rules are versioned by `classes.schedule_revision`, but every occurrence is a concrete
   session row. Billing and notifications still react only to concrete session facts.
@@ -75,5 +77,6 @@ The repo wide skills in the root file all apply here. These are the ones that ea
 - [0002 stack and scaffold](../../docs/specs/0002-stack-and-scaffold/index.md) (STK-11, STK-19)
 * [0010 recurring sessions and exceptions](../../docs/specs/0010-recurring-sessions-exceptions/index.md) (weekly rules, concrete occurrences, exceptions, overlap guards, and calendar reads)
 * [0011 student records and class rosters](../../docs/specs/0011-student-records-class-rosters/index.md) (student privacy, dated membership, and whole roster attendance)
+* [0013 tuition rate and monthly calculation](../../docs/specs/0013-tuition-rate-monthly-calculation/index.md) (dated rate commands, revisions, receipts, and published facts)
 
 _Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

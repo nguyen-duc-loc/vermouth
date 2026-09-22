@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi, Link } from '@tanstack/react-router'
-import { Archive, CalendarDays, Home, Pencil, Users } from 'lucide-react'
+import { Archive, CalendarDays, Home, Pencil, ReceiptText, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import {
@@ -39,6 +39,7 @@ const destinations: readonly AppDestination[] = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/schedule', label: 'Schedule', icon: CalendarDays },
   { href: '/students', label: 'Students', icon: Users },
+  { href: '/billing', label: 'Billing', icon: ReceiptText },
 ]
 
 /** Shows one private student record above its retained class history. */

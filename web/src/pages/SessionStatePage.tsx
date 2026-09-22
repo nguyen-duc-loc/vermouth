@@ -24,6 +24,9 @@ const ClassDetailPage = lazy(() =>
 const ProfilePage = lazy(() =>
   import('./ProfilePage').then((module) => ({ default: module.ProfilePage })),
 )
+const BillingPage = lazy(() =>
+  import('./BillingPage').then((module) => ({ default: module.BillingPage })),
+)
 
 /** Keeps protected content behind the current session state. */
 export function ProtectedHomePage() {
@@ -93,6 +96,11 @@ export function ProtectedClassDetailPage() {
 /** Keeps private invoice identity behind the verified session boundary. */
 export function ProtectedProfilePage() {
   return <ProtectedLazyPage redirectTo="/profile" page={<ProfilePage />} />
+}
+
+/** Keeps private monthly money review behind the verified session boundary. */
+export function ProtectedBillingPage() {
+  return <ProtectedLazyPage redirectTo="/billing" page={<BillingPage />} />
 }
 
 function ProtectedLazyPage({ redirectTo, page }: { redirectTo: string; page: ReactNode }) {

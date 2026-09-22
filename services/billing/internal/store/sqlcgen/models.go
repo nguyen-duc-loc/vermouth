@@ -40,13 +40,53 @@ type Class struct {
 }
 
 type ClassRate struct {
-	ClassID       uuid.UUID
-	EffectiveFrom pgtype.Date
-	TutorID       uuid.UUID
-	RateAmount    int64
-	Currency      string
-	RecordedAt    time.Time
-	UpdatedAt     time.Time
+	ClassID         uuid.UUID
+	EffectiveFrom   pgtype.Date
+	TutorID         uuid.UUID
+	RateAmount      int64
+	Currency        string
+	RecordedAt      time.Time
+	UpdatedAt       time.Time
+	RateRevision    int64
+	SourcePartition pgtype.Int4
+	SourceOffset    pgtype.Int8
+}
+
+type ConsumerFailure struct {
+	ConsumerName    string
+	SourceTopic     string
+	SourcePartition int32
+	SourceOffset    int64
+	EventID         pgtype.UUID
+	TutorID         pgtype.UUID
+	FailureCategory string
+	FailedAt        time.Time
+	ResolvedAt      pgtype.Timestamptz
+	Resolution      pgtype.Text
+	ResolutionCode  pgtype.Text
+	ResolvedBy      pgtype.Text
+	RepairReference pgtype.Text
+}
+
+type ConsumerReadiness struct {
+	ConsumerName         string
+	ProjectionGeneration uuid.UUID
+	State                string
+	UpdatedAt            time.Time
+}
+
+type ConsumerReplayManifest struct {
+	ConsumerName         string
+	ProjectionGeneration uuid.UUID
+	SourceTopic          string
+	TopicIdentity        string
+	PartitionSet         []byte
+	EarliestOffsets      []byte
+	CapturedEndOffsets   []byte
+	CompletedOffsets     []byte
+	StartedAt            time.Time
+	CompletedAt          pgtype.Timestamptz
+	OperatorIdentity     string
 }
 
 type HandledEvent struct {

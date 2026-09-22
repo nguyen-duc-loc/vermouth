@@ -24,6 +24,7 @@ business rule and no write logic of its own, and it never touches a database.
 | `internal/aggregate/thread.go` | The read fan out, the skeleton's one aggregated screen |
 | `internal/route/{student,class_roster,attendance}_routes.go` | Direct teaching proxies for student resources, dated rosters, and atomic attendance |
 | `internal/route/profile_routes.go` | Direct private profile and bank catalog proxies to billing |
+| `internal/route/billing_routes.go` | Rate aggregation across teaching and billing, plus monthly billing period proxies |
 | `internal/apitypes/types.gen.go` | Generated. Never edit by hand; run `task generate:api` |
 
 ## Commands
@@ -67,5 +68,6 @@ The repo wide skills in the root file all apply here. These are the ones that ea
 - [0002 stack and scaffold](../docs/specs/0002-stack-and-scaffold/index.md) (STK-10, STK-14)
 * [0011 student records and class rosters](../docs/specs/0011-student-records-class-rosters/index.md) (the public contract and direct teaching proxies)
 * [0012 tutor profile and bank details](../docs/specs/0012-tutor-profile-bank-details/index.md) (private billing profile proxies and cache headers)
+* [0013 tuition rate and monthly calculation](../docs/specs/0013-tuition-rate-monthly-calculation/index.md) (rate history aggregation and monthly billing routes)
 
 _Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

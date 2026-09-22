@@ -46,7 +46,13 @@ jobs:
       - name: Lint
         run: task lint
 
+      - name: Start test infrastructure
+        run: task infra:up
+
       - name: Test
+        env:
+          BILLING_DATABASE_URL: postgres://vermouth_billing:vermouth@localhost:5435/vermouth_billing?sslmode=disable
+          BROKER_SEEDS: localhost:19092
         run: task test
 
   web:

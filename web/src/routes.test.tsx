@@ -106,6 +106,43 @@ describe('route tree', () => {
     })
   })
 
+  // covers: spec 0013 AC-4, AC-7, AC-21
+  it('keeps only valid billing and recovery search values', () => {
+    const sessionID = '018f8f7e-91b0-7cc4-bd8c-f4d9030ca421'
+
+    expect(
+      routes['/']?.options.validateSearch?.({
+        date: '2026-08-30',
+        session: sessionID,
+        ignored: 'private',
+      }),
+    ).toEqual({ date: '2026-08-30', session: sessionID })
+    expect(
+      routes['/']?.options.validateSearch?.({ date: '2026-02-31', session: 'not-a-uuid' }),
+    ).toEqual({ date: undefined, session: undefined })
+    expect(
+      routes['/classes/$classId']?.options.validateSearch?.({
+        date: '2026-08-30',
+        rateDate: '2026-08-18',
+      }),
+    ).toEqual({ date: '2026-08-30', rateDate: '2026-08-18' })
+    expect(
+      routes['/classes/$classId']?.options.validateSearch?.({
+        date: 'wrong',
+        rateDate: '2026-02-31',
+      }),
+    ).toEqual({ date: undefined, rateDate: undefined })
+    expect(routes['/billing']?.options.validateSearch?.({ year: '2026', month: '8' })).toEqual({
+      year: 2026,
+      month: 8,
+    })
+    expect(routes['/billing']?.options.validateSearch?.({ year: 1999, month: 13 })).toEqual({
+      year: undefined,
+      month: undefined,
+    })
+    expect(routes['/billing']?.options.beforeLoad).toBeDefined()
+  })
+
   it('AC-1 keeps invoice profile behind the protected route tree', () => {
     expect(routes['/profile']).toBeDefined()
     expect(routes['/profile']?.options.beforeLoad).toBeDefined()

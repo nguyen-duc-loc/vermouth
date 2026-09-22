@@ -24,6 +24,7 @@ func TestThreadAcceptsCompactDevelopmentTokenJSON(t *testing.T) {
 
 	require.NoErrorf(t, result.err, "stdout: %s\nstderr: %s", result.stdout, result.stderr)
 	require.Contains(t, result.stdout, "The teaching thread is complete")
+	require.Contains(t, result.stdout, "The money thread is complete")
 	require.NotContains(t, result.stdout, "token-1")
 	assertThreadCalls(t, fixture.callLog, "dev:token", "http://vermouth.localhost:8080")
 }
@@ -45,7 +46,24 @@ func TestThreadRetriesATemporaryGatewayFailure(t *testing.T) {
 	require.NoErrorf(t, result.err, "stdout: %s\nstderr: %s", result.stdout, result.stderr)
 	count, err := os.ReadFile(fixture.count)
 	require.NoError(t, err)
-	require.Equal(t, "19", strings.TrimSpace(string(count)))
+	require.Equal(t, "36", strings.TrimSpace(string(count)))
+}
+
+func TestThreadRetriesATemporaryPreviewFailure(t *testing.T) {
+	t.Parallel()
+
+	fixture := newThreadFixture(t)
+	result := runCommand(t, "", map[string]string{
+		"PATH":             fixture.path,
+		"CALL_LOG":         fixture.callLog,
+		"CURL_COUNT":       fixture.count,
+		"PROFILE_STATE":    fixture.profile,
+		"PREVIEW_FAILURES": "1",
+		"TOKEN_OUTPUT":     `{"schema_version":1,"access_token":"token-1","tutor_id":"tutor-1"}`,
+	}, []string{repoFile(t, "test", "thread.sh")})
+
+	require.NoErrorf(t, result.err, "stdout: %s\nstderr: %s", result.stdout, result.stderr)
+	require.Contains(t, result.stdout, "The money thread is complete")
 }
 
 // covers: AC-6, AC-13
@@ -153,6 +171,52 @@ case "$calls" in
   *"/api/banks"*)
     printf '%s\n' '{"banks":[{"code":"970436","short_name":"Vietcombank","official_name":"Ngân hàng TMCP Ngoại Thương Việt Nam"}]}'
     ;;
+  *"/api/billing-periods/default"*)
+    printf '%s\n' '{"year":2026,"month":8,"timezone":"Asia/Ho_Chi_Minh","server_date":"2026-09-22"}'
+    ;;
+  *"/api/classes/"*"/rates/"*)
+    printf '%s\n' '{"class_id":"class-1","effective_from":"2026-08-15","rate_amount":175000,"currency":"VND","rate_revision":2,"issued_invoices_unchanged":true}'
+    ;;
+  *"/api/classes/"*"/rates"*)
+    printf '%s\n' '{"class_id":"class-1","history_state":"synced","projected_revision":2,"current":{"effective_from":"2026-08-15","rate_amount":175000,"currency":"VND","rate_revision":2},"allowed_range":{"from":"2026-08-15","through":"2026-09-22"},"rates":[{"effective_from":"2026-08-15","rate_amount":175000,"currency":"VND","rate_revision":2}]}'
+    ;;
+  *"/api/billing-periods/"*"/preview"*)
+    preview_attempt_state="${PROFILE_STATE}.billing-preview-attempt"
+    preview_attempt=0
+    if [ -f "$preview_attempt_state" ]; then preview_attempt=$(cat "$preview_attempt_state"); fi
+    preview_attempt=$((preview_attempt + 1))
+    printf '%s\n' "$preview_attempt" >"$preview_attempt_state"
+    if [ "$preview_attempt" -le "${PREVIEW_FAILURES:-0}" ]; then exit 22; fi
+    preview_state="${PROFILE_STATE}.billing-preview"
+    preview_count=0
+    if [ -f "$preview_state" ]; then preview_count=$(cat "$preview_state"); fi
+    preview_count=$((preview_count + 1))
+    printf '%s\n' "$preview_count" >"$preview_state"
+    if [ "$preview_count" = 1 ]; then
+      printf '%s\n' '{"status":"ready","period":{"year":2026,"month":8},"students":[{"student_id":"student-1","student_name":"Thread student","total_amount":175000,"currency":"VND","lines":[{"session_id":"session-1","session_date":"2026-08-15","class_id":"class-1","class_name":"Maths","rate_amount":175000,"amount":175000,"currency":"VND"}]}],"blockers":[],"grand_total":175000,"currency":"VND","preview_fingerprint":"preview-1"}'
+    else
+      printf '%s\n' '{"status":"ready","period":{"year":2026,"month":8},"students":[{"student_id":"student-1","student_name":"Thread student","total_amount":180000,"currency":"VND","lines":[{"session_id":"session-1","session_date":"2026-08-15","class_id":"class-1","class_name":"Maths","rate_amount":180000,"amount":180000,"currency":"VND"}]}],"blockers":[],"grand_total":180000,"currency":"VND","preview_fingerprint":"preview-2"}'
+    fi
+    ;;
+  *"/api/billing-periods/"*"/issue"*)
+    issue_state="${PROFILE_STATE}.billing-issue"
+    if [ ! -f "$issue_state" ]; then
+      printf '1\n' >"$issue_state"
+      output_file=
+      previous=
+      for argument in "$@"; do
+        if [ "$previous" = "-o" ]; then output_file=$argument; break; fi
+        previous=$argument
+      done
+      printf '%s\n' '{"error":{"code":"preview_stale","message":"Preview changed","request_id":"request-1"}}' >"$output_file"
+      printf '409'
+    else
+      printf '%s\n' '{"billing_run_id":"run-1","period":{"year":2026,"month":8},"generation":1,"grand_total":180000,"currency":"VND","invoices":[{"invoice_id":"invoice-1","invoice_number":"2026-0001","student_id":"student-1","student_name":"Thread student","total_amount":180000,"currency":"VND","lines":[{"session_id":"session-1","session_date":"2026-08-15","class_name":"Maths","rate_amount":180000,"amount":180000}]}]}'
+    fi
+    ;;
+  *"/api/billing-periods/"*)
+    printf '%s\n' '{"status":"already_issued","period":{"year":2026,"month":8},"run":{"billing_run_id":"run-1","period":{"year":2026,"month":8},"generation":1,"grand_total":180000,"currency":"VND","invoices":[{"invoice_id":"invoice-1","invoice_number":"2026-0001","student_id":"student-1","student_name":"Thread student","total_amount":180000,"currency":"VND","lines":[{"session_id":"session-1","session_date":"2026-08-15","class_name":"Maths","rate_amount":180000,"amount":180000}]}]}}'
+    ;;
   *"/schedule"*)
     printf '%s\n' '{"class":{"class_id":"class-1","schedule_revision":1},"candidate_count":1,"created_count":0,"adopted_count":1,"superseded_count":0,"preserved_count":0}'
     ;;
@@ -219,5 +283,11 @@ func assertThreadCalls(t *testing.T, path, tokenTask, gateway string) {
 	require.Contains(t, calls, "<"+gateway+"/api/sessions/session-1/cancel>")
 	require.Contains(t, calls, "<"+gateway+"/api/sessions/session-1/restore>")
 	require.Contains(t, calls, "<"+gateway+"/api/sessions/session-1/attendance>")
+	require.Contains(t, calls, "<"+gateway+"/api/billing-periods/default>")
+	require.Contains(t, calls, "<"+gateway+"/api/classes/class-1/rates/2026-08-15>")
+	require.Contains(t, calls, "<"+gateway+"/api/classes/class-1/rates>")
+	require.Contains(t, calls, "<"+gateway+"/api/billing-periods/2026/8/preview>")
+	require.Contains(t, calls, "<"+gateway+"/api/billing-periods/2026/8/issue>")
+	require.Contains(t, calls, "<"+gateway+"/api/billing-periods/2026/8>")
 	require.Contains(t, calls, "<-H> <Authorization: Bearer ")
 }

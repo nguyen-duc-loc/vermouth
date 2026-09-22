@@ -47,7 +47,12 @@ func Recipients() vermouth.Consumer {
 //
 // It stores the facts as they arrive and derives nothing (INV-7), which is why
 // order across two different tutors never matters.
-func handleTutorEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) error {
+func handleTutorEvent(
+	ctx context.Context,
+	tx pgx.Tx,
+	env vermouth.Envelope,
+	_ vermouth.SourcePosition,
+) error {
 	switch env.EventName {
 	case vermouth.EventTutorRegistered, vermouth.EventTutorProfileChanged:
 		var facts tutorFacts

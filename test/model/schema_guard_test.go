@@ -160,7 +160,8 @@ func TestEveryTableCarriesTutorID(t *testing.T) {
 			// tutor does, while a refresh token reaches its tutor through the
 			// auth_sessions foreign key. Both use unguessable values from
 			// crypto/rand, and the tenancy guard on the queries names every access.
-			if table == "handled_events" || table == "goose_db_version" || table == "login_attempts" ||
+			if table == "handled_events" || table == "consumer_readiness" ||
+				table == "consumer_replay_manifests" || table == "goose_db_version" || table == "login_attempts" ||
 				(service == "identity" && table == "refresh_tokens") {
 				continue
 			}
@@ -360,6 +361,74 @@ func TestCompletenessGateIsGenerated(t *testing.T) {
 		}
 	}
 	require.True(t, found, "billing.invoice_profiles has no is_complete gate (AC-12)")
+}
+
+// TestConsumerRecoverySchemaIsShared holds the fail closed ledger and replay
+// certification tables in every service database.
+// covers: AC-8, AC-9, AC-10, AC-23, AC-24
+func TestConsumerRecoverySchemaIsShared(t *testing.T) {
+	t.Parallel()
+	for _, service := range services {
+		conn := connect(t, service)
+		for _, table := range []string{
+			"consumer_failures", "consumer_readiness", "consumer_replay_manifests",
+		} {
+			var exists bool
+			require.NoError(t, conn.QueryRow(t.Context(), `
+				SELECT to_regclass('public.' || $1) IS NOT NULL
+			`, table).Scan(&exists))
+			require.True(t, exists, "%s is missing shared recovery table %s", service, table)
+		}
+		var failureChecks string
+		require.NoError(t, conn.QueryRow(t.Context(), `
+			SELECT string_agg(pg_get_constraintdef(oid), ' ')
+			FROM pg_constraint
+			WHERE contype = 'c' AND conrelid = 'consumer_failures'::regclass
+		`).Scan(&failureChecks))
+		require.Contains(t, failureChecks, "decode_failed")
+		require.Contains(t, failureChecks, "version_unknown")
+		require.Contains(t, failureChecks, "handler_failed")
+		require.Contains(t, failureChecks, "source_repaired")
+		require.Contains(t, failureChecks, "projection_restored")
+	}
+}
+
+// TestTuitionRateAndIssueConstraintsAreLive proves the additive money guards
+// are database facts rather than handler hopes.
+// covers: AC-2, AC-14, AC-16, AC-24
+func TestTuitionRateAndIssueConstraintsAreLive(t *testing.T) {
+	t.Parallel()
+	teaching := connect(t, "teaching")
+	var teachingRevisionDefault string
+	require.NoError(t, teaching.QueryRow(t.Context(), `
+		SELECT column_default
+		FROM information_schema.columns
+		WHERE table_schema = 'public' AND table_name = 'classes' AND column_name = 'rate_revision'
+	`).Scan(&teachingRevisionDefault))
+	require.Equal(t, "1", teachingRevisionDefault)
+
+	billing := connect(t, "billing")
+	for _, columnName := range []string{"rate_revision", "source_partition", "source_offset"} {
+		var exists bool
+		require.NoError(t, billing.QueryRow(t.Context(), `
+			SELECT EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_schema = 'public' AND table_name = 'class_rates' AND column_name = $1
+			)
+		`, columnName).Scan(&exists))
+		require.True(t, exists, "billing.class_rates is missing %s", columnName)
+	}
+	for _, indexName := range []string{
+		"billing_runs_one_live_period_idx",
+		"invoices_one_student_per_run_idx",
+		"invoices_one_direct_replacement_idx",
+	} {
+		var exists bool
+		require.NoError(t, billing.QueryRow(t.Context(), `
+			SELECT to_regclass('public.' || $1) IS NOT NULL
+		`, indexName).Scan(&exists))
+		require.True(t, exists, "billing is missing unique index %s", indexName)
+	}
 }
 
 // TestOneOwningTablePerEntity is AC-1 read against the live schema: exactly the

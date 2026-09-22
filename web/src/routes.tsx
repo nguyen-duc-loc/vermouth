@@ -14,6 +14,7 @@ import {
   sessionCoordinator,
 } from './api/session'
 import {
+  ProtectedBillingPage,
   ProtectedClassDetailPage,
   ProtectedHomePage,
   ProtectedProfilePage,
@@ -55,10 +56,19 @@ const signInRoute = createRoute({
 
 // The route waits for the shared boot refresh, so protected content never
 // renders while the browser is still checking the cookie.
+type HomeSearch = {
+  date?: string
+  session?: string
+}
+
 const threadRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   component: ProtectedHomePage,
+  validateSearch: (search: Record<string, unknown>): HomeSearch => ({
+    date: validCalendarDate(search.date) ? search.date : undefined,
+    session: validUUID(search.session) ? search.session : undefined,
+  }),
   beforeLoad: async ({ context, location }) => {
     const session = await context.session.ensure()
     if (session.status === 'anonymous') {
@@ -122,7 +132,7 @@ const studentDetailRoute = createRoute({
   beforeLoad: requireSession,
 })
 
-type ClassSearch = { date?: string }
+type ClassSearch = { date?: string; rateDate?: string }
 
 const classDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -130,6 +140,7 @@ const classDetailRoute = createRoute({
   component: ProtectedClassDetailPage,
   validateSearch: (search: Record<string, unknown>): ClassSearch => ({
     date: validCalendarDate(search.date) ? search.date : undefined,
+    rateDate: validCalendarDate(search.rateDate) ? search.rateDate : undefined,
   }),
   beforeLoad: requireSession,
 })
@@ -140,6 +151,32 @@ const profileRoute = createRoute({
   component: ProtectedProfilePage,
   beforeLoad: requireSession,
 })
+
+type BillingSearch = {
+  year?: number
+  month?: number
+}
+
+const billingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/billing',
+  component: ProtectedBillingPage,
+  validateSearch: (search: Record<string, unknown>): BillingSearch => ({
+    year: validBillingYear(search.year) ? Number(search.year) : undefined,
+    month: validBillingMonth(search.month) ? Number(search.month) : undefined,
+  }),
+  beforeLoad: requireSession,
+})
+
+function validBillingYear(value: unknown) {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : 0
+  return Number.isInteger(parsed) && parsed >= 2000
+}
+
+function validBillingMonth(value: unknown) {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : 0
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 12
+}
 
 async function requireSession({
   context,
@@ -211,6 +248,7 @@ function routeTree() {
       studentsRoute,
       studentDetailRoute,
       classDetailRoute,
+      billingRoute,
       profileRoute,
       signInRoute,
       designSystemRoute,
@@ -223,6 +261,7 @@ function routeTree() {
     studentsRoute,
     studentDetailRoute,
     classDetailRoute,
+    billingRoute,
     profileRoute,
     signInRoute,
   ])

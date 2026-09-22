@@ -15,13 +15,13 @@ RETURNING student_id, tutor_id, name, phone, created_at, updated_at, removed_at;
 -- name: InsertClass :one
 INSERT INTO classes (
     class_id, tutor_id, name, color, rate_amount, currency, rate_effective_from,
-    schedule_revision
+    schedule_revision, rate_revision
 )
 VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+    $1, $2, $3, $4, $5, $6, $7, $8, 1
 )
 RETURNING class_id, tutor_id, name, color, rate_amount, currency, rate_effective_from,
-          schedule_revision, created_at, updated_at, archived_at;
+          schedule_revision, rate_revision, created_at, updated_at, archived_at;
 
 -- name: InsertScheduleRule :one
 INSERT INTO schedule_rules (
@@ -115,14 +115,14 @@ WHERE tutor_id = $1
 
 -- name: GetOwnedClass :one
 SELECT class_id, tutor_id, name, color, rate_amount, currency,
-       rate_effective_from, schedule_revision, created_at, updated_at, archived_at
+       rate_effective_from, schedule_revision, rate_revision, created_at, updated_at, archived_at
 FROM classes
 WHERE tutor_id = $1
   AND class_id = $2;
 
 -- name: LockOwnedClass :one
 SELECT class_id, tutor_id, name, color, rate_amount, currency,
-       rate_effective_from, schedule_revision, created_at, updated_at, archived_at
+       rate_effective_from, schedule_revision, rate_revision, created_at, updated_at, archived_at
 FROM classes
 WHERE tutor_id = $1
   AND class_id = $2
@@ -135,7 +135,40 @@ SET schedule_revision = $3,
 WHERE tutor_id = $1
   AND class_id = $2
 RETURNING class_id, tutor_id, name, color, rate_amount, currency,
-          rate_effective_from, schedule_revision, created_at, updated_at, archived_at;
+          rate_effective_from, schedule_revision, rate_revision, created_at, updated_at, archived_at;
+
+-- name: GetEarliestRetainedClassSessionDate :one
+SELECT min(local_date)::date
+FROM sessions
+WHERE tutor_id = $1
+  AND class_id = $2;
+
+-- SetOwnedClassRate always advances the monotonic rate revision. A backdated
+-- correction changes history through its event but changes current class rate
+-- only when its date is at least the current effective date.
+-- name: SetOwnedClassRate :one
+UPDATE classes
+SET rate_revision = rate_revision + 1,
+    rate_amount = CASE
+        WHEN sqlc.arg(effective_from)::date >= rate_effective_from
+            THEN sqlc.arg(rate_amount)::bigint
+        ELSE rate_amount
+    END,
+    currency = CASE
+        WHEN sqlc.arg(effective_from)::date >= rate_effective_from
+            THEN sqlc.arg(currency)::text
+        ELSE currency
+    END,
+    rate_effective_from = CASE
+        WHEN sqlc.arg(effective_from)::date >= rate_effective_from
+            THEN sqlc.arg(effective_from)::date
+        ELSE rate_effective_from
+    END,
+    updated_at = sqlc.arg(updated_at)
+WHERE tutor_id = sqlc.arg(tutor_id)
+  AND class_id = sqlc.arg(class_id)
+RETURNING class_id, tutor_id, name, color, rate_amount, currency,
+          rate_effective_from, schedule_revision, rate_revision, created_at, updated_at, archived_at;
 
 -- name: GetOwnedSession :one
 SELECT session_id, class_id, tutor_id, starts_at, ends_at, local_date,

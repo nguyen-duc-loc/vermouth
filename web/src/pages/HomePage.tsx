@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, CalendarDays, Home, Plus, Sparkles, Users } from 'lucide-react'
+import { getRouteApi } from '@tanstack/react-router'
+import { BookOpen, CalendarDays, Home, Plus, ReceiptText, Sparkles, Users } from 'lucide-react'
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
@@ -25,15 +26,19 @@ import { Skeleton } from '../components/ui/skeleton'
 const homeQueryFamily = ['home'] as const
 const homeQueryKey = ['home', null] as const
 const billingQueryKey = ['home', 'billing-projection'] as const
+const homeRoute = getRouteApi('/')
 
 const destinations: readonly AppDestination[] = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/schedule', label: 'Schedule', icon: CalendarDays },
   { href: '/students', label: 'Students', icon: Users },
+  { href: '/billing', label: 'Billing', icon: ReceiptText },
 ]
 
 /** Opens the tutor's local day with setup, attendance, and isolated projection progress. */
 export function HomePage() {
+  const search = homeRoute.useSearch()
+  const navigate = homeRoute.useNavigate()
   const queryClient = useQueryClient()
   const [setupOpen, setSetupOpen] = useState(false)
   const [setupMessage, setSetupMessage] = useState<string>()
@@ -109,6 +114,10 @@ export function HomePage() {
   useEffect(() => {
     document.title = 'Today · Vermouth'
   }, [])
+
+  useEffect(() => {
+    if (search.session) setAttendanceSessionID(search.session)
+  }, [search.session])
 
   function refreshHomeAndProjection() {
     setPollCycle((current) => current + 1)
@@ -331,7 +340,12 @@ export function HomePage() {
           tutorId={firstPage.tutor.tutor_id}
           sessionId={attendanceSessionID}
           onOpenChange={(open) => {
-            if (!open) setAttendanceSessionID(undefined)
+            if (!open) {
+              setAttendanceSessionID(undefined)
+              if (search.session || search.date) {
+                void navigate({ to: '/', search: {} })
+              }
+            }
           }}
           returnFocusRef={attendanceReturnFocusRef}
           onSaved={() => {

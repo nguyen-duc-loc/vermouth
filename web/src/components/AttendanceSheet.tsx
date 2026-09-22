@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { CheckCheck } from 'lucide-react'
 import { type RefObject, useEffect, useRef, useState } from 'react'
-
+import { billingKeys } from '../api/billing'
 import {
   type AttendanceState,
   attendanceKeys,
@@ -106,6 +106,7 @@ export function AttendanceSheet({
     onSuccess: async () => {
       retainedCommand.current = undefined
       await queryClient.invalidateQueries({ queryKey: attendanceKeys.all })
+      await queryClient.invalidateQueries({ queryKey: billingKeys.all })
       onSaved()
       onOpenChange(false)
     },
