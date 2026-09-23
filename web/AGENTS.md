@@ -88,7 +88,7 @@ path. Running `pnpm` directly works in your own shell.
 - The relay polls, so an event reaches a projection 500ms to 1s after the write commits. A screen
   reading a projection must tolerate that window rather than assert on it immediately.
 - Vitest runs beside the source with jsdom and Testing Library. The repository wide `task test`
-  remains the Go module suite, so run `pnpm exec vitest run` from `web/` for browser component tests.
+  remains the Go module suite. CI runs browser tests with `pnpm --filter web exec vitest run`.
 - TypeScript 7 ships the compiler as a binary and none of the old JavaScript compiler API:
   `ts.factory`, `ts.SyntaxKind`, and `ts.createPrinter` all read as `undefined`. `openapi-typescript`
   builds `src/api/schema.d.ts` by calling that API, so it dies on TypeScript 7. That is why the

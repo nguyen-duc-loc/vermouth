@@ -39,4 +39,14 @@ func TestCIAppliesMigrationsBeforeIntegrationTests(t *testing.T) {
 	} {
 		require.Contains(t, migrationStep, variable)
 	}
+	testStep := workflow[testIndex:]
+	for _, variable := range []string{
+		"IDENTITY_DATABASE_URL",
+		"TEACHING_DATABASE_URL",
+		"BILLING_DATABASE_URL",
+		"NOTIFICATIONS_DATABASE_URL",
+	} {
+		require.Contains(t, strings.Split(testStep, "  web:")[0], variable)
+	}
+	require.Contains(t, workflow, "pnpm --filter web exec vitest run")
 }

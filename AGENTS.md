@@ -113,7 +113,7 @@ Installed by `$develop tooling` and enforced through the same task targets local
   `test/compose.test.yaml` (STK-15). `task test` enables the `integration` build tag, and CI starts
   that stack before the Go suite. Store and model integration tests are already present.
   Web unit and component tests use Vitest with jsdom and Testing Library. Run
-  `pnpm exec vitest run` from `web/`; neither `task test` nor CI includes that suite today.
+  `pnpm exec vitest run` from `web/`; CI runs that suite in its web job, while `task test` remains Go only.
   Playwright remains planned for the browser money path and is not installed yet.
 - **CI**: `.github/workflows/ci.yml` runs on every push and pull request. Its Go, web, and hook jobs
   build, check formatting, lint, type check, verify generated browser types, and test.
