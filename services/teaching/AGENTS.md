@@ -30,7 +30,7 @@ handler keeps each aggregate write and its outbox facts inside one transaction.
 | `internal/handler/student_records.go`, `class_rosters.go`, `session_attendance.go` | Student resources, atomic dated roster deltas, and whole roster attendance passes |
 | `internal/handler/class_rates.go` | Revision guarded dated rate commands, immutable receipts, and rate facts for billing |
 | `internal/store/store.go`, `db/queries/*.sql` | The only database path and its hand written queries |
-| `db/migrations/00002_teaching_model.sql` through `00010_tuition_rate_receipts.sql` | Teaching entities, recurring rules, student and roster integrity, consumer recovery, and dated rate revisions and receipts |
+| `db/migrations/00002_teaching_model.sql` through `00011_consumer_resolution_history.sql` | Teaching entities, recurring rules, student and roster integrity, consumer recovery audit history, and dated rate revisions and receipts |
 
 ## Commands
 

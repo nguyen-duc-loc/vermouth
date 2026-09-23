@@ -122,6 +122,52 @@ func TestCertifyCompletesRetainedReplay(t *testing.T) {
 	require.True(t, completed)
 }
 
+func TestCertifyRejectsPreviouslyAcknowledgedSourceThatFailsAgain(t *testing.T) {
+	t.Parallel()
+	fixture := recoverytest.New(t)
+	ctx := t.Context()
+	require.NoError(t, fixture.Client.ProduceSync(ctx, &kgo.Record{
+		Topic: fixture.Topic, Partition: 0, Value: []byte("invalid envelope"),
+	}).FirstErr())
+	seedManifest(t, fixture, "replaying")
+	_, err := fixture.Pool.Exec(ctx, `
+		INSERT INTO consumer_failures (
+			consumer_name, source_topic, source_partition, source_offset,
+			failure_category, resolved_at, resolution, resolution_code, resolved_by, repair_reference
+		) VALUES ($1, $2, 0, 0, 'decode_failed', transaction_timestamp(),
+			'acknowledged', 'projection_restored', 'operator', 'ticket:1')
+	`, fixture.Group, fixture.Topic)
+	require.NoError(t, err)
+	starts, err := fixture.Admin.ListStartOffsets(ctx, fixture.Topic)
+	require.NoError(t, err)
+	require.NoError(t, fixture.Admin.CommitAllOffsets(ctx, fixture.Group, starts.Offsets()))
+
+	service, consumer, found := strings.Cut(fixture.Group, ".")
+	require.True(t, found)
+	consumerCtx, cancel := context.WithCancel(ctx)
+	stopped := make(chan error, 1)
+	go func() {
+		stopped <- vermouth.RunConsumer(consumerCtx, vermouth.Config{
+			Service: service, BrokerSeeds: fixture.Seeds, RetryMax: 1, RetryBaseDelay: time.Millisecond,
+		}, fixture.Pool, slog.New(slog.DiscardHandler), vermouth.Consumer{
+			Name: consumer, Topics: []string{fixture.Topic},
+		})
+	}()
+	t.Cleanup(func() {
+		cancel()
+		require.NoError(t, <-stopped)
+	})
+	require.Eventually(t, func() bool {
+		offsets, offsetErr := fixture.Admin.FetchOffsets(ctx, fixture.Group)
+		if offsetErr != nil || offsets.Error() != nil {
+			return false
+		}
+		position, ok := offsets.Lookup(fixture.Topic, 0)
+		return ok && position.At == 1
+	}, 20*time.Second, 20*time.Millisecond)
+	require.ErrorIs(t, runCertify(certifyArgs(t, fixture)), errUnresolvedFailures)
+}
+
 func TestValidateOffsetMapRequiresEveryLivePartition(t *testing.T) {
 	t.Parallel()
 	for _, scenario := range []struct {

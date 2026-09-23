@@ -29,6 +29,7 @@ services importing it (STK-24), which is the reason for one repository.
 | `db.go`, `serve.go`, `health.go`, `logging.go`, `errors.go` | The pool, the HTTP server lifecycle, health and readiness, `log/slog` in JSON with `request_id`, and the one `APIError` shape |
 | `ddl/00001_vermouth_kit.sql` | The canonical DDL for `outbox` and `handled_events`, copied into each service by `task migrate:sync-kit` |
 | `ddl/00002_consumer_recovery.sql` | The canonical additive DDL for failure coordinates, replay generations, and certification evidence |
+| `ddl/00003_consumer_resolution_history.sql` | The additive audit field that retains a prior resolution when the same source fails during a later replay |
 | `cmd/devkeys`, `cmd/replay`, `cmd/consumerfailures` | Development keys, certified projection replay, and safe failure listing, acknowledgement, and certification |
 
 ## Conventions
@@ -52,6 +53,8 @@ services importing it (STK-24), which is the reason for one repository.
   code here rather than broker configuration. Budget and delay are configuration, never literals.
 * A parked record writes its safe source coordinate before the offset commits. The dead letter keeps
   arbitrary source bytes as explicit base64, so unreadable JSON can never stall the consumer.
+* A source coordinate that fails after an earlier resolution becomes unresolved again, while its prior
+  operator resolution stays in `resolution_history`. A missing event ID is parked before idempotency.
 * A projection replay starts a new generation and remains uncertified until its captured broker ends,
   topic identity, partition set, and completed offsets all agree.
 - `LISTEN/NOTIFY` may later shorten the relay wait on top of the poll, never replace it: a dropped

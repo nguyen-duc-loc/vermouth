@@ -156,6 +156,21 @@ WHERE tutor_id = $1
   AND class_id = $2
 ORDER BY effective_from DESC;
 
+-- FindBillingSessionMissingClass checks the session to class projection link
+-- before roster coverage can hide a session from the candidate query.
+-- name: FindBillingSessionMissingClass :one
+SELECT s.session_id, s.class_id
+FROM sessions s
+LEFT JOIN classes c
+  ON c.class_id = s.class_id
+ AND c.tutor_id = s.tutor_id
+WHERE s.tutor_id = sqlc.arg(owner_tutor_id)
+  AND s.local_date >= sqlc.arg(period_start)
+  AND s.local_date <= sqlc.arg(period_end)
+  AND s.cancelled_at IS NULL
+  AND c.class_id IS NULL
+LIMIT 1;
+
 -- ListBillingCandidates begins with every session and covered roster student.
 -- Outer joins keep missing labels, attendance, and rates visible as blockers.
 -- name: ListBillingCandidates :many

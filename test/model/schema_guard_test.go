@@ -390,6 +390,13 @@ func TestConsumerRecoverySchemaIsShared(t *testing.T) {
 		require.Contains(t, failureChecks, "handler_failed")
 		require.Contains(t, failureChecks, "source_repaired")
 		require.Contains(t, failureChecks, "projection_restored")
+		require.Contains(t, failureChecks, "jsonb_typeof(resolution_history)")
+		var historyType string
+		require.NoError(t, conn.QueryRow(t.Context(), `
+			SELECT data_type FROM information_schema.columns
+			WHERE table_schema='public' AND table_name='consumer_failures' AND column_name='resolution_history'
+		`).Scan(&historyType))
+		require.Equal(t, "jsonb", historyType)
 	}
 }
 

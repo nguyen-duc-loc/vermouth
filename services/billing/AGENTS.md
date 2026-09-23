@@ -29,7 +29,7 @@ month end preview and issue flow exist. Features 14 and 15 add PDF rendering, sh
 | `internal/consumer/teaching.go` | The only writer of teaching projections, including students, roster periods, attendance, and session state |
 | `internal/store/store.go`, `internal/handler/projection.go`, `internal/handler/profile.go`, `internal/handler/banks.go` | Typed database access, projections, invoice profile rules, and the stable bank catalog |
 | `internal/handler/billing_periods.go` | Fixed broker barriers, repeatable previews, checked totals, and atomic immutable invoice issue |
-| `db/migrations/00001_vermouth_kit.sql` through `00006_tuition_rate_and_invoice_constraints.sql` | Shared machinery, profiles, recovery evidence, dated rates, run constraints, and immutable invoice records |
+| `db/migrations/00001_vermouth_kit.sql` through `00007_consumer_resolution_history.sql` | Shared machinery, profiles, recovery evidence and audit history, dated rates, run constraints, and immutable invoice records |
 
 ## Conventions
 

@@ -116,6 +116,107 @@ func TestDrainRecordsParksMalformedEnvelopeAndContinues(t *testing.T) {
 	require.Equal(t, original, letter.Envelope)
 }
 
+func TestDrainRecordsParksMissingEventIDsWithoutTreatingThemAsDuplicates(t *testing.T) {
+	t.Parallel()
+	fixture := recoverytest.New(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	t.Cleanup(cancel)
+	valid, err := json.Marshal(Envelope{EventID: uuid.Must(uuid.NewV7()), EventVersion: 1})
+	require.NoError(t, err)
+	values := [][]byte{
+		[]byte(`{"event_name":"first","event_version":1}`),
+		[]byte(`{"event_name":"second","event_version":1}`),
+		valid,
+	}
+	for _, value := range values {
+		require.NoError(t, fixture.Client.ProduceSync(ctx, &kgo.Record{
+			Topic: fixture.Topic, Partition: 0, Value: value,
+		}).FirstErr())
+	}
+	client, err := openConsumerClient(Config{BrokerSeeds: fixture.Seeds}, fixture.Group, Consumer{Topics: []string{fixture.Topic}})
+	require.NoError(t, err)
+	t.Cleanup(client.Close)
+	var fetched []*kgo.Record
+	for len(fetched) < len(values) && ctx.Err() == nil {
+		batch := client.PollRecords(ctx, len(values)-len(fetched))
+		require.Empty(t, batch.Errors())
+		batch.EachRecord(func(record *kgo.Record) { fetched = append(fetched, record) })
+	}
+	require.Len(t, fetched, len(values))
+	var handled []int64
+	require.True(t, drainRecords(ctx, drain{
+		client: client, pool: fixture.Pool, producer: fixture.Client,
+		log: slog.New(slog.DiscardHandler),
+		cfg: Config{RetryMax: 1, RetryBaseDelay: time.Millisecond}, group: fixture.Group,
+		consumer: Consumer{Handle: func(_ context.Context, _ pgx.Tx, _ Envelope, source SourcePosition) error {
+			handled = append(handled, source.Offset)
+			return nil
+		}},
+	}, fetched))
+	require.Equal(t, []int64{fetched[2].Offset}, handled)
+	var failures int
+	require.NoError(t, fixture.Pool.QueryRow(ctx, `
+		SELECT count(*) FROM consumer_failures
+		WHERE consumer_name=$1 AND resolved_at IS NULL AND failure_category='decode_failed'
+	`, fixture.Group).Scan(&failures))
+	require.Equal(t, 2, failures)
+}
+
+func TestRepeatedParkReopensResolvedSourceFailure(t *testing.T) {
+	t.Parallel()
+	fixture := recoverytest.New(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	t.Cleanup(cancel)
+	require.NoError(t, fixture.Client.ProduceSync(ctx, &kgo.Record{
+		Topic: fixture.Topic, Partition: 0, Value: []byte("invalid envelope"),
+	}).FirstErr())
+	client, err := openConsumerClient(Config{BrokerSeeds: fixture.Seeds}, fixture.Group, Consumer{Topics: []string{fixture.Topic}})
+	require.NoError(t, err)
+	t.Cleanup(client.Close)
+	var record *kgo.Record
+	for record == nil && ctx.Err() == nil {
+		batch := client.PollRecords(ctx, 1)
+		require.Empty(t, batch.Errors())
+		batch.EachRecord(func(fetched *kgo.Record) { record = fetched })
+	}
+	require.NotNil(t, record)
+	log := slog.New(slog.DiscardHandler)
+	require.True(t, drainRecords(ctx, drain{
+		client: client, pool: fixture.Pool, producer: fixture.Client, log: log,
+		cfg: Config{RetryBaseDelay: time.Millisecond}, group: fixture.Group,
+	}, []*kgo.Record{record}))
+	_, err = fixture.Pool.Exec(ctx, `
+		UPDATE consumer_failures
+		SET resolved_at=transaction_timestamp(), resolution='acknowledged',
+			resolution_code='projection_restored', resolved_by='operator', repair_reference='ticket:1'
+		WHERE consumer_name=$1 AND source_topic=$2 AND source_partition=$3 AND source_offset=$4
+	`, fixture.Group, record.Topic, record.Partition, record.Offset)
+	require.NoError(t, err)
+	require.True(t, drainRecords(ctx, drain{
+		client: client, pool: fixture.Pool, producer: fixture.Client, log: log,
+		cfg: Config{RetryBaseDelay: time.Millisecond}, group: fixture.Group,
+	}, []*kgo.Record{record}))
+	offsets, err := fixture.Admin.FetchOffsets(ctx, fixture.Group)
+	require.NoError(t, err)
+	committed, ok := offsets.Lookup(fixture.Topic, record.Partition)
+	require.True(t, ok)
+	require.Equal(t, record.Offset+1, committed.At)
+	var unresolved bool
+	require.NoError(t, fixture.Pool.QueryRow(ctx, `
+		SELECT resolved_at IS NULL FROM consumer_failures
+		WHERE consumer_name=$1 AND source_topic=$2 AND source_partition=$3 AND source_offset=$4
+	`, fixture.Group, record.Topic, record.Partition, record.Offset).Scan(&unresolved))
+	require.True(t, unresolved)
+	var priorResolution, priorRepair string
+	require.NoError(t, fixture.Pool.QueryRow(ctx, `
+		SELECT resolution_history->0->>'resolution', resolution_history->0->>'repair_reference'
+		FROM consumer_failures
+		WHERE consumer_name=$1 AND source_topic=$2 AND source_partition=$3 AND source_offset=$4
+	`, fixture.Group, record.Topic, record.Partition, record.Offset).Scan(&priorResolution, &priorRepair))
+	require.Equal(t, "acknowledged", priorResolution)
+	require.Equal(t, "ticket:1", priorRepair)
+}
+
 func TestDrainRecordsRetriesFailedLedgerBeforeLaterOffsets(t *testing.T) {
 	t.Parallel()
 	fixture := recoverytest.New(t)

@@ -32,6 +32,7 @@ const (
 // The envelope refuses an event it cannot key or name, and says so with a
 // static error so a caller can match on the reason rather than on a string.
 var (
+	errEventIDRequired   = errors.New("envelope: event_id is required")
 	errEventNameRequired = errors.New("envelope: event_name is required")
 	errEventVersionStart = errors.New("envelope: event_version starts at 1")
 	errKeyRequired       = errors.New("envelope: needs a key, which decides its partition (INV-6)")

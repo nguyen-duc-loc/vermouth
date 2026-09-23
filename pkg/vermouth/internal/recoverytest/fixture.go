@@ -97,7 +97,9 @@ func newDatabase(t *testing.T, databaseURL, suffix string) (*pgxpool.Pool, strin
 	t.Cleanup(pool.Close)
 	_, source, _, ok := runtime.Caller(0)
 	require.True(t, ok)
-	for _, name := range []string{"00001_vermouth_kit.sql", "00002_consumer_recovery.sql"} {
+	for _, name := range []string{
+		"00001_vermouth_kit.sql", "00002_consumer_recovery.sql", "00003_consumer_resolution_history.sql",
+	} {
 		ddl, readErr := os.ReadFile(filepath.Join(filepath.Dir(source), "..", "..", "ddl", name)) //nolint:gosec // Only the two checked in canonical DDL files are read.
 		require.NoError(t, readErr)
 		up, _, _ := strings.Cut(string(ddl), "-- +goose Down")

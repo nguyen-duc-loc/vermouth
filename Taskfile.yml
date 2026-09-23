@@ -140,6 +140,11 @@ tasks:
         cp pkg/vermouth/ddl/00002_consumer_recovery.sql services/billing/db/migrations/00005_consumer_recovery.sql
         cp pkg/vermouth/ddl/00002_consumer_recovery.sql services/notifications/db/migrations/00004_consumer_recovery.sql
         echo "synced additive consumer recovery migrations"
+        cp pkg/vermouth/ddl/00003_consumer_resolution_history.sql services/identity/db/migrations/00006_consumer_resolution_history.sql
+        cp pkg/vermouth/ddl/00003_consumer_resolution_history.sql services/teaching/db/migrations/00011_consumer_resolution_history.sql
+        cp pkg/vermouth/ddl/00003_consumer_resolution_history.sql services/billing/db/migrations/00007_consumer_resolution_history.sql
+        cp pkg/vermouth/ddl/00003_consumer_resolution_history.sql services/notifications/db/migrations/00005_consumer_resolution_history.sql
+        echo "synced consumer resolution history migrations"
 
   migrate:up:
     desc: Apply every service's migrations (STK-21, run before services start, never from main.go)

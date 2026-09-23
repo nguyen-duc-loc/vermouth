@@ -28,19 +28,21 @@ import (
 )
 
 const (
-	billingTeachingConsumer = "billing.teaching"
-	billingMinimumYear      = 2000
-	billingMaxCandidates    = 10_000
-	billingCandidateLimit   = billingMaxCandidates + 1
-	billingMaxStudents      = 500
-	billingBarrierTimeout   = 5 * time.Second
-	billingBarrierPoll      = 50 * time.Millisecond
-	billingRetryAfter       = 1
-	billingFingerprintV1    = 1
-	billingReadinessV1      = 1
-	billingIssueRetries     = 3
-	billingCurrencyVND      = "VND"
-	codePeriodTooLarge      = "period_too_large"
+	billingTeachingConsumer  = "billing.teaching"
+	billingMinimumYear       = 2000
+	billingMaxCandidates     = 10_000
+	billingCandidateLimit    = billingMaxCandidates + 1
+	billingMaxStudents       = 500
+	billingBarrierTimeout    = 5 * time.Second
+	billingBarrierPoll       = 50 * time.Millisecond
+	billingRetryAfter        = 1
+	billingFingerprintV1     = 1
+	billingReadinessV1       = 1
+	billingIssueRetries      = 3
+	billingCurrencyVND       = "VND"
+	codePeriodTooLarge       = "period_too_large"
+	codeProjectionIncomplete = "projection_incomplete"
+	detailSessionID          = "session_id"
 )
 
 var errIssuedRunUnreadable = errors.New("issued billing run was not readable")
@@ -483,6 +485,22 @@ func (s *BillingService) calculate(
 		}
 	}
 
+	missingClass, err := queries.FindBillingSessionMissingClass(ctx, sqlcgen.FindBillingSessionMissingClassParams{
+		OwnerTutorID: tutorID,
+		PeriodStart:  pgtype.Date{Time: periodStart, Valid: true},
+		PeriodEnd:    pgtype.Date{Time: periodEnd, Valid: true},
+	})
+	if err == nil {
+		return calculation{}, &BillingPeriodError{
+			Code: codeProjectionIncomplete, Message: "the teaching projection is structurally incomplete",
+			Status:  http.StatusConflict,
+			Details: map[string]any{detailSessionID: missingClass.SessionID, "class_id": missingClass.ClassID},
+		}
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return calculation{}, fmt.Errorf("check projected session class: %w", err)
+	}
+
 	rows, err := queries.ListBillingCandidates(ctx, sqlcgen.ListBillingCandidatesParams{
 		RowLimit: billingCandidateLimit, OwnerTutorID: tutorID,
 		PeriodStart: pgtype.Date{Time: periodStart, Valid: true},
@@ -524,12 +542,12 @@ func (s *BillingService) calculate(
 		row := &rows[rowIndex]
 		if row.CoverageCount != 1 || !row.ClassName.Valid || !row.StudentName.Valid {
 			return calculation{}, &BillingPeriodError{
-				Code: "projection_incomplete", Message: "the teaching projection is structurally incomplete",
+				Code: codeProjectionIncomplete, Message: "the teaching projection is structurally incomplete",
 				Status: http.StatusConflict,
 				Details: map[string]any{
-					"session_id": row.SessionID,
-					"class_id":   row.ClassID,
-					"student_id": row.StudentID,
+					detailSessionID: row.SessionID,
+					"class_id":      row.ClassID,
+					"student_id":    row.StudentID,
 				},
 			}
 		}
@@ -588,8 +606,8 @@ func (s *BillingService) calculate(
 		case "Absent":
 		default:
 			return calculation{}, &BillingPeriodError{
-				Code: "projection_incomplete", Message: "the projection contains an unknown attendance state", Status: http.StatusConflict,
-				Details: map[string]any{"session_id": row.SessionID, "student_id": row.StudentID},
+				Code: codeProjectionIncomplete, Message: "the projection contains an unknown attendance state", Status: http.StatusConflict,
+				Details: map[string]any{detailSessionID: row.SessionID, "student_id": row.StudentID},
 			}
 		}
 	}

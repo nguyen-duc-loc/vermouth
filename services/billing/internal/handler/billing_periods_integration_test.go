@@ -533,6 +533,19 @@ func TestBillingService_ProjectionFailuresAndCalculationBlockers(t *testing.T) {
 	}
 }
 
+// covers: spec 0013 AC-11, AC-24
+func TestBillingService_MissingClassWithoutRosterCannotDisappear(t *testing.T) {
+	fixture := newBillingProtocolFixture(t)
+	fixture.seedCandidates(t, 0, 1)
+	_, err := fixture.pool.Exec(t.Context(), `DELETE FROM classes`)
+	require.NoError(t, err)
+	_, err = fixture.service.Preview(t.Context(), fixture.tutorID, "UTC", fixture.period)
+	var incomplete *BillingPeriodError
+	require.ErrorAs(t, err, &incomplete)
+	require.Equal(t, "projection_incomplete", incomplete.Code)
+	fixture.noMoney(t)
+}
+
 // covers: spec 0013 AC-9, AC-13, AC-24
 func TestBillingService_UnresolvedFailureScopeAndPrecedence(t *testing.T) {
 	fixture := newBillingProtocolFixture(t)

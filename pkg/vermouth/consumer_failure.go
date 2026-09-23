@@ -217,7 +217,30 @@ func recordConsumerFailure(
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (consumer_name, source_topic, source_partition, source_offset)
-		DO NOTHING
+		DO UPDATE SET
+			event_id = excluded.event_id,
+			tutor_id = excluded.tutor_id,
+			failure_category = excluded.failure_category,
+			failed_at = excluded.failed_at,
+			resolution_history = CASE
+				WHEN consumer_failures.resolved_at IS NULL THEN consumer_failures.resolution_history
+				ELSE consumer_failures.resolution_history || jsonb_build_array(jsonb_build_object(
+					'failed_at', consumer_failures.failed_at,
+					'event_id', consumer_failures.event_id,
+					'tutor_id', consumer_failures.tutor_id,
+					'failure_category', consumer_failures.failure_category,
+					'resolved_at', consumer_failures.resolved_at,
+					'resolution', consumer_failures.resolution,
+					'resolution_code', consumer_failures.resolution_code,
+					'resolved_by', consumer_failures.resolved_by,
+					'repair_reference', consumer_failures.repair_reference
+				))
+			END,
+			resolved_at = NULL,
+			resolution = NULL,
+			resolution_code = NULL,
+			resolved_by = NULL,
+			repair_reference = NULL
 	`, source.Consumer, source.Topic, source.Partition, source.Offset, eventID, tutorID, category)
 	if err != nil {
 		return fmt.Errorf("record consumer failure: %w", err)

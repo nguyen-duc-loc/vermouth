@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -195,8 +196,11 @@ func drainRecords(ctx context.Context, d drain, records []*kgo.Record) bool {
 func handleRecord(ctx context.Context, pool *pgxpool.Pool, producer *kgo.Client, log *slog.Logger, cfg Config, group string, consumer Consumer, record *kgo.Record) error {
 	var env Envelope
 	err := json.Unmarshal(record.Value, &env)
+	if err == nil && env.EventID == uuid.Nil {
+		err = errEventIDRequired
+	}
 	if err != nil {
-		// Undecodable bytes will never decode, so retrying is pointless.
+		// Invalid envelope bytes will not change on retry.
 		return park(
 			ctx,
 			pool,
@@ -205,12 +209,11 @@ func handleRecord(ctx context.Context, pool *pgxpool.Pool, producer *kgo.Client,
 			group,
 			record,
 			env,
-			fmt.Errorf("envelope did not decode: %w", err),
+			fmt.Errorf("invalid envelope: %w", err),
 			FailureDecode,
 			0,
 		)
 	}
-
 	ctx = WithRequestID(ctx, env.RequestID)
 	log = log.With(
 		slog.String("request_id", env.RequestID),

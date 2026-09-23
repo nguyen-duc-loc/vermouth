@@ -150,6 +150,40 @@ func (q *Queries) CurrentBillingRunGeneration(ctx context.Context, arg CurrentBi
 	return i, err
 }
 
+const findBillingSessionMissingClass = `-- name: FindBillingSessionMissingClass :one
+SELECT s.session_id, s.class_id
+FROM sessions s
+LEFT JOIN classes c
+  ON c.class_id = s.class_id
+ AND c.tutor_id = s.tutor_id
+WHERE s.tutor_id = $1
+  AND s.local_date >= $2
+  AND s.local_date <= $3
+  AND s.cancelled_at IS NULL
+  AND c.class_id IS NULL
+LIMIT 1
+`
+
+type FindBillingSessionMissingClassParams struct {
+	OwnerTutorID uuid.UUID
+	PeriodStart  pgtype.Date
+	PeriodEnd    pgtype.Date
+}
+
+type FindBillingSessionMissingClassRow struct {
+	SessionID uuid.UUID
+	ClassID   uuid.UUID
+}
+
+// FindBillingSessionMissingClass checks the session to class projection link
+// before roster coverage can hide a session from the candidate query.
+func (q *Queries) FindBillingSessionMissingClass(ctx context.Context, arg FindBillingSessionMissingClassParams) (FindBillingSessionMissingClassRow, error) {
+	row := q.db.QueryRow(ctx, findBillingSessionMissingClass, arg.OwnerTutorID, arg.PeriodStart, arg.PeriodEnd)
+	var i FindBillingSessionMissingClassRow
+	err := row.Scan(&i.SessionID, &i.ClassID)
+	return i, err
+}
+
 const getBillingRun = `-- name: GetBillingRun :one
 SELECT billing_run_id, tutor_id, period_year, period_month, generation,
        created_at, superseded_at

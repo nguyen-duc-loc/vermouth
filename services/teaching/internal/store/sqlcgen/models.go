@@ -50,19 +50,20 @@ type CommandReceipt struct {
 }
 
 type ConsumerFailure struct {
-	ConsumerName    string
-	SourceTopic     string
-	SourcePartition int32
-	SourceOffset    int64
-	EventID         pgtype.UUID
-	TutorID         pgtype.UUID
-	FailureCategory string
-	FailedAt        time.Time
-	ResolvedAt      pgtype.Timestamptz
-	Resolution      pgtype.Text
-	ResolutionCode  pgtype.Text
-	ResolvedBy      pgtype.Text
-	RepairReference pgtype.Text
+	ConsumerName      string
+	SourceTopic       string
+	SourcePartition   int32
+	SourceOffset      int64
+	EventID           pgtype.UUID
+	TutorID           pgtype.UUID
+	FailureCategory   string
+	FailedAt          time.Time
+	ResolvedAt        pgtype.Timestamptz
+	Resolution        pgtype.Text
+	ResolutionCode    pgtype.Text
+	ResolvedBy        pgtype.Text
+	RepairReference   pgtype.Text
+	ResolutionHistory []byte
 }
 
 type ConsumerReadiness struct {

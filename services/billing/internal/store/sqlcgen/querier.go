@@ -25,6 +25,9 @@ type Querier interface {
 	// race, and the loser reads the winner's invoices. An absent row means no run
 	// yet, so the next generation is 1.
 	CurrentBillingRunGeneration(ctx context.Context, arg CurrentBillingRunGenerationParams) (CurrentBillingRunGenerationRow, error)
+	// FindBillingSessionMissingClass checks the session to class projection link
+	// before roster coverage can hide a session from the candidate query.
+	FindBillingSessionMissingClass(ctx context.Context, arg FindBillingSessionMissingClassParams) (FindBillingSessionMissingClassRow, error)
 	GetBillingRun(ctx context.Context, arg GetBillingRunParams) (BillingRun, error)
 	GetBillingTransactionTimestamp(ctx context.Context, arg GetBillingTransactionTimestampParams) (time.Time, error)
 	// GetClassRateBookkeeping exposes the consumer transaction clock for the model
