@@ -1,7 +1,7 @@
 # 0013. Tuition rate and monthly calculation
 
 **Date**: 2026-09-21
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 

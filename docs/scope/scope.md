@@ -26,7 +26,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 10 | Recurring sessions & exceptions | Slice 3 | done |
 | 11 | Student records & class rosters | Slice 3 | done |
 | 12 | Tutor profile & bank details | Slice 4 | done |
-| 13 | Tuition rate & monthly calculation | Slice 4 | in-progress |
+| 13 | Tuition rate & monthly calculation | Slice 4 | done |
 | 14 | Invoice PDF with payment QR | Slice 4 | planned |
 | 15 | Invoice list, share & mark paid | Slice 4 | planned |
 | 21 | Rate limit the auth endpoints | Slice 5 | done |
@@ -185,7 +185,7 @@ code in `services/billing/`, `gateway/`, `api/openapi.yaml`, `web/src/`, and `te
   - [x] Close the thread with migration reversal, generated contracts, tenant and replay safety, private logging, browser cleanup, accessibility evidence, and `task thread` · AC-2, AC-4, AC-6, AC-7, AC-9 to AC-14
 - [x] Verify it: `$check verify tutor profile & bank details`
 
-### 13. Tuition rate & monthly calculation · in-progress · GA
+### 13. Tuition rate & monthly calculation · done · GA
 A rate per session lives on the class, and at month end the system counts each student's Present sessions and works out what they owe. This is where a silent error sends a wrong bill to a parent, so it gets the heaviest treatment in the project.
 **Done when:** a class carries a rate per session, a month end run produces a per student total from Present sessions only, absent and cancelled sessions are excluded, a rate change does not rewrite an already issued invoice, and running the calculation twice does not produce two invoices.
 spec [0013](../specs/0013-tuition-rate-monthly-calculation/index.md)
