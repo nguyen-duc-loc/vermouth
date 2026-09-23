@@ -200,7 +200,7 @@ code in `pkg/vermouth/`, `services/teaching/`, `services/billing/`, `gateway/`, 
 - [x] Verify it: `$check verify tuition rate & monthly calculation`
 - [x] Test it: `$test tuition rate & monthly calculation`
 - [x] Review it (fresh model): `$check review tuition rate & monthly calculation`
-- [ ] Document it: `$document tuition rate & monthly calculation`
+- [x] Document it: `$document tuition rate & monthly calculation`
 
 ### 14. Invoice PDF with payment QR · needs a decision
 Turn a calculated total into a PDF a parent will take seriously: the student's name, the sessions attended with dates, the rate, the total, and a payment QR carrying the tutor's bank details with the amount already filled in. This is the professionalism the product promises.
