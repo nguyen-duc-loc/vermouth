@@ -11,6 +11,8 @@ import (
 )
 
 type Querier interface {
+	// A replay may see an old leave after a later rejoin is already open in the
+	// projection. The event end date excludes that later period from the target.
 	CloseRosterPeriod(ctx context.Context, arg CloseRosterPeriodParams) error
 	GetDigestRun(ctx context.Context, arg GetDigestRunParams) (DigestRun, error)
 	GetRecipient(ctx context.Context, tutorID uuid.UUID) (Recipient, error)

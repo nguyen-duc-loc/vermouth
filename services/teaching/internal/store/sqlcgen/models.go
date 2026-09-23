@@ -32,6 +32,8 @@ type Class struct {
 	UpdatedAt         time.Time
 	ArchivedAt        pgtype.Timestamptz
 	Color             string
+	ScheduleRevision  int64
+	RateRevision      int64
 }
 
 type CommandReceipt struct {
@@ -42,6 +44,47 @@ type CommandReceipt struct {
 	PrimaryResourceID uuid.UUID
 	RelatedResourceID pgtype.UUID
 	CreatedAt         time.Time
+	ContextSnapshot   []byte
+	ResponseSnapshot  []byte
+	ResponseStatus    pgtype.Int4
+}
+
+type ConsumerFailure struct {
+	ConsumerName      string
+	SourceTopic       string
+	SourcePartition   int32
+	SourceOffset      int64
+	EventID           pgtype.UUID
+	TutorID           pgtype.UUID
+	FailureCategory   string
+	FailedAt          time.Time
+	ResolvedAt        pgtype.Timestamptz
+	Resolution        pgtype.Text
+	ResolutionCode    pgtype.Text
+	ResolvedBy        pgtype.Text
+	RepairReference   pgtype.Text
+	ResolutionHistory []byte
+}
+
+type ConsumerReadiness struct {
+	ConsumerName         string
+	ProjectionGeneration uuid.UUID
+	State                string
+	UpdatedAt            time.Time
+}
+
+type ConsumerReplayManifest struct {
+	ConsumerName         string
+	ProjectionGeneration uuid.UUID
+	SourceTopic          string
+	TopicIdentity        string
+	PartitionSet         []byte
+	EarliestOffsets      []byte
+	CapturedEndOffsets   []byte
+	CompletedOffsets     []byte
+	StartedAt            time.Time
+	CompletedAt          pgtype.Timestamptz
+	OperatorIdentity     string
 }
 
 type HandledEvent struct {
@@ -76,17 +119,46 @@ type RosterPeriod struct {
 	UpdatedAt     time.Time
 }
 
-type Session struct {
-	SessionID      uuid.UUID
-	ClassID        uuid.UUID
+type ScheduleRule struct {
+	ScheduleRuleID uuid.UUID
 	TutorID        uuid.UUID
-	StartsAt       time.Time
-	EndsAt         time.Time
-	LocalDate      pgtype.Date
-	ScheduleRuleID pgtype.UUID
+	ClassID        uuid.UUID
+	Revision       int64
+	ValidFrom      pgtype.Date
+	ValidThrough   pgtype.Date
+	TimeZone       string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
-	CancelledAt    pgtype.Timestamptz
+	ReplacedAt     pgtype.Timestamptz
+	EndedAt        pgtype.Timestamptz
+	RetiredAt      pgtype.Timestamptz
+}
+
+type ScheduleSlot struct {
+	ScheduleRuleID uuid.UUID
+	TutorID        uuid.UUID
+	Weekday        int16
+	StartTime      pgtype.Time
+	EndTime        pgtype.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type Session struct {
+	SessionID       uuid.UUID
+	ClassID         uuid.UUID
+	TutorID         uuid.UUID
+	StartsAt        time.Time
+	EndsAt          time.Time
+	LocalDate       pgtype.Date
+	ScheduleRuleID  pgtype.UUID
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	CancelledAt     pgtype.Timestamptz
+	OriginLocalDate pgtype.Date
+	Version         int64
+	MovedAt         pgtype.Timestamptz
+	SupersededAt    pgtype.Timestamptz
 }
 
 type Student struct {

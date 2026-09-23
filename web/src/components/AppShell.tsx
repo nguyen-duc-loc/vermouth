@@ -1,4 +1,4 @@
-import { useRouterState } from '@tanstack/react-router'
+import { Link, useRouterState } from '@tanstack/react-router'
 import { type LucideIcon, MoreHorizontal, UserRound } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -22,8 +22,8 @@ import {
 } from './ui/sheet'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip'
 
-export type AppDestination<TPath extends string = string> = {
-  href: TPath
+export type AppDestination = {
+  href: string
   label: string
   icon: LucideIcon
 }
@@ -37,11 +37,11 @@ export type AppShellText = {
   closeAccount: string
 }
 
-export type AppShellProps<TPath extends string = string> = {
+export type AppShellProps = {
   brandName: string
   text: AppShellText
-  primaryDestinations: readonly AppDestination<TPath>[]
-  secondaryDestinations?: readonly AppDestination<TPath>[]
+  primaryDestinations: readonly AppDestination[]
+  secondaryDestinations?: readonly AppDestination[]
   appearancePanel: ReactNode
   contextualPanel?: ReactNode
   children: ReactNode
@@ -57,19 +57,34 @@ function NavigationLink({
   compact?: boolean
 }) {
   const Icon = destination.icon
-  const link = (
+  const className = cn(
+    'group flex min-h-11 items-center rounded-lg text-sm font-medium text-muted-foreground outline-none transition-[color,background-color,box-shadow] duration-base ease-standard motion-reduce:transition-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+    active && 'bg-primary/10 text-primary-emphasis',
+    compact ? 'size-11 justify-center' : 'gap-3 px-3',
+  )
+  const content = (
+    <>
+      <Icon aria-hidden="true" className="size-icon-md shrink-0" />
+      {!compact && <span>{destination.label}</span>}
+    </>
+  )
+  const link = isAppRoute(destination.href) ? (
+    <Link
+      to={destination.href}
+      aria-label={compact ? destination.label : undefined}
+      aria-current={active ? 'page' : undefined}
+      className={className}
+    >
+      {content}
+    </Link>
+  ) : (
     <a
       href={destination.href}
       aria-label={compact ? destination.label : undefined}
       aria-current={active ? 'page' : undefined}
-      className={cn(
-        'group flex min-h-11 items-center rounded-lg text-sm font-medium text-muted-foreground outline-none transition-[color,background-color,box-shadow] duration-base ease-standard motion-reduce:transition-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-        active && 'bg-primary/10 text-primary-emphasis',
-        compact ? 'size-11 justify-center' : 'gap-3 px-3',
-      )}
+      className={className}
     >
-      <Icon aria-hidden="true" className="size-icon-md shrink-0" />
-      {!compact && <span>{destination.label}</span>}
+      {content}
     </a>
   )
 
@@ -106,10 +121,17 @@ function MoreActions({
           const Icon = destination.icon
           return (
             <DropdownMenuItem key={destination.href} asChild>
-              <a href={destination.href}>
-                <Icon aria-hidden="true" className="size-icon-sm" />
-                {destination.label}
-              </a>
+              {isAppRoute(destination.href) ? (
+                <Link to={destination.href}>
+                  <Icon aria-hidden="true" className="size-icon-sm" />
+                  {destination.label}
+                </Link>
+              ) : (
+                <a href={destination.href}>
+                  <Icon aria-hidden="true" className="size-icon-sm" />
+                  {destination.label}
+                </a>
+              )}
             </DropdownMenuItem>
           )
         })}
@@ -119,7 +141,7 @@ function MoreActions({
 }
 
 /** Adapts caller supplied destinations from a phone bar to a wide icon rail. */
-export function AppShell<TPath extends string = string>({
+export function AppShell({
   brandName,
   text,
   primaryDestinations,
@@ -127,7 +149,7 @@ export function AppShell<TPath extends string = string>({
   appearancePanel,
   contextualPanel,
   children,
-}: AppShellProps<TPath>) {
+}: AppShellProps) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const phoneDestinations = primaryDestinations.slice(0, 5)
   const overflowDestinations = [...primaryDestinations.slice(5), ...secondaryDestinations]
@@ -165,13 +187,13 @@ export function AppShell<TPath extends string = string>({
       </a>
 
       <aside className="fixed inset-y-0 start-0 z-40 hidden w-20 flex-col items-center border-e border-border bg-surface py-4 md:flex">
-        <a
-          href="/"
+        <Link
+          to="/"
           aria-label={brandName}
           className="grid size-11 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           V
-        </a>
+        </Link>
         <nav aria-label={text.primaryNavigation} className="mt-8 grid gap-2">
           {primaryDestinations.map((destination) => (
             <NavigationLink
@@ -189,12 +211,12 @@ export function AppShell<TPath extends string = string>({
       </aside>
 
       <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur md:hidden">
-        <a
-          href="/"
+        <Link
+          to="/"
           className="inline-flex min-h-11 min-w-0 items-center rounded-lg text-lg font-semibold tracking-tight wrap-anywhere outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
           {brandName}
-        </a>
+        </Link>
         <div className="flex items-center gap-1">
           <div className="xs:hidden">
             <MoreActions label={text.moreActions} destinations={zoomOverflowDestinations} />
@@ -226,25 +248,46 @@ export function AppShell<TPath extends string = string>({
         {phoneDestinations.map((destination, index) => {
           const Icon = destination.icon
           const active = pathname === destination.href
-          return (
-            <a
-              key={destination.href}
-              href={destination.href}
-              aria-current={active ? 'page' : undefined}
-              className={cn(
-                'flex min-h-14 min-w-11 flex-1 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[0.6875rem] font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset',
-                index >= 3 && 'hidden xs:flex',
-                active && 'text-primary',
-              )}
-            >
+          const className = cn(
+            'flex min-h-14 min-w-11 flex-1 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[0.6875rem] font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset',
+            index >= 3 && 'hidden xs:flex',
+            active && 'text-primary',
+          )
+          const content = (
+            <>
               <Icon aria-hidden="true" className="size-icon-md" />
               <span className="max-w-full text-center leading-tight wrap-anywhere">
                 {destination.label}
               </span>
+            </>
+          )
+          return isAppRoute(destination.href) ? (
+            <Link
+              key={destination.href}
+              to={destination.href}
+              aria-current={active ? 'page' : undefined}
+              className={className}
+            >
+              {content}
+            </Link>
+          ) : (
+            <a
+              key={destination.href}
+              href={destination.href}
+              aria-current={active ? 'page' : undefined}
+              className={className}
+            >
+              {content}
             </a>
           )
         })}
       </nav>
     </div>
   )
+}
+
+type AppRoute = '/' | '/schedule' | '/students'
+
+function isAppRoute(value: string): value is AppRoute {
+  return value === '/' || value === '/schedule' || value === '/students'
 }

@@ -174,7 +174,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/students": {
+    "/api/classes/{class_id}/schedule": {
         parameters: {
             query?: never;
             header?: never;
@@ -182,6 +182,143 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        /** Create the first weekly schedule for an existing class */
+        put: operations["putClassSchedule"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/classes/{class_id}/rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read authoritative current rate and projected dated history */
+        get: operations["getClassRates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/classes/{class_id}/rates/{effective_date}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Create or correct one dated class rate */
+        put: operations["putClassRate"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/classes/{class_id}/schedule/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** End the latest retained weekly schedule */
+        post: operations["endClassSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Move one active session */
+        post: operations["moveSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel one active session */
+        post: operations["cancelSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore one tutor cancelled session */
+        post: operations["restoreSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one bounded tutor calendar window */
+        get: operations["getSchedule"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/students": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search active students */
+        get: operations["listStudents"];
         put?: never;
         /** Register a student */
         post: operations["createStudent"];
@@ -191,7 +328,131 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/students/{student_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one active student and class history */
+        get: operations["getStudent"];
+        put?: never;
+        post?: never;
+        /** Archive an active student with no current class membership */
+        delete: operations["archiveStudent"];
+        options?: never;
+        head?: never;
+        /** Edit an active student using the last read timestamp */
+        patch: operations["updateStudent"];
+        trace?: never;
+    };
     "/api/classes/{class_id}/roster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read an owned class roster on a local date */
+        get: operations["getClassRoster"];
+        /** Apply one atomic dated roster delta */
+        put: operations["changeClassRoster"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/attendance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one whole roster attendance sheet */
+        get: operations["getSessionAttendance"];
+        /** Save one complete whole roster attendance pass */
+        put: operations["saveSessionAttendance"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/invoice-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the signed in tutor's invoice identity and bank details */
+        get: operations["getInvoiceProfile"];
+        /** Save the signed in tutor's complete editable invoice profile representation */
+        put: operations["putInvoiceProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/banks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the active committed Vietnamese bank catalog */
+        get: operations["getBanks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing-periods/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the server derived most recent completed month */
+        get: operations["getBillingPeriodDefault"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing-periods/{year}/{month}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read an unissued month or its immutable issued run */
+        get: operations["getBillingPeriod"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing-periods/{year}/{month}/preview": {
         parameters: {
             query?: never;
             header?: never;
@@ -200,15 +461,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Join a student to a class */
-        post: operations["joinRoster"];
+        /** Calculate one completed month after proving projection readiness */
+        post: operations["previewBillingPeriod"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{session_id}/attendance/{student_id}": {
+    "/api/billing-periods/{year}/{month}/issue": {
         parameters: {
             query?: never;
             header?: never;
@@ -216,9 +477,9 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Save or correct one attendance mark */
-        put: operations["markAttendance"];
-        post?: never;
+        put?: never;
+        /** Issue one immutable invoice per billable student */
+        post: operations["issueBillingPeriod"];
         delete?: never;
         options?: never;
         head?: never;
@@ -270,6 +531,9 @@ export interface components {
                 code: string;
                 message: string;
                 request_id: string;
+                details?: {
+                    [key: string]: unknown;
+                };
             };
         };
         Health: {
@@ -315,12 +579,26 @@ export interface components {
             start_time: components["schemas"]["LocalTime"];
             end_time: components["schemas"]["LocalTime"];
         };
+        WeeklyScheduleSlotInput: {
+            weekday: number;
+            start_time: components["schemas"]["LocalTime"];
+            end_time: components["schemas"]["LocalTime"];
+        };
+        WeeklyScheduleInput: {
+            /** Format: date */
+            valid_from: string;
+            /** Format: date */
+            valid_through: string;
+            slots: components["schemas"]["WeeklyScheduleSlotInput"][];
+        };
+        /** @description Exactly one of first_session or schedule is required. */
         CreateClassRequest: {
             name: string;
             color?: components["schemas"]["ClassColor"] | null;
             /** Format: int64 */
             rate_amount: number;
-            first_session: components["schemas"]["FirstSessionInput"];
+            first_session?: components["schemas"]["FirstSessionInput"];
+            schedule?: components["schemas"]["WeeklyScheduleInput"];
         };
         Class: {
             /** Format: uuid */
@@ -333,6 +611,10 @@ export interface components {
             currency: "VND";
             /** Format: date */
             rate_effective_from: string;
+            /** Format: int64 */
+            schedule_revision: number;
+            /** Format: int64 */
+            rate_revision: number;
         };
         TeachingSession: {
             /** Format: uuid */
@@ -348,47 +630,342 @@ export interface components {
         };
         CreateClassResponse: {
             class: components["schemas"]["Class"];
-            first_session: components["schemas"]["TeachingSession"];
+            first_session: components["schemas"]["TeachingSession"] | null;
+            rule: components["schemas"]["ScheduleRuleSummary"] | null;
+            candidate_count: number;
+            created_count: number;
+            adopted_count: number;
+        };
+        PutScheduleRequest: {
+            /** Format: int64 */
+            expected_revision: number;
+            /** Format: date */
+            effective_from: string;
+            /** Format: date */
+            valid_through: string;
+            slots: components["schemas"]["WeeklyScheduleSlotInput"][];
+        };
+        PutScheduleResponse: {
+            class: components["schemas"]["Class"];
+            rule: components["schemas"]["ScheduleRuleSummary"];
+            first_session: components["schemas"]["TeachingSession"] | null;
+            candidate_count: number;
+            created_count: number;
+            adopted_count: number;
+            superseded_count: number;
+            preserved_count: number;
+        };
+        EndScheduleRequest: {
+            /** Format: int64 */
+            expected_revision: number;
+            /** Format: date */
+            last_date: string;
+        };
+        EndScheduleResponse: {
+            class: components["schemas"]["Class"];
+            rule: components["schemas"]["ScheduleRuleSummary"];
+            superseded_count: number;
+            preserved_count: number;
+        };
+        SessionVersionRequest: {
+            /** Format: int64 */
+            expected_version: number;
+        };
+        MoveSessionRequest: {
+            /** Format: int64 */
+            expected_version: number;
+            /** Format: date */
+            local_date: string;
+            start_time: components["schemas"]["LocalTime"];
+            end_time: components["schemas"]["LocalTime"];
+        };
+        CanonicalSession: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            class_id: string;
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            /** Format: date */
+            local_date: string;
+            /** Format: date */
+            origin_local_date: string;
+            /** Format: uuid */
+            schedule_rule_id: string | null;
+            source_time_zone: string | null;
+            display_time_zone: string;
+            start_utc_offset: string;
+            end_utc_offset: string;
+            /** Format: int64 */
+            version: number;
+            state: components["schemas"]["ScheduleSessionState"];
+            /** Format: date-time */
+            moved_at: string | null;
+            /** Format: date-time */
+            cancelled_at: string | null;
+            /** Format: date-time */
+            superseded_at: string | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @enum {string} */
+        ScheduleRuleState: "planned" | "active" | "completed" | "replaced" | "ended" | "retired";
+        ScheduleRuleSummary: {
+            /** Format: uuid */
+            schedule_rule_id: string;
+            /** Format: uuid */
+            class_id: string;
+            /** Format: int64 */
+            revision: number;
+            /** Format: date */
+            valid_from: string;
+            /** Format: date */
+            valid_through: string;
+            time_zone: string;
+            state: components["schemas"]["ScheduleRuleState"];
+            slots: components["schemas"]["WeeklyScheduleSlotInput"][];
+            /** Format: date-time */
+            replaced_at: string | null;
+            /** Format: date-time */
+            ended_at: string | null;
+            /** Format: date-time */
+            retired_at: string | null;
+        };
+        ScheduleClass: {
+            /** Format: uuid */
+            class_id: string;
+            name: string;
+            color: components["schemas"]["ClassColor"];
+            /** Format: int64 */
+            schedule_revision: number;
+        };
+        /** @enum {string} */
+        ScheduleSessionState: "active" | "cancelled" | "replaced";
+        ScheduleSession: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            class_id: string;
+            class_name: string;
+            class_color: components["schemas"]["ClassColor"];
+            class_archived: boolean;
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            /** Format: date */
+            display_date: string;
+            display_start: components["schemas"]["LocalTime"];
+            display_end: components["schemas"]["LocalTime"];
+            start_utc_offset: string;
+            end_utc_offset: string;
+            /** Format: date */
+            local_date: string;
+            /** Format: date */
+            origin_local_date: string;
+            /** Format: uuid */
+            schedule_rule_id: string | null;
+            source_time_zone: string | null;
+            /** Format: int64 */
+            version: number;
+            state: components["schemas"]["ScheduleSessionState"];
+            /** Format: date-time */
+            moved_at: string | null;
+            /** Format: date-time */
+            cancelled_at: string | null;
+            /** Format: date-time */
+            superseded_at: string | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        Schedule: {
+            /** Format: uuid */
+            tutor_id: string;
+            request_time_zone: string;
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            through: string;
+            classes: components["schemas"]["ScheduleClass"][];
+            rules: components["schemas"]["ScheduleRuleSummary"][];
+            sessions: components["schemas"]["ScheduleSession"][];
+            replaced_history: components["schemas"]["ScheduleSession"][];
+            next_history_cursor: string | null;
         };
         CreateStudentRequest: {
             name: string;
             phone?: string | null;
         };
-        Student: {
+        StudentRecord: {
             /** Format: uuid */
             student_id: string;
             name: string;
             phone: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
-        JoinRosterRequest: {
+        StudentSummary: {
             /** Format: uuid */
             student_id: string;
-            /** Format: date */
-            effective_from: string;
+            name: string;
+            phone: string | null;
+            /** Format: int64 */
+            active_class_count: number;
+            /** Format: date-time */
+            updated_at: string;
         };
-        RosterPeriod: {
+        StudentPage: {
+            students: components["schemas"]["StudentSummary"][];
+            next_cursor: string | null;
+        };
+        StudentMembership: {
             /** Format: uuid */
             class_id: string;
+            class_name: string;
+            class_color: components["schemas"]["ClassColor"];
+            /** Format: date */
+            effective_from: string;
+            /** Format: date */
+            effective_to: string | null;
+            active: boolean;
+        };
+        StudentDetail: {
+            student: components["schemas"]["StudentRecord"];
+            memberships: components["schemas"]["StudentMembership"][];
+        };
+        UpdateStudentRequest: {
+            /** Format: date-time */
+            expected_updated_at: string;
+            name?: string;
+            phone?: string | null;
+        };
+        StudentChangedDetails: {
             /** Format: uuid */
             student_id: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ClassReference: {
+            /** Format: uuid */
+            class_id: string;
+            name: string;
+        };
+        ActiveMembershipDetails: {
+            classes: components["schemas"]["ClassReference"][];
+        };
+        ClassSummary: {
+            /** Format: uuid */
+            class_id: string;
+            name: string;
+            color: components["schemas"]["ClassColor"];
+        };
+        RosterStudent: {
+            /** Format: uuid */
+            student_id: string;
+            name: string;
+            phone: string | null;
+            archived: boolean;
             /** Format: date */
             effective_from: string;
             /** Format: date */
             effective_to: string | null;
         };
+        ClassRoster: {
+            class: components["schemas"]["ClassSummary"];
+            /** Format: date */
+            resolved_date: string;
+            students: components["schemas"]["RosterStudent"][];
+        };
+        ChangeRosterRequest: {
+            /** Format: date */
+            change_date: string;
+            additions: string[];
+            removals: string[];
+        };
+        RosterConflictStudent: {
+            /** Format: uuid */
+            student_id: string;
+            name: string;
+            archived: boolean;
+            /** Format: date */
+            effective_from: string;
+            /** Format: date */
+            effective_to: string | null;
+        };
+        RosterConflictDetails: {
+            class: components["schemas"]["ClassSummary"];
+            /** Format: date */
+            resolved_date: string;
+            students: components["schemas"]["RosterConflictStudent"][];
+        };
         /** @enum {string} */
         AttendanceState: "Present" | "Absent";
-        MarkAttendanceRequest: {
-            state: components["schemas"]["AttendanceState"];
-        };
-        Attendance: {
+        SessionSummary: {
             /** Format: uuid */
             session_id: string;
+            /** Format: uuid */
+            class_id: string;
+            class_name: string;
+            class_color: components["schemas"]["ClassColor"];
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            /** Format: date */
+            local_date: string;
+            /** @enum {string} */
+            state: "active" | "cancelled" | "replaced" | "class_archived";
+        };
+        AttendanceStudent: {
+            /** Format: uuid */
+            student_id: string;
+            name: string;
+            archived: boolean;
+            state: components["schemas"]["AttendanceState"] | null;
+            /** Format: date-time */
+            marked_at: string | null;
+        };
+        AttendanceSheet: {
+            session: components["schemas"]["SessionSummary"];
+            eligible: boolean;
+            /** @enum {string|null} */
+            ineligible_reason: "replaced" | "cancelled" | "class_archived" | "not_started" | null;
+            revision: string;
+            students: components["schemas"]["AttendanceStudent"][];
+        };
+        AttendanceMarkInput: {
+            /** Format: uuid */
+            student_id: string;
+            state: components["schemas"]["AttendanceState"];
+        };
+        SaveAttendanceRequest: {
+            revision: string;
+            marks: components["schemas"]["AttendanceMarkInput"][];
+        };
+        SavedAttendanceMark: {
             /** Format: uuid */
             student_id: string;
             state: components["schemas"]["AttendanceState"];
             /** Format: date-time */
             marked_at: string;
+        };
+        AttendanceSave: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: date-time */
+            marked_at: string;
+            marks: components["schemas"]["SavedAttendanceMark"][];
+        };
+        AttendanceChangedDetails: {
+            sheet: components["schemas"]["AttendanceSheet"];
+        };
+        SessionNotEligibleDetails: {
+            /** @enum {string} */
+            reason: "replaced" | "cancelled" | "class_archived" | "not_started";
         };
         SetupDefaults: {
             /** Format: date */
@@ -444,6 +1021,210 @@ export interface components {
             attendance_count: number;
             /** Format: date-time */
             latest_updated_at: string | null;
+        };
+        InvoiceProfile: {
+            legal_name: string | null;
+            contact_line: string | null;
+            bank_code: string | null;
+            bank_name: string | null;
+            bank_account_number: string | null;
+            bank_account_holder: string | null;
+            /** Format: int64 */
+            revision: number;
+            is_complete: boolean;
+            missing_fields: ("legal_name" | "contact_line" | "bank_code" | "bank_account_number" | "bank_account_holder")[];
+            /** @enum {string} */
+            bank_status: "missing" | "active" | "inactive";
+        };
+        PutInvoiceProfileRequest: {
+            /** Format: int64 */
+            expected_revision: number;
+            legal_name: string | null;
+            contact_line: string | null;
+            bank_code: string | null;
+            bank_account_number: string | null;
+            bank_account_holder: string | null;
+        };
+        Bank: {
+            code: string;
+            short_name: string;
+            official_name: string;
+        };
+        BankCatalog: {
+            banks: components["schemas"]["Bank"][];
+        };
+        RateCurrent: {
+            /** Format: int64 */
+            rate_amount: number;
+            /** @constant */
+            currency: "VND";
+            /** Format: date */
+            effective_from: string;
+            /** Format: int64 */
+            rate_revision: number;
+        };
+        RateAllowedRange: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            through: string;
+        };
+        ProjectedClassRate: {
+            /** Format: date */
+            effective_from: string;
+            /** Format: int64 */
+            rate_amount: number;
+            /** @constant */
+            currency: "VND";
+            /** Format: int64 */
+            rate_revision: number;
+        };
+        ClassRates: {
+            /** Format: uuid */
+            class_id: string;
+            current: components["schemas"]["RateCurrent"];
+            allowed_range: components["schemas"]["RateAllowedRange"];
+            archived: boolean;
+            rates: components["schemas"]["ProjectedClassRate"][];
+            /** Format: int64 */
+            projected_revision: number;
+            /** @enum {string} */
+            history_state: "synced" | "syncing" | "unavailable";
+        };
+        PutClassRateRequest: {
+            /** Format: int64 */
+            rate_amount: number;
+        };
+        PutClassRateResponse: {
+            /** Format: uuid */
+            class_id: string;
+            /** Format: date */
+            effective_from: string;
+            /** Format: int64 */
+            rate_amount: number;
+            /** @constant */
+            currency: "VND";
+            /** Format: int64 */
+            rate_revision: number;
+            current: components["schemas"]["RateCurrent"];
+            allowed_range: components["schemas"]["RateAllowedRange"];
+            /** @constant */
+            issued_invoices_unchanged: true;
+            /** @constant */
+            history_state: "pending";
+        };
+        BillingPeriod: {
+            year: number;
+            month: number;
+        };
+        BillingPeriodDefault: {
+            /** Format: date */
+            server_date: string;
+            timezone: string;
+            year: number;
+            month: number;
+            /** @constant */
+            minimum_year: 2000;
+        };
+        BillingRecoveryDestination: {
+            route: string;
+            /** Format: date */
+            date: string | null;
+            /** Format: uuid */
+            session_id: string | null;
+            /** Format: uuid */
+            class_id: string | null;
+            /** Format: date */
+            rate_date: string | null;
+        };
+        BillingBlocker: {
+            /** @enum {string} */
+            code: "profile_incomplete" | "attendance_incomplete" | "rate_missing";
+            /** Format: uuid */
+            student_id: string | null;
+            /** Format: uuid */
+            session_id: string | null;
+            /** Format: uuid */
+            class_id: string | null;
+            /** Format: date */
+            local_date: string | null;
+            field: string | null;
+            destination: components["schemas"]["BillingRecoveryDestination"];
+        };
+        BillingLine: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            class_id: string | null;
+            class_name: string;
+            /** Format: date */
+            local_date: string;
+            /** Format: int64 */
+            rate_amount: number;
+            /** Format: int64 */
+            amount: number;
+            /** @constant */
+            currency: "VND";
+        };
+        BillingStudentTotal: {
+            /** Format: uuid */
+            student_id: string;
+            student_name: string;
+            lines: components["schemas"]["BillingLine"][];
+            /** Format: int64 */
+            total_amount: number;
+            /** @constant */
+            currency: "VND";
+        };
+        IssuedInvoice: {
+            /** Format: uuid */
+            invoice_id: string;
+            /** Format: uuid */
+            student_id: string;
+            student_name: string;
+            invoice_number: string;
+            /** Format: int64 */
+            total_amount: number;
+            /** @constant */
+            currency: "VND";
+            /** Format: date-time */
+            issued_at: string;
+            lines: components["schemas"]["BillingLine"][];
+        };
+        BillingRun: {
+            /** Format: uuid */
+            billing_run_id: string;
+            period: components["schemas"]["BillingPeriod"];
+            generation: number;
+            /** Format: date-time */
+            created_at: string;
+            invoices: components["schemas"]["IssuedInvoice"][];
+            /** Format: int64 */
+            grand_total: number;
+            /** @constant */
+            currency: "VND";
+        };
+        BillingPeriodState: {
+            /** @enum {string} */
+            status: "unissued" | "already_issued";
+            period: components["schemas"]["BillingPeriod"];
+            run: components["schemas"]["BillingRun"] | null;
+        };
+        BillingPreview: {
+            /** @enum {string} */
+            status: "ready" | "blocked" | "empty" | "already_issued";
+            period: components["schemas"]["BillingPeriod"];
+            students: components["schemas"]["BillingStudentTotal"][];
+            blockers: components["schemas"]["BillingBlocker"][];
+            /** Format: int64 */
+            grand_total: number;
+            /** @constant */
+            currency: "VND";
+            preview_fingerprint: string | null;
+            run: components["schemas"]["BillingRun"] | null;
+        };
+        IssueBillingRequest: {
+            preview_fingerprint: string;
         };
         HomeBillingProjection: {
             billing_projection: components["schemas"]["BillingProjection"] | null;
@@ -501,6 +1282,24 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The request shape is valid but one or more profile fields are invalid */
+        UnprocessableEntity: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The owning service could not complete the request */
+        InternalError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description A required service did not answer successfully */
         BadGateway: {
             headers: {
@@ -523,13 +1322,32 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The projection cannot yet prove the requested published cut */
+        ProjectionUnavailable: {
+            headers: {
+                "Retry-After"?: number;
+                "Cache-Control": "no-store";
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
     parameters: {
         /** @description One browser generated UUID, retained until this create step succeeds. */
         IdempotencyKey: string;
         ClassId: string;
+        BillingYear: number;
+        BillingMonth: number;
         SessionId: string;
         StudentId: string;
+        /** @description Case insensitive name or literal phone fragment, trimmed by teaching. */
+        StudentQuery: string;
+        /** @description Opaque cursor bound to the trimmed student search. */
+        StudentCursor: string;
+        /** @description Local roster date. Teaching defaults it from verified token timezone claims. */
+        RosterDate: string;
         /** @description Opaque cursor bound to the current tutor local date. */
         HomeCursor: string;
     };
@@ -819,6 +1637,295 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    putClassSchedule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                class_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description A replacement rule was created or the original response was replayed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PutScheduleResponse"];
+                };
+            };
+            /** @description The first retained schedule rule and concrete sessions */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PutScheduleResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getClassRates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                class_id: components["parameters"]["ClassId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current rate, allowed correction range, and complete dated history */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassRates"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    putClassRate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                class_id: components["parameters"]["ClassId"];
+                effective_date: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutClassRateRequest"];
+            };
+        };
+        responses: {
+            /** @description The committed dated rate or its original retry response */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PutClassRateResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    endClassSchedule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                class_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EndScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description The schedule was ended or the original response was replayed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EndScheduleResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    moveSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description The moved canonical session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalSession"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    cancelSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description The cancelled canonical session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalSession"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    restoreSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description The restored canonical session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalSession"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getSchedule: {
+        parameters: {
+            query: {
+                from: string;
+                through: string;
+                class_id?: string[];
+                include_replaced?: boolean;
+                history_limit?: number;
+                history_cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The owned classes, rules, and concrete sessions in the display window */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Schedule"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listStudents: {
+        parameters: {
+            query?: {
+                /** @description Case insensitive name or literal phone fragment, trimmed by teaching. */
+                q?: components["parameters"]["StudentQuery"];
+                /** @description Opaque cursor bound to the trimmed student search. */
+                cursor?: components["parameters"]["StudentCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One stable cursor page of active students */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
     createStudent: {
         parameters: {
             query?: never;
@@ -841,7 +1948,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Student"];
+                    "application/json": components["schemas"]["StudentRecord"];
                 };
             };
             /** @description The student was registered */
@@ -850,7 +1957,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Student"];
+                    "application/json": components["schemas"]["StudentRecord"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -858,10 +1965,125 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
-    joinRoster: {
+    getStudent: {
         parameters: {
             query?: never;
             header?: never;
+            path: {
+                student_id: components["parameters"]["StudentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The active student and retained memberships */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentDetail"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    archiveStudent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                student_id: components["parameters"]["StudentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The student was archived or the exact command was replayed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateStudent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                student_id: components["parameters"]["StudentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStudentRequest"];
+            };
+        };
+        responses: {
+            /** @description The canonical updated student */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentRecord"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getClassRoster: {
+        parameters: {
+            query?: {
+                /** @description Local roster date. Teaching defaults it from verified token timezone claims. */
+                date?: components["parameters"]["RosterDate"];
+            };
+            header?: never;
+            path: {
+                class_id: components["parameters"]["ClassId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The owned class and students covered by the resolved date */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassRoster"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    changeClassRoster: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
             path: {
                 class_id: components["parameters"]["ClassId"];
             };
@@ -869,26 +2091,17 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["JoinRosterRequest"];
+                "application/json": components["schemas"]["ChangeRosterRequest"];
             };
         };
         responses: {
-            /** @description The exact open roster period already existed */
+            /** @description The canonical roster on the change date */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RosterPeriod"];
-                };
-            };
-            /** @description The roster period was opened */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RosterPeriod"];
+                    "application/json": components["schemas"]["ClassRoster"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -897,35 +2110,256 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
-    markAttendance: {
+    getSessionAttendance: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 session_id: components["parameters"]["SessionId"];
-                student_id: components["parameters"]["StudentId"];
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MarkAttendanceRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description The canonical attendance row */
+            /** @description The coherent session, roster, saved states, and revision */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Attendance"];
+                    "application/json": components["schemas"]["AttendanceSheet"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    saveSessionAttendance: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One browser generated UUID, retained until this create step succeeds. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveAttendanceRequest"];
+            };
+        };
+        responses: {
+            /** @description The complete canonical saved pass */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceSave"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    getInvoiceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The canonical private invoice profile */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceProfile"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    putInvoiceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutInvoiceProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description The normalized canonical profile after the save */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceProfile"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getBanks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every active catalog entry in stable payment code order */
+            200: {
+                headers: {
+                    "Cache-Control": "private, max-age=86400";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankCatalog"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getBillingPeriodDefault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verified timezone and default completed period */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPeriodDefault"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    getBillingPeriod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year: components["parameters"]["BillingYear"];
+                month: components["parameters"]["BillingMonth"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current authoritative period state */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPeriodState"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    previewBillingPeriod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year: components["parameters"]["BillingYear"];
+                month: components["parameters"]["BillingMonth"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ready, blocked, empty, or already issued month */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["ProjectionUnavailable"];
+        };
+    };
+    issueBillingPeriod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year: components["parameters"]["BillingYear"];
+                month: components["parameters"]["BillingMonth"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueBillingRequest"];
+            };
+        };
+        responses: {
+            /** @description The existing run returned for a retry */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingRun"];
+                };
+            };
+            /** @description The new run and every immutable invoice */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingRun"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ProjectionUnavailable"];
         };
     };
     getHome: {

@@ -48,6 +48,7 @@ ON CONFLICT (session_id) DO UPDATE
 SET starts_at  = excluded.starts_at,
     ends_at    = excluded.ends_at,
     local_date = excluded.local_date,
+    cancelled_at = NULL,
     updated_at = now()
 WHERE sessions.tutor_id = excluded.tutor_id;
 
@@ -73,6 +74,8 @@ INSERT INTO roster_periods (class_id, student_id, effective_from, tutor_id)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (class_id, student_id, effective_from) DO NOTHING;
 
+-- A replay may see an old leave after a later rejoin is already open in the
+-- projection. The event end date excludes that later period from the target.
 -- name: CloseRosterPeriod :exec
 UPDATE roster_periods
 SET effective_to = $4,
@@ -80,7 +83,8 @@ SET effective_to = $4,
 WHERE tutor_id = $1
   AND class_id = $2
   AND student_id = $3
-  AND effective_to IS NULL;
+  AND effective_to IS NULL
+  AND effective_from <= $4;
 
 -- UpsertClassRate appends the dated history billing owns. teaching.class.created
 -- seeds the first row from its rate_effective_from and
@@ -96,6 +100,129 @@ SET rate_amount = excluded.rate_amount,
     currency    = excluded.currency,
     updated_at  = now()
 WHERE class_rates.tutor_id = excluded.tutor_id;
+
+-- ApplyClassRateFact accepts positive revisions only when they advance the
+-- stored date. Revision zero keeps retained event compatibility and uses the
+-- original source coordinate to make replay order deterministic.
+-- name: ApplyClassRateFact :exec
+INSERT INTO class_rates (
+    class_id,
+    effective_from,
+    tutor_id,
+    rate_amount,
+    currency,
+    rate_revision,
+    source_partition,
+    source_offset
+)
+VALUES (
+    sqlc.arg(class_id),
+    sqlc.arg(effective_from),
+    sqlc.arg(tutor_id),
+    sqlc.arg(rate_amount),
+    sqlc.arg(currency),
+    sqlc.arg(rate_revision),
+    sqlc.arg(source_partition),
+    sqlc.arg(source_offset)
+)
+ON CONFLICT (class_id, effective_from) DO UPDATE
+SET rate_amount = excluded.rate_amount,
+    currency = excluded.currency,
+    rate_revision = excluded.rate_revision,
+    source_partition = excluded.source_partition,
+    source_offset = excluded.source_offset,
+    updated_at = now()
+WHERE class_rates.tutor_id = excluded.tutor_id
+  AND (
+      excluded.rate_revision > class_rates.rate_revision
+      OR (
+          excluded.rate_revision = 0
+          AND class_rates.rate_revision = 0
+          AND (
+              class_rates.source_partition IS NULL
+              OR (
+                  class_rates.source_partition = excluded.source_partition
+                  AND class_rates.source_offset < excluded.source_offset
+              )
+          )
+      )
+  );
+
+-- name: ListOwnedClassRates :many
+SELECT class_id, effective_from, tutor_id, rate_amount, currency, rate_revision,
+       source_partition, source_offset, recorded_at, updated_at
+FROM class_rates
+WHERE tutor_id = $1
+  AND class_id = $2
+ORDER BY effective_from DESC;
+
+-- FindBillingSessionMissingClass checks the session to class projection link
+-- before roster coverage can hide a session from the candidate query.
+-- name: FindBillingSessionMissingClass :one
+SELECT s.session_id, s.class_id
+FROM sessions s
+LEFT JOIN classes c
+  ON c.class_id = s.class_id
+ AND c.tutor_id = s.tutor_id
+WHERE s.tutor_id = sqlc.arg(owner_tutor_id)
+  AND s.local_date >= sqlc.arg(period_start)
+  AND s.local_date <= sqlc.arg(period_end)
+  AND s.cancelled_at IS NULL
+  AND c.class_id IS NULL
+LIMIT 1;
+
+-- ListBillingCandidates begins with every session and covered roster student.
+-- Outer joins keep missing labels, attendance, and rates visible as blockers.
+-- name: ListBillingCandidates :many
+SELECT s.session_id,
+       s.class_id,
+       coverage.student_id,
+       s.local_date,
+       coverage.coverage_count,
+       c.name AS class_name,
+       st.name AS student_name,
+       a.state AS attendance_state,
+       a.marked_at,
+       (rate.rate_amount IS NOT NULL)::boolean AS rate_known,
+       coalesce(rate.rate_amount, 0)::bigint AS rate_amount,
+       coalesce(rate.currency, '')::text AS currency,
+       coalesce(rate.effective_from, DATE '1970-01-01')::date AS rate_effective_from,
+       coalesce(rate.rate_revision, 0)::bigint AS rate_revision
+FROM sessions s
+JOIN LATERAL (
+    SELECT rp.student_id, count(*)::bigint AS coverage_count
+    FROM roster_periods rp
+    WHERE rp.class_id = s.class_id
+      AND rp.tutor_id = s.tutor_id
+      AND rp.effective_from <= s.local_date
+      AND (rp.effective_to IS NULL OR s.local_date <= rp.effective_to)
+    GROUP BY rp.student_id
+) coverage ON true
+LEFT JOIN classes c
+  ON c.class_id = s.class_id
+ AND c.tutor_id = s.tutor_id
+LEFT JOIN students st
+  ON st.student_id = coverage.student_id
+ AND st.tutor_id = s.tutor_id
+LEFT JOIN attendance a
+  ON a.session_id = s.session_id
+ AND a.student_id = coverage.student_id
+ AND a.tutor_id = s.tutor_id
+LEFT JOIN LATERAL (
+    SELECT cr.rate_amount, cr.currency, cr.effective_from, cr.rate_revision
+    FROM class_rates cr
+    WHERE cr.class_id = s.class_id
+      AND cr.tutor_id = s.tutor_id
+      AND cr.effective_from <= s.local_date
+    ORDER BY cr.effective_from DESC
+    LIMIT 1
+) rate ON true
+WHERE s.tutor_id = sqlc.arg(owner_tutor_id)
+  AND s.local_date >= sqlc.arg(period_start)
+  AND s.local_date <= sqlc.arg(period_end)
+  AND s.cancelled_at IS NULL
+ORDER BY coverage.student_id, s.local_date, s.session_id
+LIMIT sqlc.arg(row_limit);
 
 -- GetClassRateBookkeeping exposes the consumer transaction clock for the model
 -- regression tests. Business code reads rates through RateInForceOn instead.
@@ -238,22 +365,34 @@ INSERT INTO invoice_profiles (tutor_id)
 VALUES ($1)
 ON CONFLICT (tutor_id) DO NOTHING;
 
--- SaveInvoiceProfile is the tutor's own write, from the profile screen. Every
--- field here is theirs; no event carries any of it, so bank details never reach
--- the broker.
--- name: SaveInvoiceProfile :one
-INSERT INTO invoice_profiles (tutor_id, legal_name, contact_line, bank_name, bank_account_number, bank_account_holder)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (tutor_id) DO UPDATE
-SET legal_name          = excluded.legal_name,
-    contact_line        = excluded.contact_line,
-    bank_name           = excluded.bank_name,
-    bank_account_number = excluded.bank_account_number,
-    bank_account_holder = excluded.bank_account_holder,
+-- LockInvoiceProfile serialises profile writers. The handler compares the five
+-- normalized editable values before it checks the expected revision, which is
+-- what lets an identical retry recover a lost successful response.
+-- name: LockInvoiceProfile :one
+SELECT tutor_id, legal_name, contact_line, bank_name, bank_account_number,
+       bank_account_holder, created_at, updated_at, bank_code, revision,
+       is_complete
+FROM invoice_profiles
+WHERE tutor_id = $1
+FOR UPDATE;
+
+-- UpdateInvoiceProfile is called only after the handler has locked the row,
+-- recognized an identical retry, checked the expected revision, and validated
+-- the normalized values. One changed save advances the revision exactly once.
+-- name: UpdateInvoiceProfile :one
+UPDATE invoice_profiles
+SET legal_name          = sqlc.arg(legal_name),
+    contact_line        = sqlc.arg(contact_line),
+    bank_code           = sqlc.arg(bank_code),
+    bank_name           = sqlc.arg(bank_name),
+    bank_account_number = sqlc.arg(bank_account_number),
+    bank_account_holder = sqlc.arg(bank_account_holder),
+    revision            = revision + 1,
     updated_at          = now()
-WHERE invoice_profiles.tutor_id = excluded.tutor_id
+WHERE tutor_id = sqlc.arg(owner_tutor_id)
 RETURNING tutor_id, legal_name, contact_line, bank_name, bank_account_number,
-          bank_account_holder, created_at, updated_at, is_complete;
+          bank_account_holder, created_at, updated_at, bank_code, revision,
+          is_complete;
 
 -- GetInvoiceProfile returns is_complete beside the fields, so the month end
 -- refusal and the profile screen read the one gate rather than each testing its
@@ -262,7 +401,8 @@ RETURNING tutor_id, legal_name, contact_line, bank_name, bank_account_number,
 -- The column order is the table's own, so sqlc hands back the one
 -- invoice_profiles row type rather than a second shape of the same row.
 SELECT tutor_id, legal_name, contact_line, bank_name, bank_account_number,
-       bank_account_holder, created_at, updated_at, is_complete
+       bank_account_holder, created_at, updated_at, bank_code, revision,
+       is_complete
 FROM invoice_profiles
 WHERE tutor_id = $1;
 
@@ -311,6 +451,21 @@ FROM billing_runs
 WHERE tutor_id = $1
   AND billing_run_id = $2;
 
+-- name: GetLiveBillingRunForPeriod :one
+SELECT billing_run_id, tutor_id, period_year, period_month, generation,
+       created_at, superseded_at
+FROM billing_runs
+WHERE tutor_id = $1
+  AND period_year = $2
+  AND period_month = $3
+  AND superseded_at IS NULL;
+
+-- name: GetBillingTransactionTimestamp :one
+SELECT transaction_timestamp()::timestamptz
+FROM billing_runs
+WHERE tutor_id = $1
+  AND billing_run_id = $2;
+
 -- InsertInvoice freezes the render block at issue: the student name and the five
 -- payee fields are copied in, so a re render years later prints the file the
 -- tutor already sent and a later bank account change cannot reach backwards into
@@ -344,6 +499,16 @@ WHERE tutor_id = $1
   AND period_month = $3
 ORDER BY invoice_number;
 
+-- name: ListInvoicesForRun :many
+SELECT invoice_id, tutor_id, billing_run_id, student_id, invoice_number, period_year,
+       period_month, total_amount, currency, issued_at, pdf_location, paid_at, voided_at,
+       void_reason, replaces_invoice_id, student_name, payee_legal_name, payee_contact_line,
+       payee_bank_name, payee_bank_account_number, payee_bank_account_holder, updated_at
+FROM invoices
+WHERE tutor_id = $1
+  AND billing_run_id = $2
+ORDER BY invoice_number;
+
 -- InsertInvoiceLine keeps both the frozen values and the session_id they came
 -- from. The id is for tracing during a dispute and is never joined at render
 -- time.
@@ -361,3 +526,14 @@ FROM invoice_lines
 WHERE tutor_id = $1
   AND invoice_id = $2
 ORDER BY session_date, session_id;
+
+-- name: ListInvoiceLinesForRun :many
+SELECT il.invoice_line_id, il.invoice_id, il.tutor_id, il.session_id,
+       il.session_date, il.class_name, il.rate_amount, il.amount
+FROM invoice_lines il
+JOIN invoices i
+  ON i.invoice_id = il.invoice_id
+ AND i.tutor_id = il.tutor_id
+WHERE il.tutor_id = $1
+  AND i.billing_run_id = $2
+ORDER BY i.invoice_number, il.session_date, il.session_id;

@@ -2,12 +2,13 @@
 
 ## Overview
 
-The one infra stack, plus the scripts that run the skeleton. `compose.test.yaml` is started once and
+The one infra stack, plus the scripts that run the application and feature verification.
+`compose.test.yaml` is started once and
 serves both local development and the integration tests, because the failures worth catching (a
 consumer that is not idempotent, a relay publishing twice, a projection rebuilt wrong) only appear
 against a real broker and a real database (STK-15), and one stack started once is what 2 vCPU can
-carry. The three shell scripts are what `Taskfile.yml` calls to start a service, stop it, and prove
-the end to end thread.
+carry. The lifecycle and verification scripts are what `Taskfile.yml` calls to start services and
+prove complete paths through the real stack.
 
 ## Key files
 
@@ -16,7 +17,8 @@ the end to end thread.
 | `compose.test.yaml` | Four Postgres 18 instances and one Redpanda node, tuned small, under the compose project name `vermouth` |
 | `start-service.sh` | Start one binary from `bin/`, record its pid under `.tmp/run`, and confirm it stayed up |
 | `stop-service.sh` | Stop one service and wait until it is really gone, forcing it after 20 seconds |
-| `thread.sh` | Register a tutor through the gateway, then poll `/api/thread` until `notifications` has recorded the event |
+| `thread.sh` | Drive tutor setup, profile, recurrence, attendance, a dated rate, monthly preview, stale refusal, issue retry, and immutable invoice evidence through the gateway and Redpanda |
+| `verify-recurring.sh` | Prove recurring schedules, projection replay, controlled clock behavior, overlap guards, and invoice immutability on the host stack |
 | `e2e/` | Empty. Playwright for the money path lands here when `$test` sets the runners up |
 
 ## Commands
@@ -27,10 +29,12 @@ task infra:ps            # what is running
 task infra:logs          # follow the infra logs
 task infra:down          # stop it, keeping the data
 task infra:clean         # stop it and delete the data (it asks first)
+task test                # every Go module, including the tagged real billing protocol suite
 task start               # every service in the background, logs under .tmp/logs
 task svc:start -- identity
 task svc:stop -- identity
 task thread              # drive the end to end thread and watch it complete
+task verify:recurring    # prove the recurring session path and projection replay
 ```
 
 Where things listen, all of it also in `.env.example`: Postgres on 5433 identity, 5434 teaching,
@@ -70,5 +74,9 @@ The gateway on 8080, then the services on 8081 to 8084.
 
 - [0002 stack and scaffold](../docs/specs/0002-stack-and-scaffold/index.md) (STK-15 to STK-17, STK-22, STK-23, and the scaffold target the thread proves)
 - [0001 service boundaries and communication](../docs/specs/0001-service-boundaries-and-communication/index.md) (the thread `thread.sh` drives, browser to gateway to service to broker to consumer)
+* [0010 recurring sessions and exceptions](../docs/specs/0010-recurring-sessions-exceptions/index.md) (the recurring verification script and replay evidence)
+* [0011 student records and class rosters](../docs/specs/0011-student-records-class-rosters/index.md) (the student, roster, attendance, and projection thread)
+* [0012 tutor profile and bank details](../docs/specs/0012-tutor-profile-bank-details/index.md) (the profile save, identical retry, and reload in the end to end thread)
+* [0013 tuition rate and monthly calculation](../docs/specs/0013-tuition-rate-monthly-calculation/index.md) (the real rate, replay, preview, issue, and immutable invoice thread)
 
 _Drafted by $audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

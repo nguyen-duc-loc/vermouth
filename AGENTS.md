@@ -32,7 +32,7 @@ task build          # every Go binary into bin/, CGO_ENABLED=0
 task web:build      # the web app to static files
 
 # Test
-task test           # go test ./... in every module
+task test           # go test -tags=integration ./... in every module, against the shared test stack
 
 # Container images: FROM scratch, built with the repository root as the build context (STK-24)
 task image -- identity   # one service
@@ -49,7 +49,7 @@ Stored in `docs/specs/`. Format: `docs/specs/NNNN-title/index.md` plus its `rati
 Spec 0001 fixes the service boundaries and the event catalogue (`INV-n`), spec 0002 the stack
 (`STK-n`). Both are Accepted, and the rules below only say how they are met.
 
-The feature roadmap lives in `docs/scope/scope.md`: twenty features in phases with their status, the
+The feature roadmap lives in `docs/scope/scope.md`: twenty one features in phases with their status, the
 workflow level (Beta, so `$develop` then `$check verify` then `$test`), and the decisions taken up
 front so no feature reopens them. `$scope` owns that file.
 
@@ -110,9 +110,10 @@ Installed by `$develop tooling` and enforced through the same task targets local
   it with `task hooks:install`; `task hooks:run` checks the whole tree.
 - **Tests**: Go `testing` with `testify/require`; anything touching a relay, a consumer, a
   projection, or a month end run runs against the real Postgres and Redpanda in
-  `test/compose.test.yaml` (STK-15). Store and model integration tests are already present.
+  `test/compose.test.yaml` (STK-15). `task test` enables the `integration` build tag, and CI starts
+  that stack before the Go suite. Store and model integration tests are already present.
   Web unit and component tests use Vitest with jsdom and Testing Library. Run
-  `pnpm exec vitest run` from `web/`; neither `task test` nor CI includes that suite today.
+  `pnpm exec vitest run` from `web/`; CI runs that suite in its web job, while `task test` remains Go only.
   Playwright remains planned for the browser money path and is not installed yet.
 - **CI**: `.github/workflows/ci.yml` runs on every push and pull request. Its Go, web, and hook jobs
   build, check formatting, lint, type check, verify generated browser types, and test.

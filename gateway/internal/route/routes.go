@@ -25,6 +25,8 @@ const maxRequestBody = 1 << 20
 
 const refreshCookieName = "vermouth_refresh"
 
+const idempotencyHeader = "Idempotency-Key"
+
 // Deps is what the routes need. There is no database in here on purpose.
 type Deps struct {
 	Client        *aggregate.Client
@@ -37,6 +39,8 @@ type Deps struct {
 // Mux builds the gateway surface described by api/openapi.yaml (STK-10). The
 // request id is created here and travels onward on every call, and from there
 // onto every event published while handling it (INV-15).
+//
+//nolint:funlen // Keeping the complete explicit public route table together makes contract drift visible.
 func Mux(deps Deps) http.Handler {
 	mux := http.NewServeMux()
 
@@ -85,34 +89,155 @@ func Mux(deps Deps) http.Handler {
 	})
 
 	authenticated.HandleFunc("POST /api/classes", proxyCreateClass(deps))
+	authenticated.HandleFunc("GET /api/classes/{class_id}/rates", readClassRates(deps))
+	authenticated.HandleFunc("PUT /api/classes/{class_id}/rates/{effective_date}", putClassRate(deps))
+	authenticated.HandleFunc("PUT /api/classes/{class_id}/schedule", proxyPutSchedule(deps))
+	authenticated.HandleFunc("POST /api/classes/{class_id}/schedule/end", proxyEndSchedule(deps))
+	authenticated.HandleFunc("POST /api/sessions/{session_id}/move", proxyMoveSession(deps))
+	authenticated.HandleFunc("POST /api/sessions/{session_id}/cancel", proxyCancelSession(deps))
+	authenticated.HandleFunc("POST /api/sessions/{session_id}/restore", proxyRestoreSession(deps))
+	authenticated.HandleFunc("GET /api/students", proxyListStudents(deps))
 	authenticated.HandleFunc("POST /api/students", proxyCreateStudent(deps))
-	authenticated.HandleFunc("POST /api/classes/{class_id}/roster", proxyJoinRoster(deps))
-	authenticated.HandleFunc(
-		"PUT /api/sessions/{session_id}/attendance/{student_id}",
-		proxyMarkAttendance(deps),
-	)
+	authenticated.HandleFunc("GET /api/students/{student_id}", proxyGetStudent(deps))
+	authenticated.HandleFunc("PATCH /api/students/{student_id}", proxyUpdateStudent(deps))
+	authenticated.HandleFunc("DELETE /api/students/{student_id}", proxyArchiveStudent(deps))
+	authenticated.HandleFunc("GET /api/classes/{class_id}/roster", proxyGetClassRoster(deps))
+	authenticated.HandleFunc("PUT /api/classes/{class_id}/roster", proxyChangeClassRoster(deps))
+	authenticated.HandleFunc("GET /api/sessions/{session_id}/attendance", proxyGetAttendance(deps))
+	authenticated.HandleFunc("PUT /api/sessions/{session_id}/attendance", proxySaveAttendance(deps))
 	authenticated.HandleFunc("GET /api/home", readHome(deps))
 	authenticated.HandleFunc("GET /api/home/billing-projection", readHomeBillingProjection(deps))
+	authenticated.HandleFunc("GET /api/schedule", readSchedule(deps))
+	authenticated.HandleFunc("GET /api/invoice-profile", proxyGetInvoiceProfile(deps))
+	authenticated.HandleFunc("PUT /api/invoice-profile", proxyPutInvoiceProfile(deps))
+	authenticated.HandleFunc("GET /api/banks", proxyGetBanks(deps))
+	authenticated.HandleFunc("GET /api/billing-periods/default", proxyBillingPeriodDefault(deps))
+	authenticated.HandleFunc("GET /api/billing-periods/{year}/{month}", proxyGetBillingPeriod(deps))
+	authenticated.HandleFunc("POST /api/billing-periods/{year}/{month}/preview", proxyPreviewBillingPeriod(deps))
+	authenticated.HandleFunc("POST /api/billing-periods/{year}/{month}/issue", proxyIssueBillingPeriod(deps))
 
 	mux.Handle("/api/", auth.Middleware(deps.Verifier, deps.Logger, authenticated))
 
 	return vermouth.RequestIDMiddleware(deps.Logger, mux)
 }
 
-func proxyCreateClass(deps Deps) http.HandlerFunc {
+func proxyEndSchedule(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var input apitypes.CreateClassRequest
+		classID, err := uuid.Parse(r.PathValue("class_id"))
+		if err != nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "class_id must be a UUID")
+			return
+		}
+		var input apitypes.EndScheduleRequest
 		if !decodeJSONBody(w, r, &input) {
 			return
 		}
+		proxyTeachingCommand(deps, w, r, "/classes/"+classID.String()+"/schedule/end", input)
+	}
+}
+
+func proxyMoveSession(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID, err := uuid.Parse(r.PathValue("session_id"))
+		if err != nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "session_id must be a UUID")
+			return
+		}
+		var input apitypes.MoveSessionRequest
+		if !decodeJSONBody(w, r, &input) {
+			return
+		}
+		proxyTeachingCommand(deps, w, r, "/sessions/"+sessionID.String()+"/move", input)
+	}
+}
+
+func proxyCancelSession(deps Deps) http.HandlerFunc {
+	return proxySessionVersionCommand(deps, "cancel")
+}
+
+func proxyRestoreSession(deps Deps) http.HandlerFunc {
+	return proxySessionVersionCommand(deps, "restore")
+}
+
+func proxySessionVersionCommand(deps Deps, action string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID, err := uuid.Parse(r.PathValue("session_id"))
+		if err != nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "session_id must be a UUID")
+			return
+		}
+		var input apitypes.SessionVersionRequest
+		if !decodeJSONBody(w, r, &input) {
+			return
+		}
+		proxyTeachingCommand(deps, w, r, "/sessions/"+sessionID.String()+"/"+action, input)
+	}
+}
+
+func proxyTeachingCommand(deps Deps, w http.ResponseWriter, r *http.Request, path string, input any) {
+	response, err := deps.Client.CallWithHeaders(
+		r.Context(), http.MethodPost, deps.Client.Upstreams().Teaching, path,
+		vermouth.BearerToken(r),
+		http.Header{idempotencyHeader: []string{r.Header.Get(idempotencyHeader)}}, input,
+	)
+	if err != nil {
+		upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)
+		return
+	}
+	passThrough(r.Context(), deps.Logger, w, response)
+}
+
+func proxyPutSchedule(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var input apitypes.PutScheduleRequest
+		if !decodeJSONBody(w, r, &input) {
+			return
+		}
+		classID, err := uuid.Parse(r.PathValue("class_id"))
+		if err != nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "class_id must be a UUID")
+			return
+		}
+		response, err := deps.Client.CallWithHeaders(
+			r.Context(),
+			http.MethodPut,
+			deps.Client.Upstreams().Teaching,
+			"/classes/"+classID.String()+"/schedule",
+			vermouth.BearerToken(r),
+			http.Header{idempotencyHeader: []string{r.Header.Get(idempotencyHeader)}},
+			input,
+		)
+		if err != nil {
+			upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)
+			return
+		}
+		passThrough(r.Context(), deps.Logger, w, response)
+	}
+}
+
+func proxyCreateClass(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var input struct {
+			apitypes.CreateClassRequest
+
+			RateAmount *int64 `json:"rate_amount"`
+		}
+		if !decodeJSONBody(w, r, &input) {
+			return
+		}
+		if input.RateAmount == nil {
+			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "rate_amount must be an integer")
+			return
+		}
+		input.CreateClassRequest.RateAmount = *input.RateAmount
 		response, err := deps.Client.CallWithHeaders(
 			r.Context(),
 			http.MethodPost,
 			deps.Client.Upstreams().Teaching,
 			"/classes",
 			vermouth.BearerToken(r),
-			http.Header{"Idempotency-Key": []string{r.Header.Get("Idempotency-Key")}},
-			input,
+			http.Header{idempotencyHeader: []string{r.Header.Get(idempotencyHeader)}},
+			input.CreateClassRequest,
 		)
 		if err != nil {
 			upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)
@@ -134,68 +259,7 @@ func proxyCreateStudent(deps Deps) http.HandlerFunc {
 			deps.Client.Upstreams().Teaching,
 			"/students",
 			vermouth.BearerToken(r),
-			http.Header{"Idempotency-Key": []string{r.Header.Get("Idempotency-Key")}},
-			input,
-		)
-		if err != nil {
-			upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)
-			return
-		}
-		passThrough(r.Context(), deps.Logger, w, response)
-	}
-}
-
-func proxyJoinRoster(deps Deps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		classID, err := uuid.Parse(r.PathValue("class_id"))
-		if err != nil {
-			vermouth.WriteError(r.Context(), w, http.StatusBadRequest, "invalid_input", "class_id must be a UUID")
-			return
-		}
-		var input apitypes.JoinRosterRequest
-		if !decodeJSONBody(w, r, &input) {
-			return
-		}
-		response, err := deps.Client.Call(
-			r.Context(),
-			http.MethodPost,
-			deps.Client.Upstreams().Teaching,
-			"/classes/"+classID.String()+"/roster",
-			vermouth.BearerToken(r),
-			input,
-		)
-		if err != nil {
-			upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)
-			return
-		}
-		passThrough(r.Context(), deps.Logger, w, response)
-	}
-}
-
-func proxyMarkAttendance(deps Deps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		sessionID, sessionErr := uuid.Parse(r.PathValue("session_id"))
-		studentID, studentErr := uuid.Parse(r.PathValue("student_id"))
-		if sessionErr != nil || studentErr != nil {
-			vermouth.WriteError(
-				r.Context(),
-				w,
-				http.StatusBadRequest,
-				"invalid_input",
-				"session_id and student_id must be UUID values",
-			)
-			return
-		}
-		var input apitypes.MarkAttendanceRequest
-		if !decodeJSONBody(w, r, &input) {
-			return
-		}
-		response, err := deps.Client.Call(
-			r.Context(),
-			http.MethodPut,
-			deps.Client.Upstreams().Teaching,
-			"/sessions/"+sessionID.String()+"/attendance/"+studentID.String(),
-			vermouth.BearerToken(r),
+			http.Header{idempotencyHeader: []string{r.Header.Get(idempotencyHeader)}},
 			input,
 		)
 		if err != nil {
@@ -229,6 +293,28 @@ func readHomeBillingProjection(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		status := deps.Client.HomeBillingProjection(r.Context(), vermouth.BearerToken(r))
 		vermouth.WriteJSON(r.Context(), deps.Logger, w, http.StatusOK, status)
+	}
+}
+
+func readSchedule(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := "/schedule"
+		if r.URL.RawQuery != "" {
+			path += "?" + r.URL.RawQuery
+		}
+		response, err := deps.Client.Call(
+			r.Context(),
+			http.MethodGet,
+			deps.Client.Upstreams().Teaching,
+			path,
+			vermouth.BearerToken(r),
+			nil,
+		)
+		if err != nil {
+			upstreamFailed(r.Context(), deps.Logger, w, "teaching", err)
+			return
+		}
+		passThrough(r.Context(), deps.Logger, w, response)
 	}
 }
 
@@ -393,6 +479,9 @@ func passThrough(ctx context.Context, logger *slog.Logger, w http.ResponseWriter
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
+	if cacheControl := response.Header.Get("Cache-Control"); cacheControl != "" {
+		w.Header().Set("Cache-Control", cacheControl)
+	}
 	w.WriteHeader(response.Status)
 	_, err := w.Write(response.Body)
 	if err != nil {

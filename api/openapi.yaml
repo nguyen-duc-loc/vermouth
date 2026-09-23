@@ -320,7 +320,321 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /api/classes/{class_id}/schedule:
+    put:
+      operationId: putClassSchedule
+      summary: Create the first weekly schedule for an existing class
+      parameters:
+        - name: class_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PutScheduleRequest"
+      responses:
+        "200":
+          description: A replacement rule was created or the original response was replayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PutScheduleResponse"
+        "201":
+          description: The first retained schedule rule and concrete sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PutScheduleResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/classes/{class_id}/rates:
+    get:
+      operationId: getClassRates
+      summary: Read authoritative current rate and projected dated history
+      parameters:
+        - $ref: "#/components/parameters/ClassId"
+      responses:
+        "200":
+          description: Current rate, allowed correction range, and complete dated history
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClassRates"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+
+  /api/classes/{class_id}/rates/{effective_date}:
+    put:
+      operationId: putClassRate
+      summary: Create or correct one dated class rate
+      parameters:
+        - $ref: "#/components/parameters/ClassId"
+        - name: effective_date
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PutClassRateRequest"
+      responses:
+        "200":
+          description: The committed dated rate or its original retry response
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PutClassRateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/classes/{class_id}/schedule/end:
+    post:
+      operationId: endClassSchedule
+      summary: End the latest retained weekly schedule
+      parameters:
+        - name: class_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EndScheduleRequest"
+      responses:
+        "200":
+          description: The schedule was ended or the original response was replayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EndScheduleResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/sessions/{session_id}/move:
+    post:
+      operationId: moveSession
+      summary: Move one active session
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoveSessionRequest"
+      responses:
+        "200":
+          description: The moved canonical session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanonicalSession"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/sessions/{session_id}/cancel:
+    post:
+      operationId: cancelSession
+      summary: Cancel one active session
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionVersionRequest"
+      responses:
+        "200":
+          description: The cancelled canonical session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanonicalSession"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/sessions/{session_id}/restore:
+    post:
+      operationId: restoreSession
+      summary: Restore one tutor cancelled session
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionVersionRequest"
+      responses:
+        "200":
+          description: The restored canonical session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanonicalSession"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/schedule:
+    get:
+      operationId: getSchedule
+      summary: Read one bounded tutor calendar window
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: through
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: class_id
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+        - name: include_replaced
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: history_limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 50
+        - name: history_cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The owned classes, rules, and concrete sessions in the display window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Schedule"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
   /api/students:
+    get:
+      operationId: listStudents
+      summary: Search active students
+      parameters:
+        - $ref: "#/components/parameters/StudentQuery"
+        - $ref: "#/components/parameters/StudentCursor"
+      responses:
+        "200":
+          description: One stable cursor page of active students
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
     post:
       operationId: createStudent
       summary: Register a student
@@ -338,45 +652,165 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Student"
+                $ref: "#/components/schemas/StudentRecord"
         "201":
           description: The student was registered
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Student"
+                $ref: "#/components/schemas/StudentRecord"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/students/{student_id}:
+    get:
+      operationId: getStudent
+      summary: Read one active student and class history
+      parameters:
+        - $ref: "#/components/parameters/StudentId"
+      responses:
+        "200":
+          description: The active student and retained memberships
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentDetail"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateStudent
+      summary: Edit an active student using the last read timestamp
+      parameters:
+        - $ref: "#/components/parameters/StudentId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStudentRequest"
+      responses:
+        "200":
+          description: The canonical updated student
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      operationId: archiveStudent
+      summary: Archive an active student with no current class membership
+      parameters:
+        - $ref: "#/components/parameters/StudentId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: The student was archived or the exact command was replayed
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
 
   /api/classes/{class_id}/roster:
-    post:
-      operationId: joinRoster
-      summary: Join a student to a class
+    get:
+      operationId: getClassRoster
+      summary: Read an owned class roster on a local date
       parameters:
         - $ref: "#/components/parameters/ClassId"
+        - $ref: "#/components/parameters/RosterDate"
+      responses:
+        "200":
+          description: The owned class and students covered by the resolved date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClassRoster"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: changeClassRoster
+      summary: Apply one atomic dated roster delta
+      parameters:
+        - $ref: "#/components/parameters/ClassId"
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/JoinRosterRequest"
+              $ref: "#/components/schemas/ChangeRosterRequest"
       responses:
         "200":
-          description: The exact open roster period already existed
+          description: The canonical roster on the change date
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RosterPeriod"
-        "201":
-          description: The roster period was opened
+                $ref: "#/components/schemas/ClassRoster"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/sessions/{session_id}/attendance:
+    get:
+      operationId: getSessionAttendance
+      summary: Read one whole roster attendance sheet
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: The coherent session, roster, saved states, and revision
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RosterPeriod"
+                $ref: "#/components/schemas/AttendanceSheet"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: saveSessionAttendance
+      summary: Save one complete whole roster attendance pass
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveAttendanceRequest"
+      responses:
+        "200":
+          description: The complete canonical saved pass
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSave"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -386,34 +820,204 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
-  /api/sessions/{session_id}/attendance/{student_id}:
+  /api/invoice-profile:
+    get:
+      operationId: getInvoiceProfile
+      summary: Read the signed in tutor's invoice identity and bank details
+      responses:
+        "200":
+          description: The canonical private invoice profile
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceProfile"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
     put:
-      operationId: markAttendance
-      summary: Save or correct one attendance mark
-      parameters:
-        - $ref: "#/components/parameters/SessionId"
-        - $ref: "#/components/parameters/StudentId"
+      operationId: putInvoiceProfile
+      summary: Save the signed in tutor's complete editable invoice profile representation
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/MarkAttendanceRequest"
+              $ref: "#/components/schemas/PutInvoiceProfileRequest"
       responses:
         "200":
-          description: The canonical attendance row
+          description: The normalized canonical profile after the save
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Attendance"
+                $ref: "#/components/schemas/InvoiceProfile"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
-        "404":
-          $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/banks:
+    get:
+      operationId: getBanks
+      summary: Read the active committed Vietnamese bank catalog
+      responses:
+        "200":
+          description: Every active catalog entry in stable payment code order
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: "private, max-age=86400"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankCatalog"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/billing-periods/default:
+    get:
+      operationId: getBillingPeriodDefault
+      summary: Read the server derived most recent completed month
+      responses:
+        "200":
+          description: Verified timezone and default completed period
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingPeriodDefault"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /api/billing-periods/{year}/{month}:
+    get:
+      operationId: getBillingPeriod
+      summary: Read an unissued month or its immutable issued run
+      parameters:
+        - $ref: "#/components/parameters/BillingYear"
+        - $ref: "#/components/parameters/BillingMonth"
+      responses:
+        "200":
+          description: The current authoritative period state
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingPeriodState"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /api/billing-periods/{year}/{month}/preview:
+    post:
+      operationId: previewBillingPeriod
+      summary: Calculate one completed month after proving projection readiness
+      parameters:
+        - $ref: "#/components/parameters/BillingYear"
+        - $ref: "#/components/parameters/BillingMonth"
+      responses:
+        "200":
+          description: Ready, blocked, empty, or already issued month
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingPreview"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          $ref: "#/components/responses/ProjectionUnavailable"
+
+  /api/billing-periods/{year}/{month}/issue:
+    post:
+      operationId: issueBillingPeriod
+      summary: Issue one immutable invoice per billable student
+      parameters:
+        - $ref: "#/components/parameters/BillingYear"
+        - $ref: "#/components/parameters/BillingMonth"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueBillingRequest"
+      responses:
+        "200":
+          description: The existing run returned for a retry
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingRun"
+        "201":
+          description: The new run and every immutable invoice
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingRun"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ProjectionUnavailable"
 
   /api/home:
     get:
@@ -467,6 +1071,21 @@ components:
       schema:
         type: string
         format: uuid
+    BillingYear:
+      name: year
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 2000
+    BillingMonth:
+      name: month
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 12
     SessionId:
       name: session_id
       in: path
@@ -481,6 +1100,29 @@ components:
       schema:
         type: string
         format: uuid
+    StudentQuery:
+      name: q
+      in: query
+      required: false
+      description: Case insensitive name or literal phone fragment, trimmed by teaching.
+      schema:
+        type: string
+        maxLength: 160
+    StudentCursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor bound to the trimmed student search.
+      schema:
+        type: string
+    RosterDate:
+      name: date
+      in: query
+      required: false
+      description: Local roster date. Teaching defaults it from verified token timezone claims.
+      schema:
+        type: string
+        format: date
     HomeCursor:
       name: cursor
       in: query
@@ -526,6 +1168,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    UnprocessableEntity:
+      description: The request shape is valid but one or more profile fields are invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: The owning service could not complete the request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     BadGateway:
       description: A required service did not answer successfully
       content:
@@ -551,6 +1205,23 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    ProjectionUnavailable:
+      description: The projection cannot yet prove the requested published cut
+      headers:
+        Retry-After:
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        Cache-Control:
+          required: true
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
 
   schemas:
     Error:
@@ -569,6 +1240,9 @@ components:
               type: string
             request_id:
               type: string
+            details:
+              type: object
+              additionalProperties: true
 
     Health:
       type: object
@@ -648,9 +1322,40 @@ components:
         end_time:
           $ref: "#/components/schemas/LocalTime"
 
+    WeeklyScheduleSlotInput:
+      type: object
+      required: [weekday, start_time, end_time]
+      properties:
+        weekday:
+          type: integer
+          minimum: 1
+          maximum: 7
+        start_time:
+          $ref: "#/components/schemas/LocalTime"
+        end_time:
+          $ref: "#/components/schemas/LocalTime"
+
+    WeeklyScheduleInput:
+      type: object
+      required: [valid_from, valid_through, slots]
+      properties:
+        valid_from:
+          type: string
+          format: date
+        valid_through:
+          type: string
+          format: date
+        slots:
+          type: array
+          minItems: 1
+          maxItems: 7
+          items:
+            $ref: "#/components/schemas/WeeklyScheduleSlotInput"
+
     CreateClassRequest:
       type: object
-      required: [name, rate_amount, first_session]
+      description: Exactly one of first_session or schedule is required.
+      required: [name, rate_amount]
       properties:
         name:
           type: string
@@ -667,11 +1372,13 @@ components:
           maximum: 1000000000
         first_session:
           $ref: "#/components/schemas/FirstSessionInput"
+        schedule:
+          $ref: "#/components/schemas/WeeklyScheduleInput"
 
     Class:
       type: object
       required:
-        [class_id, name, color, rate_amount, currency, rate_effective_from]
+        [class_id, name, color, rate_amount, currency, rate_effective_from, schedule_revision, rate_revision]
       properties:
         class_id:
           type: string
@@ -689,6 +1396,14 @@ components:
         rate_effective_from:
           type: string
           format: date
+        schedule_revision:
+          type: integer
+          format: int64
+          minimum: 0
+        rate_revision:
+          type: integer
+          format: int64
+          minimum: 0
 
     TeachingSession:
       type: object
@@ -712,12 +1427,348 @@ components:
 
     CreateClassResponse:
       type: object
-      required: [class, first_session]
+      required: [class, first_session, rule, candidate_count, created_count, adopted_count]
       properties:
         class:
           $ref: "#/components/schemas/Class"
         first_session:
-          $ref: "#/components/schemas/TeachingSession"
+          oneOf:
+            - $ref: "#/components/schemas/TeachingSession"
+            - type: "null"
+        rule:
+          oneOf:
+            - $ref: "#/components/schemas/ScheduleRuleSummary"
+            - type: "null"
+        candidate_count:
+          type: integer
+          minimum: 0
+        created_count:
+          type: integer
+          minimum: 0
+        adopted_count:
+          type: integer
+          minimum: 0
+
+    PutScheduleRequest:
+      type: object
+      required: [expected_revision, effective_from, valid_through, slots]
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 0
+        effective_from:
+          type: string
+          format: date
+        valid_through:
+          type: string
+          format: date
+        slots:
+          type: array
+          minItems: 1
+          maxItems: 7
+          items:
+            $ref: "#/components/schemas/WeeklyScheduleSlotInput"
+
+    PutScheduleResponse:
+      type: object
+      required:
+        [class, rule, first_session, candidate_count, created_count, adopted_count, superseded_count, preserved_count]
+      properties:
+        class:
+          $ref: "#/components/schemas/Class"
+        rule:
+          $ref: "#/components/schemas/ScheduleRuleSummary"
+        first_session:
+          oneOf:
+            - $ref: "#/components/schemas/TeachingSession"
+            - type: "null"
+        candidate_count:
+          type: integer
+          minimum: 0
+        created_count:
+          type: integer
+          minimum: 0
+        adopted_count:
+          type: integer
+          minimum: 0
+        superseded_count:
+          type: integer
+          minimum: 0
+        preserved_count:
+          type: integer
+          minimum: 0
+
+    EndScheduleRequest:
+      type: object
+      required: [expected_revision, last_date]
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 0
+        last_date:
+          type: string
+          format: date
+
+    EndScheduleResponse:
+      type: object
+      required: [class, rule, superseded_count, preserved_count]
+      properties:
+        class:
+          $ref: "#/components/schemas/Class"
+        rule:
+          $ref: "#/components/schemas/ScheduleRuleSummary"
+        superseded_count:
+          type: integer
+          minimum: 0
+        preserved_count:
+          type: integer
+          minimum: 0
+
+    SessionVersionRequest:
+      type: object
+      required: [expected_version]
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+
+    MoveSessionRequest:
+      type: object
+      required: [expected_version, local_date, start_time, end_time]
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+          minimum: 1
+        local_date:
+          type: string
+          format: date
+        start_time:
+          $ref: "#/components/schemas/LocalTime"
+        end_time:
+          $ref: "#/components/schemas/LocalTime"
+
+    CanonicalSession:
+      type: object
+      required:
+        [session_id, class_id, starts_at, ends_at, local_date, origin_local_date, schedule_rule_id, source_time_zone, display_time_zone, start_utc_offset, end_utc_offset, version, state, moved_at, cancelled_at, superseded_at, updated_at]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        local_date:
+          type: string
+          format: date
+        origin_local_date:
+          type: string
+          format: date
+        schedule_rule_id:
+          type: [string, "null"]
+          format: uuid
+        source_time_zone:
+          type: [string, "null"]
+        display_time_zone:
+          type: string
+        start_utc_offset:
+          type: string
+          pattern: "^[+-][0-9]{2}:[0-9]{2}$"
+        end_utc_offset:
+          type: string
+          pattern: "^[+-][0-9]{2}:[0-9]{2}$"
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        state:
+          $ref: "#/components/schemas/ScheduleSessionState"
+        moved_at:
+          type: [string, "null"]
+          format: date-time
+        cancelled_at:
+          type: [string, "null"]
+          format: date-time
+        superseded_at:
+          type: [string, "null"]
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ScheduleRuleState:
+      type: string
+      enum: [planned, active, completed, replaced, ended, retired]
+
+    ScheduleRuleSummary:
+      type: object
+      required:
+        [schedule_rule_id, class_id, revision, valid_from, valid_through, time_zone, state, slots, replaced_at, ended_at, retired_at]
+      properties:
+        schedule_rule_id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+        valid_from:
+          type: string
+          format: date
+        valid_through:
+          type: string
+          format: date
+        time_zone:
+          type: string
+        state:
+          $ref: "#/components/schemas/ScheduleRuleState"
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeeklyScheduleSlotInput"
+        replaced_at:
+          type: [string, "null"]
+          format: date-time
+        ended_at:
+          type: [string, "null"]
+          format: date-time
+        retired_at:
+          type: [string, "null"]
+          format: date-time
+
+    ScheduleClass:
+      type: object
+      required: [class_id, name, color, schedule_revision]
+      properties:
+        class_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          $ref: "#/components/schemas/ClassColor"
+        schedule_revision:
+          type: integer
+          format: int64
+          minimum: 0
+
+    ScheduleSessionState:
+      type: string
+      enum: [active, cancelled, replaced]
+
+    ScheduleSession:
+      type: object
+      required:
+        [session_id, class_id, class_name, class_color, class_archived, starts_at, ends_at, display_date, display_start, display_end, start_utc_offset, end_utc_offset, local_date, origin_local_date, schedule_rule_id, source_time_zone, version, state, moved_at, cancelled_at, superseded_at, updated_at]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        class_id:
+          type: string
+          format: uuid
+        class_name:
+          type: string
+        class_color:
+          $ref: "#/components/schemas/ClassColor"
+        class_archived:
+          type: boolean
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        display_date:
+          type: string
+          format: date
+        display_start:
+          $ref: "#/components/schemas/LocalTime"
+        display_end:
+          $ref: "#/components/schemas/LocalTime"
+        start_utc_offset:
+          type: string
+          pattern: "^[+-][0-9]{2}:[0-9]{2}$"
+        end_utc_offset:
+          type: string
+          pattern: "^[+-][0-9]{2}:[0-9]{2}$"
+        local_date:
+          type: string
+          format: date
+        origin_local_date:
+          type: string
+          format: date
+        schedule_rule_id:
+          type: [string, "null"]
+          format: uuid
+        source_time_zone:
+          type: [string, "null"]
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        state:
+          $ref: "#/components/schemas/ScheduleSessionState"
+        moved_at:
+          type: [string, "null"]
+          format: date-time
+        cancelled_at:
+          type: [string, "null"]
+          format: date-time
+        superseded_at:
+          type: [string, "null"]
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Schedule:
+      type: object
+      required:
+        [tutor_id, request_time_zone, from, through, classes, rules, sessions, replaced_history, next_history_cursor]
+      properties:
+        tutor_id:
+          type: string
+          format: uuid
+        request_time_zone:
+          type: string
+        from:
+          type: string
+          format: date
+        through:
+          type: string
+          format: date
+        classes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduleClass"
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduleRuleSummary"
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduleSession"
+        replaced_history:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduleSession"
+        next_history_cursor:
+          type: [string, "null"]
 
     CreateStudentRequest:
       type: object
@@ -726,14 +1777,14 @@ components:
         name:
           type: string
           minLength: 1
-          maxLength: 120
+          maxLength: 160
         phone:
           type: [string, "null"]
           maxLength: 40
 
-    Student:
+    StudentRecord:
       type: object
-      required: [student_id, name, phone]
+      required: [student_id, name, phone, created_at, updated_at]
       properties:
         student_id:
           type: string
@@ -742,28 +1793,152 @@ components:
           type: string
         phone:
           type: [string, "null"]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
-    JoinRosterRequest:
+    StudentSummary:
       type: object
-      required: [student_id, effective_from]
+      required: [student_id, name, phone, active_class_count, updated_at]
       properties:
         student_id:
           type: string
           format: uuid
-        effective_from:
+        name:
           type: string
-          format: date
+        phone:
+          type: [string, "null"]
+        active_class_count:
+          type: integer
+          format: int64
+          minimum: 0
+        updated_at:
+          type: string
+          format: date-time
 
-    RosterPeriod:
+    StudentPage:
       type: object
-      required: [class_id, student_id, effective_from, effective_to]
+      required: [students, next_cursor]
+      properties:
+        students:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/StudentSummary"
+        next_cursor:
+          type: [string, "null"]
+
+    StudentMembership:
+      type: object
+      required: [class_id, class_name, class_color, effective_from, effective_to, active]
       properties:
         class_id:
           type: string
           format: uuid
+        class_name:
+          type: string
+        class_color:
+          $ref: "#/components/schemas/ClassColor"
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type: [string, "null"]
+          format: date
+        active:
+          type: boolean
+
+    StudentDetail:
+      type: object
+      required: [student, memberships]
+      properties:
+        student:
+          $ref: "#/components/schemas/StudentRecord"
+        memberships:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentMembership"
+
+    UpdateStudentRequest:
+      type: object
+      required: [expected_updated_at]
+      minProperties: 2
+      additionalProperties: false
+      properties:
+        expected_updated_at:
+          type: string
+          format: date-time
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        phone:
+          type: [string, "null"]
+          maxLength: 40
+
+    StudentChangedDetails:
+      type: object
+      required: [student_id, updated_at]
+      additionalProperties: false
+      properties:
         student_id:
           type: string
           format: uuid
+        updated_at:
+          type: string
+          format: date-time
+
+    ClassReference:
+      type: object
+      required: [class_id, name]
+      additionalProperties: false
+      properties:
+        class_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    ActiveMembershipDetails:
+      type: object
+      required: [classes]
+      additionalProperties: false
+      properties:
+        classes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClassReference"
+
+    ClassSummary:
+      type: object
+      required: [class_id, name, color]
+      additionalProperties: false
+      properties:
+        class_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          $ref: "#/components/schemas/ClassColor"
+
+    RosterStudent:
+      type: object
+      required: [student_id, name, phone, archived, effective_from, effective_to]
+      additionalProperties: false
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone:
+          type: [string, "null"]
+        archived:
+          type: boolean
         effective_from:
           type: string
           format: date
@@ -771,24 +1946,181 @@ components:
           type: [string, "null"]
           format: date
 
+    ClassRoster:
+      type: object
+      required: [class, resolved_date, students]
+      additionalProperties: false
+      properties:
+        class:
+          $ref: "#/components/schemas/ClassSummary"
+        resolved_date:
+          type: string
+          format: date
+        students:
+          type: array
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/RosterStudent"
+
+    ChangeRosterRequest:
+      type: object
+      required: [change_date, additions, removals]
+      additionalProperties: false
+      properties:
+        change_date:
+          type: string
+          format: date
+        additions:
+          type: array
+          maxItems: 200
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        removals:
+          type: array
+          maxItems: 200
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+
+    RosterConflictStudent:
+      type: object
+      required: [student_id, name, archived, effective_from, effective_to]
+      additionalProperties: false
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        archived:
+          type: boolean
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type: [string, "null"]
+          format: date
+
+    RosterConflictDetails:
+      type: object
+      required: [class, resolved_date, students]
+      additionalProperties: false
+      properties:
+        class:
+          $ref: "#/components/schemas/ClassSummary"
+        resolved_date:
+          type: string
+          format: date
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/RosterConflictStudent"
+
     AttendanceState:
       type: string
       enum: [Present, Absent]
 
-    MarkAttendanceRequest:
+    SessionSummary:
       type: object
-      required: [state]
-      properties:
-        state:
-          $ref: "#/components/schemas/AttendanceState"
-
-    Attendance:
-      type: object
-      required: [session_id, student_id, state, marked_at]
+      required: [session_id, class_id, class_name, class_color, starts_at, ends_at, local_date, state]
+      additionalProperties: false
       properties:
         session_id:
           type: string
           format: uuid
+        class_id:
+          type: string
+          format: uuid
+        class_name:
+          type: string
+        class_color:
+          $ref: "#/components/schemas/ClassColor"
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        local_date:
+          type: string
+          format: date
+        state:
+          type: string
+          enum: [active, cancelled, replaced, class_archived]
+
+    AttendanceStudent:
+      type: object
+      required: [student_id, name, archived, state, marked_at]
+      additionalProperties: false
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        archived:
+          type: boolean
+        state:
+          oneOf:
+            - $ref: "#/components/schemas/AttendanceState"
+            - type: "null"
+        marked_at:
+          type: [string, "null"]
+          format: date-time
+
+    AttendanceSheet:
+      type: object
+      required: [session, eligible, ineligible_reason, revision, students]
+      additionalProperties: false
+      properties:
+        session:
+          $ref: "#/components/schemas/SessionSummary"
+        eligible:
+          type: boolean
+        ineligible_reason:
+          type: [string, "null"]
+          enum: [replaced, cancelled, class_archived, not_started, null]
+        revision:
+          type: string
+        students:
+          type: array
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/AttendanceStudent"
+
+    AttendanceMarkInput:
+      type: object
+      required: [student_id, state]
+      additionalProperties: false
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        state:
+          $ref: "#/components/schemas/AttendanceState"
+
+    SaveAttendanceRequest:
+      type: object
+      required: [revision, marks]
+      additionalProperties: false
+      properties:
+        revision:
+          type: string
+          minLength: 1
+        marks:
+          type: array
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/AttendanceMarkInput"
+
+    SavedAttendanceMark:
+      type: object
+      required: [student_id, state, marked_at]
+      additionalProperties: false
+      properties:
         student_id:
           type: string
           format: uuid
@@ -797,6 +2129,39 @@ components:
         marked_at:
           type: string
           format: date-time
+
+    AttendanceSave:
+      type: object
+      required: [session_id, marked_at, marks]
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        marked_at:
+          type: string
+          format: date-time
+        marks:
+          type: array
+          items:
+            $ref: "#/components/schemas/SavedAttendanceMark"
+
+    AttendanceChangedDetails:
+      type: object
+      required: [sheet]
+      additionalProperties: false
+      properties:
+        sheet:
+          $ref: "#/components/schemas/AttendanceSheet"
+
+    SessionNotEligibleDetails:
+      type: object
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          enum: [replaced, cancelled, class_archived, not_started]
 
     SetupDefaults:
       type: object
@@ -909,6 +2274,450 @@ components:
         latest_updated_at:
           type: [string, "null"]
           format: date-time
+
+    InvoiceProfile:
+      type: object
+      additionalProperties: false
+      required:
+        [legal_name, contact_line, bank_code, bank_name, bank_account_number, bank_account_holder, revision, is_complete, missing_fields, bank_status]
+      properties:
+        legal_name:
+          type: [string, "null"]
+        contact_line:
+          type: [string, "null"]
+        bank_code:
+          type: [string, "null"]
+        bank_name:
+          type: [string, "null"]
+        bank_account_number:
+          type: [string, "null"]
+        bank_account_holder:
+          type: [string, "null"]
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+        is_complete:
+          type: boolean
+        missing_fields:
+          type: array
+          items:
+            type: string
+            enum: [legal_name, contact_line, bank_code, bank_account_number, bank_account_holder]
+        bank_status:
+          type: string
+          enum: [missing, active, inactive]
+
+    PutInvoiceProfileRequest:
+      type: object
+      additionalProperties: false
+      required:
+        [expected_revision, legal_name, contact_line, bank_code, bank_account_number, bank_account_holder]
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 0
+        legal_name:
+          type: [string, "null"]
+          maxLength: 120
+        contact_line:
+          type: [string, "null"]
+          maxLength: 200
+        bank_code:
+          type: [string, "null"]
+        bank_account_number:
+          type: [string, "null"]
+        bank_account_holder:
+          type: [string, "null"]
+          maxLength: 120
+
+    Bank:
+      type: object
+      additionalProperties: false
+      required: [code, short_name, official_name]
+      properties:
+        code:
+          type: string
+          pattern: "^[0-9]{6}$"
+        short_name:
+          type: string
+        official_name:
+          type: string
+
+    BankCatalog:
+      type: object
+      additionalProperties: false
+      required: [banks]
+      properties:
+        banks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Bank"
+
+    RateCurrent:
+      type: object
+      additionalProperties: false
+      required: [rate_amount, currency, effective_from, rate_revision]
+      properties:
+        rate_amount:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1000000000
+        currency:
+          type: string
+          const: VND
+        effective_from:
+          type: string
+          format: date
+        rate_revision:
+          type: integer
+          format: int64
+          minimum: 0
+
+    RateAllowedRange:
+      type: object
+      additionalProperties: false
+      required: [from, through]
+      properties:
+        from:
+          type: string
+          format: date
+        through:
+          type: string
+          format: date
+
+    ProjectedClassRate:
+      type: object
+      additionalProperties: false
+      required: [effective_from, rate_amount, currency, rate_revision]
+      properties:
+        effective_from:
+          type: string
+          format: date
+        rate_amount:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1000000000
+        currency:
+          type: string
+          const: VND
+        rate_revision:
+          type: integer
+          format: int64
+          minimum: 0
+
+    ClassRates:
+      type: object
+      additionalProperties: false
+      required: [class_id, current, allowed_range, archived, rates, projected_revision, history_state]
+      properties:
+        class_id:
+          type: string
+          format: uuid
+        current:
+          $ref: "#/components/schemas/RateCurrent"
+        allowed_range:
+          $ref: "#/components/schemas/RateAllowedRange"
+        archived:
+          type: boolean
+        rates:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectedClassRate"
+        projected_revision:
+          type: integer
+          format: int64
+          minimum: 0
+        history_state:
+          type: string
+          enum: [synced, syncing, unavailable]
+
+    PutClassRateRequest:
+      type: object
+      additionalProperties: false
+      required: [rate_amount]
+      properties:
+        rate_amount:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1000000000
+
+    PutClassRateResponse:
+      type: object
+      additionalProperties: false
+      required:
+        [class_id, effective_from, rate_amount, currency, rate_revision, current, allowed_range, issued_invoices_unchanged, history_state]
+      properties:
+        class_id:
+          type: string
+          format: uuid
+        effective_from:
+          type: string
+          format: date
+        rate_amount:
+          type: integer
+          format: int64
+        currency:
+          type: string
+          const: VND
+        rate_revision:
+          type: integer
+          format: int64
+          minimum: 1
+        current:
+          $ref: "#/components/schemas/RateCurrent"
+        allowed_range:
+          $ref: "#/components/schemas/RateAllowedRange"
+        issued_invoices_unchanged:
+          type: boolean
+          const: true
+        history_state:
+          type: string
+          const: pending
+
+    BillingPeriod:
+      type: object
+      additionalProperties: false
+      required: [year, month]
+      properties:
+        year:
+          type: integer
+          minimum: 2000
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+
+    BillingPeriodDefault:
+      type: object
+      additionalProperties: false
+      required: [server_date, timezone, year, month, minimum_year]
+      properties:
+        server_date:
+          type: string
+          format: date
+        timezone:
+          type: string
+        year:
+          type: integer
+          minimum: 2000
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        minimum_year:
+          type: integer
+          const: 2000
+
+    BillingRecoveryDestination:
+      type: object
+      additionalProperties: false
+      required: [route, date, session_id, class_id, rate_date]
+      properties:
+        route:
+          type: string
+        date:
+          type: [string, "null"]
+          format: date
+        session_id:
+          type: [string, "null"]
+          format: uuid
+        class_id:
+          type: [string, "null"]
+          format: uuid
+        rate_date:
+          type: [string, "null"]
+          format: date
+
+    BillingBlocker:
+      type: object
+      additionalProperties: false
+      required: [code, student_id, session_id, class_id, local_date, field, destination]
+      properties:
+        code:
+          type: string
+          enum: [profile_incomplete, attendance_incomplete, rate_missing]
+        student_id:
+          type: [string, "null"]
+          format: uuid
+        session_id:
+          type: [string, "null"]
+          format: uuid
+        class_id:
+          type: [string, "null"]
+          format: uuid
+        local_date:
+          type: [string, "null"]
+          format: date
+        field:
+          type: [string, "null"]
+        destination:
+          $ref: "#/components/schemas/BillingRecoveryDestination"
+
+    BillingLine:
+      type: object
+      additionalProperties: false
+      required: [session_id, class_id, class_name, local_date, rate_amount, amount, currency]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        class_id:
+          type: [string, "null"]
+          format: uuid
+        class_name:
+          type: string
+        local_date:
+          type: string
+          format: date
+        rate_amount:
+          type: integer
+          format: int64
+        amount:
+          type: integer
+          format: int64
+        currency:
+          type: string
+          const: VND
+
+    BillingStudentTotal:
+      type: object
+      additionalProperties: false
+      required: [student_id, student_name, lines, total_amount, currency]
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        student_name:
+          type: string
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/BillingLine"
+        total_amount:
+          type: integer
+          format: int64
+        currency:
+          type: string
+          const: VND
+
+    IssuedInvoice:
+      type: object
+      additionalProperties: false
+      required:
+        [invoice_id, student_id, student_name, invoice_number, total_amount, currency, issued_at, lines]
+      properties:
+        invoice_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        student_name:
+          type: string
+        invoice_number:
+          type: string
+        total_amount:
+          type: integer
+          format: int64
+        currency:
+          type: string
+          const: VND
+        issued_at:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/BillingLine"
+
+    BillingRun:
+      type: object
+      additionalProperties: false
+      required: [billing_run_id, period, generation, created_at, invoices, grand_total, currency]
+      properties:
+        billing_run_id:
+          type: string
+          format: uuid
+        period:
+          $ref: "#/components/schemas/BillingPeriod"
+        generation:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        invoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/IssuedInvoice"
+        grand_total:
+          type: integer
+          format: int64
+        currency:
+          type: string
+          const: VND
+
+    BillingPeriodState:
+      type: object
+      additionalProperties: false
+      required: [status, period, run]
+      properties:
+        status:
+          type: string
+          enum: [unissued, already_issued]
+        period:
+          $ref: "#/components/schemas/BillingPeriod"
+        run:
+          oneOf:
+            - $ref: "#/components/schemas/BillingRun"
+            - type: "null"
+
+    BillingPreview:
+      type: object
+      additionalProperties: false
+      required: [status, period, students, blockers, grand_total, currency, preview_fingerprint, run]
+      properties:
+        status:
+          type: string
+          enum: [ready, blocked, empty, already_issued]
+        period:
+          $ref: "#/components/schemas/BillingPeriod"
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/BillingStudentTotal"
+        blockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/BillingBlocker"
+        grand_total:
+          type: integer
+          format: int64
+        currency:
+          type: string
+          const: VND
+        preview_fingerprint:
+          type: [string, "null"]
+        run:
+          oneOf:
+            - $ref: "#/components/schemas/BillingRun"
+            - type: "null"
+
+    IssueBillingRequest:
+      type: object
+      additionalProperties: false
+      required: [preview_fingerprint]
+      properties:
+        preview_fingerprint:
+          type: string
+          minLength: 1
 
     HomeBillingProjection:
       type: object

@@ -71,6 +71,9 @@ func run() error {
 	group.Go(func() error {
 		return vermouth.RunConsumer(groupCtx, cfg, pool, logger, consumer.Recipients())
 	})
+	group.Go(func() error {
+		return vermouth.RunConsumer(groupCtx, cfg, pool, logger, consumer.Teaching())
+	})
 	err = group.Wait()
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return err

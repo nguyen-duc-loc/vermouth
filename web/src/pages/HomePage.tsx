@@ -1,73 +1,54 @@
-import {
-  type InfiniteData,
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
-import { BookOpen, CalendarDays, Home, LogOut, Plus, Sparkles } from 'lucide-react'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getRouteApi } from '@tanstack/react-router'
+import { BookOpen, CalendarDays, Home, Plus, ReceiptText, Sparkles, Users } from 'lucide-react'
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react'
 
-import { signOut } from '../api/session'
 import {
+  changeClassRoster,
   createClass,
   createStudent,
-  type Home as HomeData,
-  joinRoster,
-  markAttendance,
   readBillingProjection,
   readHome,
 } from '../api/teaching'
-import { AppearancePanel, type AppearancePanelText } from '../components/AppearancePanel'
+import { AccountPanel } from '../components/AccountPanel'
 import { type AppDestination, AppShell } from '../components/AppShell'
+import { AttendanceSheet } from '../components/AttendanceSheet'
 import { BillingProjectionPanel } from '../components/BillingProjectionPanel'
 import { EmptyState } from '../components/EmptyState'
 import { ErrorState } from '../components/ErrorState'
 import { PageEntrance } from '../components/PageEntrance'
-import { SessionAttendanceCard } from '../components/SessionAttendanceCard'
 import { TeachingSetupSheet } from '../components/TeachingSetupSheet'
 import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardHeader } from '../components/ui/card'
-import { Separator } from '../components/ui/separator'
 import { Skeleton } from '../components/ui/skeleton'
-import { clearAllTeachingDrafts } from '../lib/teaching-draft'
 
 const homeQueryFamily = ['home'] as const
 const homeQueryKey = ['home', null] as const
 const billingQueryKey = ['home', 'billing-projection'] as const
+const homeRoute = getRouteApi('/')
 
-const appearanceText: AppearancePanelText = {
-  title: 'Appearance',
-  themeLegend: 'Theme',
-  accentLegend: 'Accent color',
-  themes: { light: 'Light', dark: 'Dark', system: 'System' },
-  accents: {
-    red: 'Red',
-    rose: 'Rose',
-    orange: 'Orange',
-    green: 'Green',
-    blue: 'Blue',
-    yellow: 'Yellow',
-    violet: 'Violet',
-  },
-}
-
-const destinations: readonly AppDestination[] = [{ href: '/', label: 'Home', icon: Home }]
+const destinations: readonly AppDestination[] = [
+  { href: '/', label: 'Home', icon: Home },
+  { href: '/schedule', label: 'Schedule', icon: CalendarDays },
+  { href: '/students', label: 'Students', icon: Users },
+  { href: '/billing', label: 'Billing', icon: ReceiptText },
+]
 
 /** Opens the tutor's local day with setup, attendance, and isolated projection progress. */
 export function HomePage() {
-  const navigate = useNavigate()
+  const search = homeRoute.useSearch()
+  const navigate = homeRoute.useNavigate()
   const queryClient = useQueryClient()
   const [setupOpen, setSetupOpen] = useState(false)
   const [setupMessage, setSetupMessage] = useState<string>()
-  const [savedMessage, setSavedMessage] = useState<{ sessionId: string; message: string }>()
-  const [signingOut, setSigningOut] = useState(false)
+  const [attendanceMessage, setAttendanceMessage] = useState('')
+  const [attendanceSessionID, setAttendanceSessionID] = useState<string>()
   const [pollTimedOut, setPollTimedOut] = useState(false)
   const [pollCycle, setPollCycle] = useState(0)
   const [manualPolling, setManualPolling] = useState(false)
   const setupReturnFocusRef = useRef<HTMLButtonElement>(null)
+  const attendanceReturnFocusRef = useRef<HTMLButtonElement>(null)
 
   const homeQuery = useInfiniteQuery({
     queryKey: homeQueryKey,
@@ -134,6 +115,10 @@ export function HomePage() {
     document.title = 'Today · Vermouth'
   }, [])
 
+  useEffect(() => {
+    if (search.session) setAttendanceSessionID(search.session)
+  }, [search.session])
+
   function refreshHomeAndProjection() {
     setPollCycle((current) => current + 1)
     void queryClient.resetQueries({ queryKey: homeQueryKey, exact: true })
@@ -159,81 +144,14 @@ export function HomePage() {
     mutationFn: ({
       classId,
       input,
+      key,
     }: {
       classId: string
-      input: Parameters<typeof joinRoster>[1]
-    }) => joinRoster(classId, input),
+      input: Parameters<typeof changeClassRoster>[1]
+      key: string
+    }) => changeClassRoster(classId, input, key),
     onSuccess: refreshHomeAndProjection,
   })
-  const attendanceMutation = useMutation({
-    mutationFn: ({
-      sessionId,
-      studentId,
-      state,
-    }: {
-      sessionId: string
-      studentId: string
-      state: 'Present' | 'Absent'
-    }) => markAttendance(sessionId, studentId, { state }),
-    onSuccess: (attendance) => {
-      queryClient.setQueryData<InfiniteData<HomeData>>(homeQueryKey, (current) => {
-        if (!current) return current
-        return {
-          ...current,
-          pages: current.pages.map((page) => ({
-            ...page,
-            sessions: page.sessions.map((session) =>
-              session.session_id !== attendance.session_id
-                ? session
-                : {
-                    ...session,
-                    students: session.students.map((student) =>
-                      student.student_id !== attendance.student_id
-                        ? student
-                        : {
-                            ...student,
-                            attendance_state: attendance.state,
-                            marked_at: attendance.marked_at,
-                          },
-                    ),
-                  },
-            ),
-          })),
-        }
-      })
-      setSavedMessage({
-        sessionId: attendance.session_id,
-        message: `Attendance saved as ${attendance.state}.`,
-      })
-      setPollCycle((current) => current + 1)
-      void queryClient.invalidateQueries({ queryKey: homeQueryFamily })
-    },
-  })
-
-  const accountPanel = (
-    <div className="grid gap-6">
-      <AppearancePanel text={appearanceText} />
-      <Separator />
-      <Button
-        variant="secondary"
-        loading={signingOut}
-        onClick={async () => {
-          setSigningOut(true)
-          clearAllTeachingDrafts()
-          const session = await signOut()
-          if (session.status === 'anonymous') {
-            await navigate({ to: '/signin', search: { redirect: '/' } })
-            return
-          }
-          setSigningOut(false)
-        }}
-      >
-        <LogOut aria-hidden="true" className="size-icon-sm" />
-        {signingOut ? 'Signing out…' : 'Sign out'}
-      </Button>
-    </div>
-  )
-
   const billingPanel = (
     <BillingProjectionPanel
       projection={projection}
@@ -260,7 +178,7 @@ export function HomePage() {
         closeAccount: 'Close account panel',
       }}
       primaryDestinations={destinations}
-      appearancePanel={accountPanel}
+      appearancePanel={<AccountPanel />}
       contextualPanel={firstPage ? billingPanel : undefined}
     >
       <PageEntrance className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-8 sm:px-6 md:py-10 lg:px-8">
@@ -294,7 +212,7 @@ export function HomePage() {
           aria-live="polite"
           className="text-sm font-medium text-success-foreground"
         >
-          {setupMessage}
+          {setupMessage ?? attendanceMessage}
         </div>
 
         {homeQuery.isPending ? (
@@ -345,31 +263,36 @@ export function HomePage() {
             ) : (
               <div className="grid gap-4">
                 {sessions.map((session) => (
-                  <SessionAttendanceCard
+                  <Card
                     key={session.session_id}
-                    session={session}
-                    timeZone={firstPage?.request_time_zone ?? 'UTC'}
-                    pendingStudentId={
-                      attendanceMutation.isPending &&
-                      attendanceMutation.variables?.sessionId === session.session_id
-                        ? attendanceMutation.variables.studentId
-                        : undefined
-                    }
-                    savedMessage={
-                      savedMessage?.sessionId === session.session_id
-                        ? savedMessage.message
-                        : undefined
-                    }
-                    error={
-                      attendanceMutation.variables?.sessionId === session.session_id
-                        ? attendanceMutation.error?.message
-                        : undefined
-                    }
-                    onMark={(studentId, state) => {
-                      setSavedMessage(undefined)
-                      attendanceMutation.mutate({ sessionId: session.session_id, studentId, state })
-                    }}
-                  />
+                    data-class-color={session.class_color}
+                    className="border-s-4 border-s-class-marker bg-class-surface"
+                  >
+                    <CardHeader>
+                      <h3 className="text-lg font-semibold">{session.class_name}</h3>
+                      <p className="font-mono text-sm text-muted-foreground">
+                        {formatSessionTime(
+                          session.starts_at,
+                          firstPage?.request_time_zone ?? 'UTC',
+                        )}
+                      </p>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm text-muted-foreground">
+                        {session.students.length === 1
+                          ? '1 student on this session roster'
+                          : `${session.students.length} students on this session roster`}
+                      </p>
+                      <Button
+                        onClick={(event) => {
+                          attendanceReturnFocusRef.current = event.currentTarget
+                          setAttendanceSessionID(session.session_id)
+                        }}
+                      >
+                        Mark attendance
+                      </Button>
+                    </CardContent>
+                  </Card>
                 ))}
                 {homeQuery.hasNextPage && (
                   <Button
@@ -397,7 +320,9 @@ export function HomePage() {
           onOpenChange={setSetupOpen}
           onCreateClass={(input, key) => classMutation.mutateAsync({ input, key })}
           onCreateStudent={(input, key) => studentMutation.mutateAsync({ input, key })}
-          onJoinRoster={(classId, input) => rosterMutation.mutateAsync({ classId, input })}
+          onChangeRoster={(classId, input, key) =>
+            rosterMutation.mutateAsync({ classId, input, key })
+          }
           onComplete={(localDate) => {
             const message =
               localDate === firstPage.local_date
@@ -408,6 +333,29 @@ export function HomePage() {
           returnFocusRef={setupReturnFocusRef}
         />
       )}
+
+      {firstPage && (
+        <AttendanceSheet
+          open={attendanceSessionID !== undefined}
+          tutorId={firstPage.tutor.tutor_id}
+          sessionId={attendanceSessionID}
+          onOpenChange={(open) => {
+            if (!open) {
+              setAttendanceSessionID(undefined)
+              if (search.session || search.date) {
+                void navigate({ to: '/', search: {} })
+              }
+            }
+          }}
+          returnFocusRef={attendanceReturnFocusRef}
+          onSaved={() => {
+            setAttendanceMessage('Attendance saved for the whole roster.')
+            setPollCycle((current) => current + 1)
+            void queryClient.invalidateQueries({ queryKey: homeQueryFamily })
+            void queryClient.invalidateQueries({ queryKey: billingQueryKey })
+          }}
+        />
+      )}
     </AppShell>
   )
 }
@@ -416,4 +364,12 @@ function formatLocalDate(value: string) {
   return new Intl.DateTimeFormat('en', { dateStyle: 'full', timeZone: 'UTC' }).format(
     new Date(`${value}T00:00:00Z`),
   )
+}
+
+function formatSessionTime(value: string, timeZone: string) {
+  return new Intl.DateTimeFormat('en', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone,
+  }).format(new Date(value))
 }

@@ -23,10 +23,10 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | 7 | Tutor sign in & identity | Slice 1 | done |
 | 8 | Core teaching loop | Slice 1 | done |
 | 9 | Tracing, central logs & error alerts | Slice 2 | planned |
-| 10 | Recurring sessions & exceptions | Slice 3 | planned |
-| 11 | Student records & class rosters | Slice 3 | planned |
-| 12 | Tutor profile & bank details | Slice 4 | planned |
-| 13 | Tuition rate & monthly calculation | Slice 4 | planned |
+| 10 | Recurring sessions & exceptions | Slice 3 | done |
+| 11 | Student records & class rosters | Slice 3 | done |
+| 12 | Tutor profile & bank details | Slice 4 | done |
+| 13 | Tuition rate & monthly calculation | Slice 4 | done |
 | 14 | Invoice PDF with payment QR | Slice 4 | planned |
 | 15 | Invoice list, share & mark paid | Slice 4 | planned |
 | 21 | Rate limit the auth endpoints | Slice 5 | done |
@@ -141,27 +141,66 @@ Follow one request from the gateway through every service it touches, including 
 
 ## Slice 3: Real schedules
 
-### 10. Recurring sessions & exceptions · needs a decision
+### 10. Recurring sessions & exceptions · done
 A class repeats weekly (for example every Monday and Thursday) and generates its sessions, and a single session can be cancelled or moved without disturbing the rest. The rule versus the exception is a genuinely tricky model, and attendance and billing both read it.
 **Done when:** a tutor can define a repeating schedule with an end, see the generated sessions, cancel one session, and move one session to another time, with the change touching only that session and the invoice count reflecting it.
-- [ ] Design it (spec): `$architect recurring sessions & exceptions`
+spec [0010](../specs/0010-recurring-sessions-exceptions/index.md)
+code in `services/teaching/`, `services/notifications/`, `gateway/`, `api/openapi.yaml`, and `web/src/`
+- [x] Design it (spec): `$architect recurring sessions & exceptions`
+- [x] Build it: `$develop recurring sessions & exceptions`
+  - [x] Prove one weekly occurrence through the guarded overlap constraints, teaching model, existing events, both projections, gateway contract, and one accessible calendar card · AC-1, AC-2, AC-8, AC-9, AC-10, AC-12, AC-13, AC-16, AC-17
+  - [x] Complete seven day rules, stored time zones, active standalone adoption, exact command counts, revisions, durable retries, and existing class scheduling · AC-1, AC-3, AC-9, AC-10, AC-11
+  - [x] Add future replacement, early ending, preserved exceptions, session actions, and detailed conflict recovery · AC-4, AC-5, AC-6, AC-7, AC-8, AC-9, AC-11, AC-13, AC-16
+  - [x] Build the Monday first Day, Week, and Month calendar with class filters, schedule management, phone agenda, bounded history, and accessible states · AC-12, AC-14, AC-15
+  - [x] Close the thread with migration evidence, concurrent overlap, clock transition, replay, tenant, contract, and browser checks · AC-1 to AC-17
+- [x] Verify it: `$check verify recurring sessions & exceptions`
+- [x] Test it: `$test recurring sessions & exceptions`
 
-### 11. Student records & class rosters
+### 11. Student records & class rosters · done
 Manage students properly (name and phone number for now) and put them into classes, with a student able to sit in more than one class. Thickens the student strand that slice 1 ran narrowly.
 **Done when:** a tutor can create, edit, and remove students, add and remove them from a class, see a class roster and a student's classes, and attendance marking covers a whole roster in one pass.
-- [ ] Build it: `$develop student records & class rosters`
+spec [0011](../specs/0011-student-records-class-rosters/index.md)
+code in `services/teaching/`, `services/{billing,notifications}/internal/consumer/`, `gateway/`, `api/openapi.yaml`, `web/src/`, and `test/thread.sh`
+- [x] Design it (spec): `$architect student records & class rosters`
+- [x] Build it: `$develop student records & class rosters`
+  - [x] Prove the student record thread through the guarded migration, teaching store and handler, generated contract, gateway, and minimal Students page, then complete search, edit, archive, history, retry, concurrency, and privacy behavior · AC-1 to AC-5, AC-14 to AC-17, AC-19, AC-20
+  - [x] Add dated class roster reads and one atomic delta with overlap constraints, projection events, conflict recovery, class detail, and accessible roster management · AC-6 to AC-10, AC-14 to AC-17, AC-19, AC-20
+  - [x] Replace per student marking with one revision guarded whole roster attendance pass across teaching, events, Home, Schedule, and the attendance sheet · AC-11 to AC-15, AC-18 to AC-20
+  - [x] Close the thread with validated routes, exact cache refresh, generated types, obsolete route removal, migration reversal, tenant, replay, browser recovery, and accessibility checks · AC-2, AC-3, AC-6, AC-8 to AC-20
+- [x] Verify it: `$check verify student records & class rosters`
+- [x] Test it: `$test student records & class rosters`
 
 ## Slice 4: The money loop
 
-### 12. Tutor profile & bank details · Alpha
+### 12. Tutor profile & bank details · done · Alpha
 The tutor's name, contact line, bank name, account number, and account holder name, which are what the invoice and its payment QR are built from.
 **Done when:** a tutor can save and edit their profile and bank details, the fields are validated, and the invoice service can read them when it builds an invoice.
-- [ ] Build it: `$develop tutor profile & bank details`
+spec [0012](../specs/0012-tutor-profile-bank-details/index.md)
+code in `services/billing/`, `gateway/`, `api/openapi.yaml`, `web/src/`, and `test/thread.sh`
+- [x] Design it (spec): `$architect tutor profile & bank details`
+- [x] Build it: `$develop tutor profile & bank details`
+  - [x] Prove one partial legal name from the browser through the generated contract, gateway, billing migration and handler, then back through reload and the account completion cue · AC-1, AC-2, AC-3, AC-4, AC-9, AC-13
+  - [x] Add the reviewed bank catalog, full normalization and validation, every field, the searchable bank list, completion state, responsive page, and cache policy · AC-1, AC-3 to AC-6, AC-8, AC-10, AC-14
+  - [x] Add revision guarded saves, identical retry recovery, conflict handling, inactive bank rules, dirty navigation, incomplete confirmation, and independent load and save recovery · AC-7, AC-8, AC-11, AC-12
+  - [x] Close the thread with migration reversal, generated contracts, tenant and replay safety, private logging, browser cleanup, accessibility evidence, and `task thread` · AC-2, AC-4, AC-6, AC-7, AC-9 to AC-14
+- [x] Verify it: `$check verify tutor profile & bank details`
 
-### 13. Tuition rate & monthly calculation · needs a decision · GA
+### 13. Tuition rate & monthly calculation · done · GA
 A rate per session lives on the class, and at month end the system counts each student's Present sessions and works out what they owe. This is where a silent error sends a wrong bill to a parent, so it gets the heaviest treatment in the project.
 **Done when:** a class carries a rate per session, a month end run produces a per student total from Present sessions only, absent and cancelled sessions are excluded, a rate change does not rewrite an already issued invoice, and running the calculation twice does not produce two invoices.
-- [ ] Design it (spec): `$architect tuition rate & monthly calculation`
+spec [0013](../specs/0013-tuition-rate-monthly-calculation/index.md)
+- [x] Design it (spec): `$architect tuition rate & monthly calculation`
+- [x] Build it: `$develop tuition rate & monthly calculation`
+  - [x] Establish the shared failure ledger, replay certification, projection generations, safe operator recovery, and additive migrations · AC-8 to AC-11, AC-23, AC-24
+  - [x] Prove one dated rate through teaching, Redpanda, billing, preview, issue, generated contracts, and the browser, then complete revisions, history, archived corrections, and retry behavior · AC-1 to AC-4, AC-8, AC-12 to AC-17, AC-19, AC-21 to AC-24
+  - [x] Complete monthly eligibility, blockers, empty and zero rate cases, checked totals, volume bounds, detailed review, and accessible recovery destinations · AC-4 to AC-7, AC-11 to AC-13, AC-20 to AC-24
+  - [x] Harden fixed broker barriers, certification, dead letters, stale previews, transaction rollback, issue races, lost responses, degraded reads, privacy, and immutable invoice evidence · AC-8 to AC-19, AC-23, AC-24
+  - [x] Regenerate every contract, close the real Postgres and Redpanda thread, add browser component coverage, and record GA evidence for the whole feature · AC-1 to AC-24
+code in `pkg/vermouth/`, `services/teaching/`, `services/billing/`, `gateway/`, `api/openapi.yaml`, `web/src/`, and `test/`
+- [x] Verify it: `$check verify tuition rate & monthly calculation`
+- [x] Test it: `$test tuition rate & monthly calculation`
+- [x] Review it (fresh model): `$check review tuition rate & monthly calculation`
+- [x] Document it: `$document tuition rate & monthly calculation`
 
 ### 14. Invoice PDF with payment QR · needs a decision
 Turn a calculated total into a PDF a parent will take seriously: the student's name, the sessions attended with dates, the rate, the total, and a payment QR carrying the tutor's bank details with the amount already filled in. This is the professionalism the product promises.
@@ -238,8 +277,10 @@ Out of scope for this build pass, kept here so the plan stays honest.
 - **Excused absences**: a third attendance state that is not billed · needs a decision
 - **Parent portal**: parents sign in to see attendance and invoices · needs a decision
 - **Student data export & delete**: export or fully remove one student's data · needs a decision
+- **Student restoration**: restore an archived student and publish the matching cross service fact before making the record active again · from spec 0011 · needs a decision
 - **Metrics dashboards**: throughput and latency graphs across services · needs a decision
 - **Product analytics**: which features get used · needs a decision
+- **Teaching outbox fence for billing**: prove that billing includes every committed teaching write, not only every event published through a captured broker cut, if friend testing shows reviewed causal syncing is not enough · from spec 0013 · needs a decision
 - **Teaching centers with several tutors**: shared students, owner and tutor roles · needs a decision
 - **Vermouth subscription plans**: charging tutors to use the product · needs a decision
 - **Session level student count snapshot**: carry the roster count on the session events if the digest count drifts, instead of `notifications` counting roster events · from spec 0001

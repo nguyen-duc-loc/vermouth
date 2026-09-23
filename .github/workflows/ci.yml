@@ -32,10 +32,11 @@ jobs:
 
       # Both tools are pinned and built from source rather than curled, so the
       # version in CI is the version named here and nothing else.
-      - name: Install task and golangci-lint
+      - name: Install task, golangci-lint, and goose
         run: |
           go install github.com/go-task/task/v3/cmd/task@v3.53.1
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
+          go install github.com/pressly/goose/v3/cmd/goose@v3.27.3
 
       - name: Build every binary
         run: task build
@@ -46,7 +47,24 @@ jobs:
       - name: Lint
         run: task lint
 
+      - name: Start test infrastructure
+        run: task infra:up
+
+      - name: Apply migrations
+        env:
+          IDENTITY_DATABASE_URL: postgres://vermouth_identity:vermouth@localhost:5433/vermouth_identity?sslmode=disable
+          TEACHING_DATABASE_URL: postgres://vermouth_teaching:vermouth@localhost:5434/vermouth_teaching?sslmode=disable
+          BILLING_DATABASE_URL: postgres://vermouth_billing:vermouth@localhost:5435/vermouth_billing?sslmode=disable
+          NOTIFICATIONS_DATABASE_URL: postgres://vermouth_notifications:vermouth@localhost:5436/vermouth_notifications?sslmode=disable
+        run: task migrate:up
+
       - name: Test
+        env:
+          IDENTITY_DATABASE_URL: postgres://vermouth_identity:vermouth@localhost:5433/vermouth_identity?sslmode=disable
+          TEACHING_DATABASE_URL: postgres://vermouth_teaching:vermouth@localhost:5434/vermouth_teaching?sslmode=disable
+          BILLING_DATABASE_URL: postgres://vermouth_billing:vermouth@localhost:5435/vermouth_billing?sslmode=disable
+          NOTIFICATIONS_DATABASE_URL: postgres://vermouth_notifications:vermouth@localhost:5436/vermouth_notifications?sslmode=disable
+          BROKER_SEEDS: localhost:19092
         run: task test
 
   web:
@@ -73,6 +91,9 @@ jobs:
 
       - name: Type check
         run: pnpm --filter web run typecheck
+
+      - name: Browser tests
+        run: pnpm --filter web exec vitest run
 
       # The browser type generator drives the TypeScript compiler API, so it can
       # break in a way no type check and no test ever sees. Running it here proves

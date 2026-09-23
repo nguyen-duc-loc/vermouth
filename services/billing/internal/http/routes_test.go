@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,6 +71,112 @@ func TestTeachingProjectionStatus_RequiresLocalVerificationAndReturnsTutorProgre
 		"attendance_count":0,
 		"latest_updated_at":null
 	}`, authorizedRecorder.Body.String())
+}
+
+// covers: spec 0013 AC-1, AC-21, AC-23
+func TestBillingRoutesRequireAValidTokenAndDisableCaching(t *testing.T) {
+	t.Parallel()
+
+	verifier, _ := billingRouteToken(t)
+	server := billinghttp.Mux(billinghttp.Deps{
+		Verifier: verifier,
+		Logger:   slog.New(slog.DiscardHandler),
+		Health: vermouth.Health{
+			Service: "billing",
+			Logger:  slog.New(slog.DiscardHandler),
+		},
+	})
+	tests := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/rates"},
+		{http.MethodGet, "/billing-periods/default"},
+		{http.MethodGet, "/billing-periods/2026/8"},
+		{http.MethodPost, "/billing-periods/2026/8/preview"},
+		{http.MethodPost, "/billing-periods/2026/8/issue"},
+	}
+
+	for _, test := range tests {
+		request := httptest.NewRequestWithContext(t.Context(), test.method, test.path, http.NoBody)
+		request.Header.Set(vermouth.RequestIDHeader, "request-private-billing")
+		recorder := httptest.NewRecorder()
+
+		server.ServeHTTP(recorder, request)
+
+		require.Equal(t, http.StatusUnauthorized, recorder.Code)
+		require.Equal(t, "no-store", recorder.Header().Get("Cache-Control"))
+		require.Contains(t, recorder.Body.String(), `"code":"invalid_token"`)
+	}
+}
+
+// covers: spec 0013 AC-1, AC-4, AC-13, AC-21
+func TestBillingRoutesRejectMalformedInputBeforeBusinessWork(t *testing.T) {
+	t.Parallel()
+
+	verifier, token := billingRouteToken(t)
+	server := billinghttp.Mux(billinghttp.Deps{
+		Verifier: verifier,
+		Logger:   slog.New(slog.DiscardHandler),
+		Health: vermouth.Health{
+			Service: "billing",
+			Logger:  slog.New(slog.DiscardHandler),
+		},
+	})
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+		code   string
+	}{
+		{
+			name:   "invalid class identifier",
+			method: http.MethodGet,
+			path:   "/classes/not-a-uuid/rates",
+			code:   "invalid_input",
+		},
+		{
+			name:   "invalid period path",
+			method: http.MethodPost,
+			path:   "/billing-periods/year/8/preview",
+			code:   "invalid_period",
+		},
+		{
+			name:   "unknown issue field",
+			method: http.MethodPost,
+			path:   "/billing-periods/2026/8/issue",
+			body:   `{"preview_fingerprint":"digest","unknown":true}`,
+			code:   "invalid_input",
+		},
+		{
+			name:   "two issue values",
+			method: http.MethodPost,
+			path:   "/billing-periods/2026/8/issue",
+			body:   `{"preview_fingerprint":"first"}{"preview_fingerprint":"second"}`,
+			code:   "invalid_input",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			request := httptest.NewRequestWithContext(
+				t.Context(), test.method, test.path, strings.NewReader(test.body),
+			)
+			request.Header.Set("Authorization", "Bearer "+token)
+			request.Header.Set(vermouth.RequestIDHeader, "request-invalid-billing")
+			recorder := httptest.NewRecorder()
+
+			server.ServeHTTP(recorder, request)
+
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+			require.Equal(t, "no-store", recorder.Header().Get("Cache-Control"))
+			require.Contains(t, recorder.Body.String(), `"code":"`+test.code+`"`)
+			require.NotContains(t, recorder.Body.String(), token)
+		})
+	}
 }
 
 func billingRouteToken(t *testing.T) (*vermouth.Verifier, string) {

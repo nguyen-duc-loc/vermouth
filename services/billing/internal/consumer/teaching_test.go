@@ -43,7 +43,7 @@ func TestHandleTeachingEvent_RejectsAConflictingPayloadTutorBeforeWriting(t *tes
 	)
 	require.NoError(t, err)
 
-	err = handleTeachingEvent(t.Context(), nil, envelope)
+	err = handleTeachingEvent(t.Context(), nil, envelope, vermouth.SourcePosition{})
 
 	var conflict *vermouth.TutorIDConflictError
 	require.ErrorAs(t, err, &conflict)
@@ -73,7 +73,7 @@ func TestHandleTeachingEvent_RejectsInvalidCalendarDaysAndIgnoresUnknownFacts(t 
 	)
 	require.NoError(t, err)
 
-	err = handleTeachingEvent(t.Context(), nil, invalidDate)
+	err = handleTeachingEvent(t.Context(), nil, invalidDate, vermouth.SourcePosition{})
 	require.ErrorContains(t, err, "parse teaching local date")
 
 	unknown, err := vermouth.NewEnvelope(
@@ -85,5 +85,5 @@ func TestHandleTeachingEvent_RejectsInvalidCalendarDaysAndIgnoresUnknownFacts(t 
 		map[string]any{"future": true},
 	)
 	require.NoError(t, err)
-	require.NoError(t, handleTeachingEvent(t.Context(), nil, unknown))
+	require.NoError(t, handleTeachingEvent(t.Context(), nil, unknown, vermouth.SourcePosition{}))
 }

@@ -6,11 +6,18 @@ package sqlcgen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 type Querier interface {
+	// ApplyClassRateFact accepts positive revisions only when they advance the
+	// stored date. Revision zero keeps retained event compatibility and uses the
+	// original source coordinate to make replay order deterministic.
+	ApplyClassRateFact(ctx context.Context, arg ApplyClassRateFactParams) error
+	// A replay may see an old leave after a later rejoin is already open in the
+	// projection. The event end date excludes that later period from the target.
 	CloseRosterPeriod(ctx context.Context, arg CloseRosterPeriodParams) error
 	// CurrentBillingRunGeneration only tells the handler which number to attempt. It
 	// needs no lock and no SELECT ... FOR UPDATE: the unique constraint on
@@ -18,7 +25,11 @@ type Querier interface {
 	// race, and the loser reads the winner's invoices. An absent row means no run
 	// yet, so the next generation is 1.
 	CurrentBillingRunGeneration(ctx context.Context, arg CurrentBillingRunGenerationParams) (CurrentBillingRunGenerationRow, error)
+	// FindBillingSessionMissingClass checks the session to class projection link
+	// before roster coverage can hide a session from the candidate query.
+	FindBillingSessionMissingClass(ctx context.Context, arg FindBillingSessionMissingClassParams) (FindBillingSessionMissingClassRow, error)
 	GetBillingRun(ctx context.Context, arg GetBillingRunParams) (BillingRun, error)
+	GetBillingTransactionTimestamp(ctx context.Context, arg GetBillingTransactionTimestampParams) (time.Time, error)
 	// GetClassRateBookkeeping exposes the consumer transaction clock for the model
 	// regression tests. Business code reads rates through RateInForceOn instead.
 	GetClassRateBookkeeping(ctx context.Context, arg GetClassRateBookkeepingParams) (GetClassRateBookkeepingRow, error)
@@ -30,6 +41,7 @@ type Querier interface {
 	// The column order is the table's own, so sqlc hands back the one
 	// invoice_profiles row type rather than a second shape of the same row.
 	GetInvoiceProfile(ctx context.Context, tutorID uuid.UUID) (InvoiceProfile, error)
+	GetLiveBillingRunForPeriod(ctx context.Context, arg GetLiveBillingRunForPeriodParams) (BillingRun, error)
 	// Projection status is diagnostic progress only. Each count is scoped to the
 	// trusted tutor, and latest_updated_at covers every teaching projection table,
 	// including the rate history that is not itself a displayed count.
@@ -61,8 +73,18 @@ type Querier interface {
 	// stays plain int64 dong and rate_known is the only place the question "was there
 	// a rate at all" is answered.
 	ListBillableSessions(ctx context.Context, arg ListBillableSessionsParams) ([]ListBillableSessionsRow, error)
+	// ListBillingCandidates begins with every session and covered roster student.
+	// Outer joins keep missing labels, attendance, and rates visible as blockers.
+	ListBillingCandidates(ctx context.Context, arg ListBillingCandidatesParams) ([]ListBillingCandidatesRow, error)
 	ListInvoiceLines(ctx context.Context, arg ListInvoiceLinesParams) ([]InvoiceLine, error)
+	ListInvoiceLinesForRun(ctx context.Context, arg ListInvoiceLinesForRunParams) ([]InvoiceLine, error)
 	ListInvoicesForPeriod(ctx context.Context, arg ListInvoicesForPeriodParams) ([]ListInvoicesForPeriodRow, error)
+	ListInvoicesForRun(ctx context.Context, arg ListInvoicesForRunParams) ([]Invoice, error)
+	ListOwnedClassRates(ctx context.Context, arg ListOwnedClassRatesParams) ([]ListOwnedClassRatesRow, error)
+	// LockInvoiceProfile serialises profile writers. The handler compares the five
+	// normalized editable values before it checks the expected revision, which is
+	// what lets an identical retry recover a lost successful response.
+	LockInvoiceProfile(ctx context.Context, tutorID uuid.UUID) (InvoiceProfile, error)
 	MarkSessionCancelled(ctx context.Context, arg MarkSessionCancelledParams) error
 	// MarkStudentRemoved stamps the end from the envelope occurred_at, because
 	// teaching.student.removed carries no timestamp of its own (INV-4). The first end
@@ -73,10 +95,6 @@ type Querier interface {
 	// already orders: a backwards scan of one index, no extra descending index. An
 	// absent row is what the run turns into rate_missing.
 	RateInForceOn(ctx context.Context, arg RateInForceOnParams) (RateInForceOnRow, error)
-	// SaveInvoiceProfile is the tutor's own write, from the profile screen. Every
-	// field here is theirs; no event carries any of it, so bank details never reach
-	// the broker.
-	SaveInvoiceProfile(ctx context.Context, arg SaveInvoiceProfileParams) (InvoiceProfile, error)
 	// ------------------------------------------------------- authoritative records
 	// No replay may rewrite anything below this line (AC-8).
 	// SeedInvoiceProfile is the one statement a consumer runs on an authoritative
@@ -89,6 +107,10 @@ type Querier interface {
 	// invoices, because a voided invoice keeps its number spent. Two concurrent
 	// takes serialise on the row and can never return the same sequence.
 	TakeNextInvoiceNumber(ctx context.Context, arg TakeNextInvoiceNumberParams) (int32, error)
+	// UpdateInvoiceProfile is called only after the handler has locked the row,
+	// recognized an identical retry, checked the expected revision, and validated
+	// the normalized values. One changed save advances the revision exactly once.
+	UpdateInvoiceProfile(ctx context.Context, arg UpdateInvoiceProfileParams) (InvoiceProfile, error)
 	UpsertAttendance(ctx context.Context, arg UpsertAttendanceParams) error
 	UpsertClass(ctx context.Context, arg UpsertClassParams) error
 	// UpsertClassRate appends the dated history billing owns. teaching.class.created

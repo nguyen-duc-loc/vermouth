@@ -1,12 +1,20 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Circle, Home } from 'lucide-react'
+import type { ComponentProps } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { type AppDestination, AppShell } from './AppShell'
 import { TooltipProvider } from './ui/tooltip'
 
+type MockLinkProps = Omit<ComponentProps<'a'>, 'href'> & { to: string }
+
 vi.mock('@tanstack/react-router', () => ({
+  Link: ({ to, children, ...props }: MockLinkProps) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
   useRouterState: ({
     select,
   }: {

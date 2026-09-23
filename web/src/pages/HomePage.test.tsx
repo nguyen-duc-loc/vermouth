@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Home as HomeData, HomeSession } from '../api/teaching'
@@ -9,18 +10,31 @@ import { TooltipProvider } from '../components/ui/tooltip'
 import { installMatchMedia } from '../test/setup'
 import { HomePage } from './HomePage'
 
+type MockLinkProps = Omit<ComponentProps<'a'>, 'href'> & { to: string }
+
 const api = vi.hoisted(() => ({
   createClass: vi.fn(),
   createStudent: vi.fn(),
-  joinRoster: vi.fn(),
-  markAttendance: vi.fn(),
+  changeClassRoster: vi.fn(),
   navigate: vi.fn(),
   readBillingProjection: vi.fn(),
+  readAttendance: vi.fn(),
   readHome: vi.fn(),
+  saveAttendance: vi.fn(),
+  search: { date: undefined as string | undefined, session: undefined as string | undefined },
   signOut: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
+  getRouteApi: () => ({
+    useNavigate: () => api.navigate,
+    useSearch: () => api.search,
+  }),
+  Link: ({ to, children, ...props }: MockLinkProps) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
   useNavigate: () => api.navigate,
   useRouterState: ({
     select,
@@ -39,10 +53,11 @@ vi.mock('../api/teaching', async (importOriginal) => {
     ...original,
     createClass: api.createClass,
     createStudent: api.createStudent,
-    joinRoster: api.joinRoster,
-    markAttendance: api.markAttendance,
+    changeClassRoster: api.changeClassRoster,
     readBillingProjection: api.readBillingProjection,
+    readAttendance: api.readAttendance,
     readHome: api.readHome,
+    saveAttendance: api.saveAttendance,
   }
 })
 
@@ -79,7 +94,7 @@ function home(overrides: Partial<HomeData> = {}): HomeData {
     },
     request_time_zone: 'Asia/Ho_Chi_Minh',
     local_date: '2026-08-30',
-    next_local_midnight_at: '2026-08-30T17:00:00Z',
+    next_local_midnight_at: new Date(Date.now() + 86_400_000).toISOString(),
     setup_defaults: {
       local_date: '2026-08-30',
       start_time: '10:00',
@@ -123,13 +138,16 @@ function renderHome(): QueryClient {
 beforeEach(() => {
   installMatchMedia(true)
   window.sessionStorage.clear()
+  api.search.date = undefined
+  api.search.session = undefined
   api.navigate.mockReset()
   api.readHome.mockReset()
   api.readBillingProjection.mockReset()
   api.createClass.mockReset()
   api.createStudent.mockReset()
-  api.joinRoster.mockReset()
-  api.markAttendance.mockReset()
+  api.changeClassRoster.mockReset()
+  api.readAttendance.mockReset()
+  api.saveAttendance.mockReset()
   api.signOut.mockReset()
   api.signOut.mockResolvedValue({ status: 'anonymous' })
   vi.spyOn(crypto, 'randomUUID').mockReturnValue('018f8f7e-91b0-7cc4-bd8c-f4d9030ca422')
@@ -156,7 +174,7 @@ describe('HomePage', () => {
     expect(screen.getByRole('dialog', { name: 'Set up your teaching day' })).toBeInTheDocument()
   })
 
-  it('shows the canonical attendance response instead of inventing local state', async () => {
+  it('saves one canonical whole roster attendance pass', async () => {
     const user = userEvent.setup()
     api.readHome.mockResolvedValueOnce(home({ sessions: [teachingSession()] })).mockResolvedValue(
       home({
@@ -174,22 +192,96 @@ describe('HomePage', () => {
         ],
       }),
     )
-    api.markAttendance.mockResolvedValue({
+    api.readAttendance.mockResolvedValue({
+      session: {
+        session_id: 'session-1',
+        class_id: 'class-1',
+        class_name: 'Maths 9A',
+        class_color: 'blue',
+        starts_at: '2026-08-30T03:00:00Z',
+        ends_at: '2026-08-30T04:00:00Z',
+        local_date: '2026-08-30',
+        state: 'active',
+      },
+      eligible: true,
+      ineligible_reason: null,
+      revision: 'revision-1',
+      students: [
+        {
+          student_id: 'student-1',
+          name: 'Mai',
+          archived: false,
+          state: null,
+          marked_at: null,
+        },
+      ],
+    })
+    api.saveAttendance.mockResolvedValue({
       session_id: 'session-1',
-      student_id: 'student-1',
-      state: 'Present',
       marked_at: '2026-08-30T03:31:00Z',
+      marks: [
+        {
+          student_id: 'student-1',
+          state: 'Present',
+          marked_at: '2026-08-30T03:31:00Z',
+        },
+      ],
     })
     renderHome()
 
+    await user.click(await screen.findByRole('button', { name: 'Mark attendance' }))
     const present = await screen.findByRole('radio', { name: 'Present' })
     await user.click(present)
+    await user.click(screen.getByRole('button', { name: 'Save attendance' }))
 
-    expect(api.markAttendance).toHaveBeenCalledWith('session-1', 'student-1', {
-      state: 'Present',
+    expect(api.saveAttendance).toHaveBeenCalledWith(
+      'session-1',
+      {
+        revision: 'revision-1',
+        marks: [{ student_id: 'student-1', state: 'Present' }],
+      },
+      '018f8f7e-91b0-7cc4-bd8c-f4d9030ca422',
+    )
+    expect(await screen.findByText('Attendance saved for the whole roster.')).toBeInTheDocument()
+  })
+
+  // covers: spec 0013 AC-7, AC-21, AC-22
+  it('opens attendance from a billing recovery link and clears recovery search on close', async () => {
+    const user = userEvent.setup()
+    api.search.date = '2026-08-30'
+    api.search.session = 'session-1'
+    api.readHome.mockResolvedValue(home({ sessions: [teachingSession()] }))
+    api.readAttendance.mockResolvedValue({
+      session: {
+        session_id: 'session-1',
+        class_id: 'class-1',
+        class_name: 'Maths 9A',
+        class_color: 'blue',
+        starts_at: '2026-08-30T03:00:00Z',
+        ends_at: '2026-08-30T04:00:00Z',
+        local_date: '2026-08-30',
+        state: 'active',
+      },
+      eligible: true,
+      ineligible_reason: null,
+      revision: 'revision-1',
+      students: [
+        {
+          student_id: 'student-1',
+          name: 'Mai',
+          archived: false,
+          state: null,
+          marked_at: null,
+        },
+      ],
     })
-    expect(await screen.findByText('Attendance saved as Present.')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('radio', { name: 'Present' })).toBeChecked())
+    renderHome()
+
+    expect(await screen.findByRole('dialog', { name: 'Maths 9A' })).toBeVisible()
+    expect(screen.getByRole('radio', { name: 'Present' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Close attendance' }))
+
+    expect(api.navigate).toHaveBeenCalledWith({ to: '/', search: {} })
   })
 
   it('loads each opaque cursor page without replacing earlier sessions', async () => {

@@ -23,7 +23,14 @@ const repoRoot = "../.."
 // kitTables belong to the shared module and are reached with pgx directly, never
 // through a service's db/queries (STK-3). They are owned tables all the same, so
 // they are excluded by name rather than by absence.
-var kitTables = map[string]bool{"outbox": true, "handled_events": true, "goose_db_version": true}
+var kitTables = map[string]bool{
+	"outbox":                    true,
+	"handled_events":            true,
+	"consumer_failures":         true,
+	"consumer_readiness":        true,
+	"consumer_replay_manifests": true,
+	"goose_db_version":          true,
+}
 
 // commentLine strips a whole line SQL comment, so prose above a statement cannot
 // be mistaken for the statement's own SQL.

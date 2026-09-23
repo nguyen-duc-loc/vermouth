@@ -26,10 +26,12 @@ func TestTheMissingFieldListAgreesWithTheGate(t *testing.T) {
 	ctx := t.Context()
 	tutorID := newTutor(t)
 
-	full := sqlcgen.SaveInvoiceProfileParams{
-		TutorID:           tutorID,
+	require.NoError(t, q.SeedInvoiceProfile(ctx, tutorID))
+	full := sqlcgen.UpdateInvoiceProfileParams{
+		OwnerTutorID:      tutorID,
 		LegalName:         words("Nguyen Thi Lan"),
 		ContactLine:       words("lan@example.com"),
+		BankCode:          words("970436"),
 		BankName:          words("Vietcombank"),
 		BankAccountNumber: words("0123456789"),
 		BankAccountHolder: words("NGUYEN THI LAN"),
@@ -37,14 +39,14 @@ func TestTheMissingFieldListAgreesWithTheGate(t *testing.T) {
 
 	cases := []struct {
 		name    string
-		profile sqlcgen.SaveInvoiceProfileParams
+		profile sqlcgen.UpdateInvoiceProfileParams
 		missing []string
 	}{
 		{
 			name:    "the seeded row, where the tutor has typed nothing",
-			profile: sqlcgen.SaveInvoiceProfileParams{TutorID: tutorID},
+			profile: sqlcgen.UpdateInvoiceProfileParams{OwnerTutorID: tutorID},
 			missing: []string{
-				handler.FieldLegalName, handler.FieldContactLine, handler.FieldBankName,
+				handler.FieldLegalName, handler.FieldContactLine, handler.FieldBankCode,
 				handler.FieldBankAccountNumber, handler.FieldBankAccountHolder,
 			},
 		},
@@ -55,17 +57,17 @@ func TestTheMissingFieldListAgreesWithTheGate(t *testing.T) {
 		},
 		{
 			name:    "the contact line left out, which the run still refuses on",
-			profile: withField(full, func(p *sqlcgen.SaveInvoiceProfileParams) { p.ContactLine = pgtype.Text{} }),
+			profile: withField(full, func(p *sqlcgen.UpdateInvoiceProfileParams) { p.ContactLine = pgtype.Text{} }),
 			missing: []string{handler.FieldContactLine},
 		},
 		{
 			name:    "an empty bank account number, which is missing rather than filled",
-			profile: withField(full, func(p *sqlcgen.SaveInvoiceProfileParams) { p.BankAccountNumber = words("") }),
+			profile: withField(full, func(p *sqlcgen.UpdateInvoiceProfileParams) { p.BankAccountNumber = words("") }),
 			missing: []string{handler.FieldBankAccountNumber},
 		},
 		{
 			name: "only the bank block, which happens part way through typing",
-			profile: withField(full, func(p *sqlcgen.SaveInvoiceProfileParams) {
+			profile: withField(full, func(p *sqlcgen.UpdateInvoiceProfileParams) {
 				p.LegalName = pgtype.Text{}
 				p.ContactLine = words("")
 			}),
@@ -75,7 +77,7 @@ func TestTheMissingFieldListAgreesWithTheGate(t *testing.T) {
 
 	for _, one := range cases {
 		t.Run(one.name, func(t *testing.T) {
-			stored, err := q.SaveInvoiceProfile(ctx, one.profile)
+			stored, err := q.UpdateInvoiceProfile(ctx, one.profile)
 			require.NoError(t, err)
 
 			missing := handler.MissingProfileFields(stored)
@@ -93,7 +95,7 @@ func TestTheMissingFieldListAgreesWithTheGate(t *testing.T) {
 
 // withField copies the full profile and changes one thing, so each case reads as
 // the one difference it is testing.
-func withField(base sqlcgen.SaveInvoiceProfileParams, change func(*sqlcgen.SaveInvoiceProfileParams)) sqlcgen.SaveInvoiceProfileParams {
+func withField(base sqlcgen.UpdateInvoiceProfileParams, change func(*sqlcgen.UpdateInvoiceProfileParams)) sqlcgen.UpdateInvoiceProfileParams {
 	changed := base
 	change(&changed)
 	return changed

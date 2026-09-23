@@ -21,6 +21,7 @@ WHERE tutor_id = $1
   AND class_id = $2
   AND student_id = $3
   AND effective_to IS NULL
+  AND effective_from <= $4
 `
 
 type CloseRosterPeriodParams struct {
@@ -30,6 +31,8 @@ type CloseRosterPeriodParams struct {
 	EffectiveTo pgtype.Date
 }
 
+// A replay may see an old leave after a later rejoin is already open in the
+// projection. The event end date excludes that later period from the target.
 func (q *Queries) CloseRosterPeriod(ctx context.Context, arg CloseRosterPeriodParams) error {
 	_, err := q.db.Exec(ctx, closeRosterPeriod,
 		arg.TutorID,
@@ -255,6 +258,7 @@ ON CONFLICT (session_id) DO UPDATE
 SET starts_at  = excluded.starts_at,
     ends_at    = excluded.ends_at,
     local_date = excluded.local_date,
+    cancelled_at = NULL,
     updated_at = now()
 WHERE sessions.tutor_id = excluded.tutor_id
 `

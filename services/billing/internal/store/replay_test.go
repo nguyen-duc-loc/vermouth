@@ -58,7 +58,12 @@ type teachingFacts struct {
 // It is the shape feature 13's internal/consumer will take. It lives in the test
 // because feature 4 owns the tables and their idempotency, not the wiring that
 // starts a consumer: teaching publishes none of these events yet.
-func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) error {
+func handleTeachingEvent(
+	ctx context.Context,
+	tx pgx.Tx,
+	env vermouth.Envelope,
+	_ vermouth.SourcePosition,
+) error {
 	var facts teachingFacts
 	err := vermouth.DecodeInto(env, []int{1}, &facts)
 	if err != nil {
@@ -185,7 +190,7 @@ func TestTeachingConsumerRejectsAConflictingPayloadTenant(t *testing.T) {
 	)
 
 	var tx pgx.Tx
-	err := handleTeachingEvent(t.Context(), tx, env)
+	err := handleTeachingEvent(t.Context(), tx, env, vermouth.SourcePosition{})
 	require.ErrorAs(t, err, new(*vermouth.TutorIDConflictError))
 }
 

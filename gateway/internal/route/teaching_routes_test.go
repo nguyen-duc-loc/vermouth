@@ -50,6 +50,14 @@ func TestMux_ForwardsTeachingCommandsThroughTheirDeclaredBoundary(t *testing.T) 
 			wantIdempotencyKey: "class-command",
 		},
 		{
+			name:               "first schedule for existing class",
+			method:             http.MethodPut,
+			path:               "/api/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/schedule",
+			body:               `{"expected_revision":0,"effective_from":"2026-08-30","valid_through":"2026-09-06","slots":[{"weekday":7,"start_time":"10:00","end_time":"11:00"}]}`,
+			wantPath:           "/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/schedule",
+			wantIdempotencyKey: "schedule-command",
+		},
+		{
 			name:               "student",
 			method:             http.MethodPost,
 			path:               "/api/students",
@@ -58,18 +66,20 @@ func TestMux_ForwardsTeachingCommandsThroughTheirDeclaredBoundary(t *testing.T) 
 			wantIdempotencyKey: "student-command",
 		},
 		{
-			name:     "roster",
-			method:   http.MethodPost,
-			path:     "/api/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/roster",
-			body:     `{"student_id":"018f8f7e-91b0-7cc4-bd8c-f4d9030ca422","effective_from":"2026-08-30"}`,
-			wantPath: "/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/roster",
+			name:               "roster",
+			method:             http.MethodPut,
+			path:               "/api/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/roster",
+			body:               `{"change_date":"2026-08-30","additions":["018f8f7e-91b0-7cc4-bd8c-f4d9030ca422"],"removals":[]}`,
+			wantPath:           "/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/roster",
+			wantIdempotencyKey: "roster-command",
 		},
 		{
-			name:     "attendance",
-			method:   http.MethodPut,
-			path:     "/api/sessions/018f8f7e-91b0-7cc4-bd8c-f4d9030ca423/attendance/018f8f7e-91b0-7cc4-bd8c-f4d9030ca422",
-			body:     `{"state":"Present"}`,
-			wantPath: "/sessions/018f8f7e-91b0-7cc4-bd8c-f4d9030ca423/attendance/018f8f7e-91b0-7cc4-bd8c-f4d9030ca422",
+			name:               "attendance",
+			method:             http.MethodPut,
+			path:               "/api/sessions/018f8f7e-91b0-7cc4-bd8c-f4d9030ca423/attendance",
+			body:               `{"revision":"revision-1","marks":[{"student_id":"018f8f7e-91b0-7cc4-bd8c-f4d9030ca422","state":"Present"}]}`,
+			wantPath:           "/sessions/018f8f7e-91b0-7cc4-bd8c-f4d9030ca423/attendance",
+			wantIdempotencyKey: "attendance-command",
 		},
 	}
 
@@ -138,11 +148,21 @@ func TestMux_RejectsMissingBearerOnEveryTeachingRoute(t *testing.T) {
 		path   string
 	}{
 		{http.MethodPost, "/api/classes"},
+		{http.MethodPut, "/api/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/schedule"},
 		{http.MethodPost, "/api/students"},
-		{http.MethodPost, "/api/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/roster"},
-		{http.MethodPut, "/api/sessions/018f8f7e-91b0-7cc4-bd8c-f4d9030ca423/attendance/018f8f7e-91b0-7cc4-bd8c-f4d9030ca422"},
+		{http.MethodGet, "/api/students"},
+		{http.MethodGet, "/api/students/018f8f7e-91b0-7cc4-bd8c-f4d9030ca422"},
+		{http.MethodPatch, "/api/students/018f8f7e-91b0-7cc4-bd8c-f4d9030ca422"},
+		{http.MethodDelete, "/api/students/018f8f7e-91b0-7cc4-bd8c-f4d9030ca422"},
+		{http.MethodGet, "/api/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/roster"},
+		{http.MethodPut, "/api/classes/018f8f7e-91b0-7cc4-bd8c-f4d9030ca421/roster"},
+		{http.MethodGet, "/api/sessions/018f8f7e-91b0-7cc4-bd8c-f4d9030ca423/attendance"},
+		{http.MethodPut, "/api/sessions/018f8f7e-91b0-7cc4-bd8c-f4d9030ca423/attendance"},
 		{http.MethodGet, "/api/home"},
 		{http.MethodGet, "/api/home/billing-projection"},
+		{http.MethodGet, "/api/invoice-profile"},
+		{http.MethodPut, "/api/invoice-profile"},
+		{http.MethodGet, "/api/banks"},
 	}
 
 	for _, test := range tests {

@@ -55,6 +55,7 @@ func run() error {
 		cfg.BrokerSeeds,
 		cfg.TopicPartitions,
 		cfg.PublishTopic,
+		vermouth.TopicIdentity,
 		vermouth.TopicTeaching,
 	)
 	if err != nil {
@@ -81,6 +82,8 @@ func run() error {
 	}
 	mux := billinghttp.Mux(billinghttp.Deps{
 		Projection: handler.NewProjectionReader(pool),
+		Profile:    handler.NewProfileService(pool),
+		Billing:    handler.NewBillingService(pool, producer, logger, cfg.PublishTopic),
 		Verifier:   verifier,
 		Logger:     logger,
 		Health:     health,
@@ -93,6 +96,9 @@ func run() error {
 	group.Go(func() error { return relay.Run(groupCtx) })
 	group.Go(func() error {
 		return vermouth.RunConsumer(groupCtx, cfg, pool, logger, consumer.Teaching())
+	})
+	group.Go(func() error {
+		return vermouth.RunConsumer(groupCtx, cfg, pool, logger, consumer.Identity())
 	})
 	err = group.Wait()
 	if err != nil && !errors.Is(err, context.Canceled) {

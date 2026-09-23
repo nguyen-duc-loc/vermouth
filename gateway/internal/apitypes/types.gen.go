@@ -9,6 +9,33 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AttendanceSheetIneligibleReason.
+const (
+	AttendanceSheetIneligibleReasonCancelled     AttendanceSheetIneligibleReason = "cancelled"
+	AttendanceSheetIneligibleReasonClassArchived AttendanceSheetIneligibleReason = "class_archived"
+	AttendanceSheetIneligibleReasonLessThannil   AttendanceSheetIneligibleReason = "<nil>"
+	AttendanceSheetIneligibleReasonNotStarted    AttendanceSheetIneligibleReason = "not_started"
+	AttendanceSheetIneligibleReasonReplaced      AttendanceSheetIneligibleReason = "replaced"
+)
+
+// Valid indicates whether the value is a known member of the AttendanceSheetIneligibleReason enum.
+func (e AttendanceSheetIneligibleReason) Valid() bool {
+	switch e {
+	case AttendanceSheetIneligibleReasonCancelled:
+		return true
+	case AttendanceSheetIneligibleReasonClassArchived:
+		return true
+	case AttendanceSheetIneligibleReasonLessThannil:
+		return true
+	case AttendanceSheetIneligibleReasonNotStarted:
+		return true
+	case AttendanceSheetIneligibleReasonReplaced:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AttendanceState.
 const (
 	Absent  AttendanceState = "Absent"
@@ -27,18 +54,156 @@ func (e AttendanceState) Valid() bool {
 	}
 }
 
+// Defines values for BillingBlockerCode.
+const (
+	AttendanceIncomplete BillingBlockerCode = "attendance_incomplete"
+	ProfileIncomplete    BillingBlockerCode = "profile_incomplete"
+	RateMissing          BillingBlockerCode = "rate_missing"
+)
+
+// Valid indicates whether the value is a known member of the BillingBlockerCode enum.
+func (e BillingBlockerCode) Valid() bool {
+	switch e {
+	case AttendanceIncomplete:
+		return true
+	case ProfileIncomplete:
+		return true
+	case RateMissing:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BillingLineCurrency.
+const (
+	BillingLineCurrencyVND BillingLineCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the BillingLineCurrency enum.
+func (e BillingLineCurrency) Valid() bool {
+	switch e {
+	case BillingLineCurrencyVND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BillingPeriodDefaultMinimumYear.
+const (
+	N2000 BillingPeriodDefaultMinimumYear = 2000
+)
+
+// Valid indicates whether the value is a known member of the BillingPeriodDefaultMinimumYear enum.
+func (e BillingPeriodDefaultMinimumYear) Valid() bool {
+	switch e {
+	case N2000:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BillingPeriodStateStatus.
+const (
+	BillingPeriodStateStatusAlreadyIssued BillingPeriodStateStatus = "already_issued"
+	BillingPeriodStateStatusUnissued      BillingPeriodStateStatus = "unissued"
+)
+
+// Valid indicates whether the value is a known member of the BillingPeriodStateStatus enum.
+func (e BillingPeriodStateStatus) Valid() bool {
+	switch e {
+	case BillingPeriodStateStatusAlreadyIssued:
+		return true
+	case BillingPeriodStateStatusUnissued:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BillingPreviewCurrency.
+const (
+	BillingPreviewCurrencyVND BillingPreviewCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the BillingPreviewCurrency enum.
+func (e BillingPreviewCurrency) Valid() bool {
+	switch e {
+	case BillingPreviewCurrencyVND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BillingPreviewStatus.
+const (
+	BillingPreviewStatusAlreadyIssued BillingPreviewStatus = "already_issued"
+	BillingPreviewStatusBlocked       BillingPreviewStatus = "blocked"
+	BillingPreviewStatusEmpty         BillingPreviewStatus = "empty"
+	BillingPreviewStatusReady         BillingPreviewStatus = "ready"
+)
+
+// Valid indicates whether the value is a known member of the BillingPreviewStatus enum.
+func (e BillingPreviewStatus) Valid() bool {
+	switch e {
+	case BillingPreviewStatusAlreadyIssued:
+		return true
+	case BillingPreviewStatusBlocked:
+		return true
+	case BillingPreviewStatusEmpty:
+		return true
+	case BillingPreviewStatusReady:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BillingProjectionState.
 const (
-	Active  BillingProjectionState = "active"
-	Waiting BillingProjectionState = "waiting"
+	BillingProjectionStateActive  BillingProjectionState = "active"
+	BillingProjectionStateWaiting BillingProjectionState = "waiting"
 )
 
 // Valid indicates whether the value is a known member of the BillingProjectionState enum.
 func (e BillingProjectionState) Valid() bool {
 	switch e {
-	case Active:
+	case BillingProjectionStateActive:
 		return true
-	case Waiting:
+	case BillingProjectionStateWaiting:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BillingRunCurrency.
+const (
+	BillingRunCurrencyVND BillingRunCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the BillingRunCurrency enum.
+func (e BillingRunCurrency) Valid() bool {
+	switch e {
+	case BillingRunCurrencyVND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BillingStudentTotalCurrency.
+const (
+	BillingStudentTotalCurrencyVND BillingStudentTotalCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the BillingStudentTotalCurrency enum.
+func (e BillingStudentTotalCurrency) Valid() bool {
+	switch e {
+	case BillingStudentTotalCurrencyVND:
 		return true
 	default:
 		return false
@@ -47,13 +212,13 @@ func (e BillingProjectionState) Valid() bool {
 
 // Defines values for ClassCurrency.
 const (
-	VND ClassCurrency = "VND"
+	ClassCurrencyVND ClassCurrency = "VND"
 )
 
 // Valid indicates whether the value is a known member of the ClassCurrency enum.
 func (e ClassCurrency) Valid() bool {
 	switch e {
-	case VND:
+	case ClassCurrencyVND:
 		return true
 	default:
 		return false
@@ -87,6 +252,264 @@ func (e ClassColor) Valid() bool {
 	case Violet:
 		return true
 	case Yellow:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClassRatesHistoryState.
+const (
+	Synced      ClassRatesHistoryState = "synced"
+	Syncing     ClassRatesHistoryState = "syncing"
+	Unavailable ClassRatesHistoryState = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the ClassRatesHistoryState enum.
+func (e ClassRatesHistoryState) Valid() bool {
+	switch e {
+	case Synced:
+		return true
+	case Syncing:
+		return true
+	case Unavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InvoiceProfileBankStatus.
+const (
+	InvoiceProfileBankStatusActive   InvoiceProfileBankStatus = "active"
+	InvoiceProfileBankStatusInactive InvoiceProfileBankStatus = "inactive"
+	InvoiceProfileBankStatusMissing  InvoiceProfileBankStatus = "missing"
+)
+
+// Valid indicates whether the value is a known member of the InvoiceProfileBankStatus enum.
+func (e InvoiceProfileBankStatus) Valid() bool {
+	switch e {
+	case InvoiceProfileBankStatusActive:
+		return true
+	case InvoiceProfileBankStatusInactive:
+		return true
+	case InvoiceProfileBankStatusMissing:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InvoiceProfileMissingFields.
+const (
+	BankAccountHolder InvoiceProfileMissingFields = "bank_account_holder"
+	BankAccountNumber InvoiceProfileMissingFields = "bank_account_number"
+	BankCode          InvoiceProfileMissingFields = "bank_code"
+	ContactLine       InvoiceProfileMissingFields = "contact_line"
+	LegalName         InvoiceProfileMissingFields = "legal_name"
+)
+
+// Valid indicates whether the value is a known member of the InvoiceProfileMissingFields enum.
+func (e InvoiceProfileMissingFields) Valid() bool {
+	switch e {
+	case BankAccountHolder:
+		return true
+	case BankAccountNumber:
+		return true
+	case BankCode:
+		return true
+	case ContactLine:
+		return true
+	case LegalName:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssuedInvoiceCurrency.
+const (
+	IssuedInvoiceCurrencyVND IssuedInvoiceCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the IssuedInvoiceCurrency enum.
+func (e IssuedInvoiceCurrency) Valid() bool {
+	switch e {
+	case IssuedInvoiceCurrencyVND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProjectedClassRateCurrency.
+const (
+	ProjectedClassRateCurrencyVND ProjectedClassRateCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the ProjectedClassRateCurrency enum.
+func (e ProjectedClassRateCurrency) Valid() bool {
+	switch e {
+	case ProjectedClassRateCurrencyVND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PutClassRateResponseCurrency.
+const (
+	PutClassRateResponseCurrencyVND PutClassRateResponseCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the PutClassRateResponseCurrency enum.
+func (e PutClassRateResponseCurrency) Valid() bool {
+	switch e {
+	case PutClassRateResponseCurrencyVND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PutClassRateResponseHistoryState.
+const (
+	Pending PutClassRateResponseHistoryState = "pending"
+)
+
+// Valid indicates whether the value is a known member of the PutClassRateResponseHistoryState enum.
+func (e PutClassRateResponseHistoryState) Valid() bool {
+	switch e {
+	case Pending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PutClassRateResponseIssuedInvoicesUnchanged.
+const (
+	True PutClassRateResponseIssuedInvoicesUnchanged = true
+)
+
+// Valid indicates whether the value is a known member of the PutClassRateResponseIssuedInvoicesUnchanged enum.
+func (e PutClassRateResponseIssuedInvoicesUnchanged) Valid() bool {
+	switch e {
+	case True:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RateCurrentCurrency.
+const (
+	RateCurrentCurrencyVND RateCurrentCurrency = "VND"
+)
+
+// Valid indicates whether the value is a known member of the RateCurrentCurrency enum.
+func (e RateCurrentCurrency) Valid() bool {
+	switch e {
+	case RateCurrentCurrencyVND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScheduleRuleState.
+const (
+	ScheduleRuleStateActive    ScheduleRuleState = "active"
+	ScheduleRuleStateCompleted ScheduleRuleState = "completed"
+	ScheduleRuleStateEnded     ScheduleRuleState = "ended"
+	ScheduleRuleStatePlanned   ScheduleRuleState = "planned"
+	ScheduleRuleStateReplaced  ScheduleRuleState = "replaced"
+	ScheduleRuleStateRetired   ScheduleRuleState = "retired"
+)
+
+// Valid indicates whether the value is a known member of the ScheduleRuleState enum.
+func (e ScheduleRuleState) Valid() bool {
+	switch e {
+	case ScheduleRuleStateActive:
+		return true
+	case ScheduleRuleStateCompleted:
+		return true
+	case ScheduleRuleStateEnded:
+		return true
+	case ScheduleRuleStatePlanned:
+		return true
+	case ScheduleRuleStateReplaced:
+		return true
+	case ScheduleRuleStateRetired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScheduleSessionState.
+const (
+	ScheduleSessionStateActive    ScheduleSessionState = "active"
+	ScheduleSessionStateCancelled ScheduleSessionState = "cancelled"
+	ScheduleSessionStateReplaced  ScheduleSessionState = "replaced"
+)
+
+// Valid indicates whether the value is a known member of the ScheduleSessionState enum.
+func (e ScheduleSessionState) Valid() bool {
+	switch e {
+	case ScheduleSessionStateActive:
+		return true
+	case ScheduleSessionStateCancelled:
+		return true
+	case ScheduleSessionStateReplaced:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionNotEligibleDetailsReason.
+const (
+	SessionNotEligibleDetailsReasonCancelled     SessionNotEligibleDetailsReason = "cancelled"
+	SessionNotEligibleDetailsReasonClassArchived SessionNotEligibleDetailsReason = "class_archived"
+	SessionNotEligibleDetailsReasonNotStarted    SessionNotEligibleDetailsReason = "not_started"
+	SessionNotEligibleDetailsReasonReplaced      SessionNotEligibleDetailsReason = "replaced"
+)
+
+// Valid indicates whether the value is a known member of the SessionNotEligibleDetailsReason enum.
+func (e SessionNotEligibleDetailsReason) Valid() bool {
+	switch e {
+	case SessionNotEligibleDetailsReasonCancelled:
+		return true
+	case SessionNotEligibleDetailsReasonClassArchived:
+		return true
+	case SessionNotEligibleDetailsReasonNotStarted:
+		return true
+	case SessionNotEligibleDetailsReasonReplaced:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionSummaryState.
+const (
+	SessionSummaryStateActive        SessionSummaryState = "active"
+	SessionSummaryStateCancelled     SessionSummaryState = "cancelled"
+	SessionSummaryStateClassArchived SessionSummaryState = "class_archived"
+	SessionSummaryStateReplaced      SessionSummaryState = "replaced"
+)
+
+// Valid indicates whether the value is a known member of the SessionSummaryState enum.
+func (e SessionSummaryState) Valid() bool {
+	switch e {
+	case SessionSummaryStateActive:
+		return true
+	case SessionSummaryStateCancelled:
+		return true
+	case SessionSummaryStateClassArchived:
+		return true
+	case SessionSummaryStateReplaced:
 		return true
 	default:
 		return false
@@ -129,16 +552,138 @@ func (e StartGoogleSignInParamsLang) Valid() bool {
 	}
 }
 
-// Attendance defines model for Attendance.
-type Attendance struct {
-	MarkedAt  time.Time          `json:"marked_at"`
-	SessionId openapi_types.UUID `json:"session_id"`
+// ActiveMembershipDetails defines model for ActiveMembershipDetails.
+type ActiveMembershipDetails struct {
+	Classes []ClassReference `json:"classes"`
+}
+
+// AttendanceChangedDetails defines model for AttendanceChangedDetails.
+type AttendanceChangedDetails struct {
+	Sheet AttendanceSheet `json:"sheet"`
+}
+
+// AttendanceMarkInput defines model for AttendanceMarkInput.
+type AttendanceMarkInput struct {
 	State     AttendanceState    `json:"state"`
 	StudentId openapi_types.UUID `json:"student_id"`
 }
 
+// AttendanceSave defines model for AttendanceSave.
+type AttendanceSave struct {
+	MarkedAt  time.Time             `json:"marked_at"`
+	Marks     []SavedAttendanceMark `json:"marks"`
+	SessionId openapi_types.UUID    `json:"session_id"`
+}
+
+// AttendanceSheet defines model for AttendanceSheet.
+type AttendanceSheet struct {
+	Eligible         bool                             `json:"eligible"`
+	IneligibleReason *AttendanceSheetIneligibleReason `json:"ineligible_reason"`
+	Revision         string                           `json:"revision"`
+	Session          SessionSummary                   `json:"session"`
+	Students         []AttendanceStudent              `json:"students"`
+}
+
+// AttendanceSheetIneligibleReason defines model for AttendanceSheet.IneligibleReason.
+type AttendanceSheetIneligibleReason string
+
 // AttendanceState defines model for AttendanceState.
 type AttendanceState string
+
+// AttendanceStudent defines model for AttendanceStudent.
+type AttendanceStudent struct {
+	Archived  bool               `json:"archived"`
+	MarkedAt  *time.Time         `json:"marked_at"`
+	Name      string             `json:"name"`
+	State     *AttendanceState   `json:"state"`
+	StudentId openapi_types.UUID `json:"student_id"`
+}
+
+// Bank defines model for Bank.
+type Bank struct {
+	Code         string `json:"code"`
+	OfficialName string `json:"official_name"`
+	ShortName    string `json:"short_name"`
+}
+
+// BankCatalog defines model for BankCatalog.
+type BankCatalog struct {
+	Banks []Bank `json:"banks"`
+}
+
+// BillingBlocker defines model for BillingBlocker.
+type BillingBlocker struct {
+	ClassId     *openapi_types.UUID        `json:"class_id"`
+	Code        BillingBlockerCode         `json:"code"`
+	Destination BillingRecoveryDestination `json:"destination"`
+	Field       *string                    `json:"field"`
+	LocalDate   *openapi_types.Date        `json:"local_date"`
+	SessionId   *openapi_types.UUID        `json:"session_id"`
+	StudentId   *openapi_types.UUID        `json:"student_id"`
+}
+
+// BillingBlockerCode defines model for BillingBlocker.Code.
+type BillingBlockerCode string
+
+// BillingLine defines model for BillingLine.
+type BillingLine struct {
+	Amount     int64               `json:"amount"`
+	ClassId    *openapi_types.UUID `json:"class_id"`
+	ClassName  string              `json:"class_name"`
+	Currency   BillingLineCurrency `json:"currency"`
+	LocalDate  openapi_types.Date  `json:"local_date"`
+	RateAmount int64               `json:"rate_amount"`
+	SessionId  openapi_types.UUID  `json:"session_id"`
+}
+
+// BillingLineCurrency defines model for BillingLine.Currency.
+type BillingLineCurrency string
+
+// BillingPeriod defines model for BillingPeriod.
+type BillingPeriod struct {
+	Month int `json:"month"`
+	Year  int `json:"year"`
+}
+
+// BillingPeriodDefault defines model for BillingPeriodDefault.
+type BillingPeriodDefault struct {
+	MinimumYear BillingPeriodDefaultMinimumYear `json:"minimum_year"`
+	Month       int                             `json:"month"`
+	ServerDate  openapi_types.Date              `json:"server_date"`
+	Timezone    string                          `json:"timezone"`
+	Year        int                             `json:"year"`
+}
+
+// BillingPeriodDefaultMinimumYear defines model for BillingPeriodDefault.MinimumYear.
+type BillingPeriodDefaultMinimumYear int
+
+// BillingPeriodState defines model for BillingPeriodState.
+type BillingPeriodState struct {
+	Period BillingPeriod            `json:"period"`
+	Run    *BillingRun              `json:"run"`
+	Status BillingPeriodStateStatus `json:"status"`
+}
+
+// BillingPeriodStateStatus defines model for BillingPeriodState.Status.
+type BillingPeriodStateStatus string
+
+// BillingPreview defines model for BillingPreview.
+type BillingPreview struct {
+	Blockers           []BillingBlocker       `json:"blockers"`
+	Currency           BillingPreviewCurrency `json:"currency"`
+	GrandTotal         int64                  `json:"grand_total"`
+	Period             BillingPeriod          `json:"period"`
+	PreviewFingerprint *string                `json:"preview_fingerprint"`
+	Run                *BillingRun            `json:"run"`
+	Status             BillingPreviewStatus   `json:"status"`
+	Students           []BillingStudentTotal  `json:"students"`
+}
+
+// BillingPreviewCurrency defines model for BillingPreview.Currency.
+type BillingPreviewCurrency string
+
+// BillingPreviewStatus defines model for BillingPreview.Status.
+type BillingPreviewStatus string
 
 // BillingProjection defines model for BillingProjection.
 type BillingProjection struct {
@@ -154,6 +699,69 @@ type BillingProjection struct {
 // BillingProjectionState defines model for BillingProjection.State.
 type BillingProjectionState string
 
+// BillingRecoveryDestination defines model for BillingRecoveryDestination.
+type BillingRecoveryDestination struct {
+	ClassId   *openapi_types.UUID `json:"class_id"`
+	Date      *openapi_types.Date `json:"date"`
+	RateDate  *openapi_types.Date `json:"rate_date"`
+	Route     string              `json:"route"`
+	SessionId *openapi_types.UUID `json:"session_id"`
+}
+
+// BillingRun defines model for BillingRun.
+type BillingRun struct {
+	BillingRunId openapi_types.UUID `json:"billing_run_id"`
+	CreatedAt    time.Time          `json:"created_at"`
+	Currency     BillingRunCurrency `json:"currency"`
+	Generation   int                `json:"generation"`
+	GrandTotal   int64              `json:"grand_total"`
+	Invoices     []IssuedInvoice    `json:"invoices"`
+	Period       BillingPeriod      `json:"period"`
+}
+
+// BillingRunCurrency defines model for BillingRun.Currency.
+type BillingRunCurrency string
+
+// BillingStudentTotal defines model for BillingStudentTotal.
+type BillingStudentTotal struct {
+	Currency    BillingStudentTotalCurrency `json:"currency"`
+	Lines       []BillingLine               `json:"lines"`
+	StudentId   openapi_types.UUID          `json:"student_id"`
+	StudentName string                      `json:"student_name"`
+	TotalAmount int64                       `json:"total_amount"`
+}
+
+// BillingStudentTotalCurrency defines model for BillingStudentTotal.Currency.
+type BillingStudentTotalCurrency string
+
+// CanonicalSession defines model for CanonicalSession.
+type CanonicalSession struct {
+	CancelledAt     *time.Time           `json:"cancelled_at"`
+	ClassId         openapi_types.UUID   `json:"class_id"`
+	DisplayTimeZone string               `json:"display_time_zone"`
+	EndUtcOffset    string               `json:"end_utc_offset"`
+	EndsAt          time.Time            `json:"ends_at"`
+	LocalDate       openapi_types.Date   `json:"local_date"`
+	MovedAt         *time.Time           `json:"moved_at"`
+	OriginLocalDate openapi_types.Date   `json:"origin_local_date"`
+	ScheduleRuleId  *openapi_types.UUID  `json:"schedule_rule_id"`
+	SessionId       openapi_types.UUID   `json:"session_id"`
+	SourceTimeZone  *string              `json:"source_time_zone"`
+	StartUtcOffset  string               `json:"start_utc_offset"`
+	StartsAt        time.Time            `json:"starts_at"`
+	State           ScheduleSessionState `json:"state"`
+	SupersededAt    *time.Time           `json:"superseded_at"`
+	UpdatedAt       time.Time            `json:"updated_at"`
+	Version         int64                `json:"version"`
+}
+
+// ChangeRosterRequest defines model for ChangeRosterRequest.
+type ChangeRosterRequest struct {
+	Additions  []openapi_types.UUID `json:"additions"`
+	ChangeDate openapi_types.Date   `json:"change_date"`
+	Removals   []openapi_types.UUID `json:"removals"`
+}
+
 // Class defines model for Class.
 type Class struct {
 	ClassId           openapi_types.UUID `json:"class_id"`
@@ -162,6 +770,8 @@ type Class struct {
 	Name              string             `json:"name"`
 	RateAmount        int64              `json:"rate_amount"`
 	RateEffectiveFrom openapi_types.Date `json:"rate_effective_from"`
+	RateRevision      int64              `json:"rate_revision"`
+	ScheduleRevision  int64              `json:"schedule_revision"`
 }
 
 // ClassCurrency defines model for Class.Currency.
@@ -170,18 +780,57 @@ type ClassCurrency string
 // ClassColor defines model for ClassColor.
 type ClassColor string
 
-// CreateClassRequest defines model for CreateClassRequest.
+// ClassRates defines model for ClassRates.
+type ClassRates struct {
+	AllowedRange      RateAllowedRange       `json:"allowed_range"`
+	Archived          bool                   `json:"archived"`
+	ClassId           openapi_types.UUID     `json:"class_id"`
+	Current           RateCurrent            `json:"current"`
+	HistoryState      ClassRatesHistoryState `json:"history_state"`
+	ProjectedRevision int64                  `json:"projected_revision"`
+	Rates             []ProjectedClassRate   `json:"rates"`
+}
+
+// ClassRatesHistoryState defines model for ClassRates.HistoryState.
+type ClassRatesHistoryState string
+
+// ClassReference defines model for ClassReference.
+type ClassReference struct {
+	ClassId openapi_types.UUID `json:"class_id"`
+	Name    string             `json:"name"`
+}
+
+// ClassRoster defines model for ClassRoster.
+type ClassRoster struct {
+	Class        ClassSummary       `json:"class"`
+	ResolvedDate openapi_types.Date `json:"resolved_date"`
+	Students     []RosterStudent    `json:"students"`
+}
+
+// ClassSummary defines model for ClassSummary.
+type ClassSummary struct {
+	ClassId openapi_types.UUID `json:"class_id"`
+	Color   ClassColor         `json:"color"`
+	Name    string             `json:"name"`
+}
+
+// CreateClassRequest Exactly one of first_session or schedule is required.
 type CreateClassRequest struct {
-	Color        *ClassColor       `json:"color,omitempty"`
-	FirstSession FirstSessionInput `json:"first_session"`
-	Name         string            `json:"name"`
-	RateAmount   int64             `json:"rate_amount"`
+	Color        *ClassColor          `json:"color,omitempty"`
+	FirstSession *FirstSessionInput   `json:"first_session,omitempty"`
+	Name         string               `json:"name"`
+	RateAmount   int64                `json:"rate_amount"`
+	Schedule     *WeeklyScheduleInput `json:"schedule,omitempty"`
 }
 
 // CreateClassResponse defines model for CreateClassResponse.
 type CreateClassResponse struct {
-	Class        Class           `json:"class"`
-	FirstSession TeachingSession `json:"first_session"`
+	AdoptedCount   int                  `json:"adopted_count"`
+	CandidateCount int                  `json:"candidate_count"`
+	Class          Class                `json:"class"`
+	CreatedCount   int                  `json:"created_count"`
+	FirstSession   *TeachingSession     `json:"first_session"`
+	Rule           *ScheduleRuleSummary `json:"rule"`
 }
 
 // CreateStudentRequest defines model for CreateStudentRequest.
@@ -190,13 +839,28 @@ type CreateStudentRequest struct {
 	Phone *string `json:"phone,omitempty"`
 }
 
+// EndScheduleRequest defines model for EndScheduleRequest.
+type EndScheduleRequest struct {
+	ExpectedRevision int64              `json:"expected_revision"`
+	LastDate         openapi_types.Date `json:"last_date"`
+}
+
+// EndScheduleResponse defines model for EndScheduleResponse.
+type EndScheduleResponse struct {
+	Class           Class               `json:"class"`
+	PreservedCount  int                 `json:"preserved_count"`
+	Rule            ScheduleRuleSummary `json:"rule"`
+	SupersededCount int                 `json:"superseded_count"`
+}
+
 // Error The one error shape at the gateway boundary (spec 0001).
 type Error struct {
 	Error struct {
 		// Code Examples: invalid_input
-		Code      string `json:"code"`
-		Message   string `json:"message"`
-		RequestId string `json:"request_id"`
+		Code      string                  `json:"code"`
+		Details   *map[string]interface{} `json:"details,omitempty"`
+		Message   string                  `json:"message"`
+		RequestId string                  `json:"request_id"`
 	} `json:"error"`
 }
 
@@ -255,19 +919,144 @@ type HomeStudent struct {
 	StudentId       openapi_types.UUID `json:"student_id"`
 }
 
-// JoinRosterRequest defines model for JoinRosterRequest.
-type JoinRosterRequest struct {
-	EffectiveFrom openapi_types.Date `json:"effective_from"`
-	StudentId     openapi_types.UUID `json:"student_id"`
+// InvoiceProfile defines model for InvoiceProfile.
+type InvoiceProfile struct {
+	BankAccountHolder *string                       `json:"bank_account_holder"`
+	BankAccountNumber *string                       `json:"bank_account_number"`
+	BankCode          *string                       `json:"bank_code"`
+	BankName          *string                       `json:"bank_name"`
+	BankStatus        InvoiceProfileBankStatus      `json:"bank_status"`
+	ContactLine       *string                       `json:"contact_line"`
+	IsComplete        bool                          `json:"is_complete"`
+	LegalName         *string                       `json:"legal_name"`
+	MissingFields     []InvoiceProfileMissingFields `json:"missing_fields"`
+	Revision          int64                         `json:"revision"`
 }
+
+// InvoiceProfileBankStatus defines model for InvoiceProfile.BankStatus.
+type InvoiceProfileBankStatus string
+
+// InvoiceProfileMissingFields defines model for InvoiceProfile.MissingFields.
+type InvoiceProfileMissingFields string
+
+// IssueBillingRequest defines model for IssueBillingRequest.
+type IssueBillingRequest struct {
+	PreviewFingerprint string `json:"preview_fingerprint"`
+}
+
+// IssuedInvoice defines model for IssuedInvoice.
+type IssuedInvoice struct {
+	Currency      IssuedInvoiceCurrency `json:"currency"`
+	InvoiceId     openapi_types.UUID    `json:"invoice_id"`
+	InvoiceNumber string                `json:"invoice_number"`
+	IssuedAt      time.Time             `json:"issued_at"`
+	Lines         []BillingLine         `json:"lines"`
+	StudentId     openapi_types.UUID    `json:"student_id"`
+	StudentName   string                `json:"student_name"`
+	TotalAmount   int64                 `json:"total_amount"`
+}
+
+// IssuedInvoiceCurrency defines model for IssuedInvoice.Currency.
+type IssuedInvoiceCurrency string
 
 // LocalTime Examples: 17:30
 type LocalTime = string
 
-// MarkAttendanceRequest defines model for MarkAttendanceRequest.
-type MarkAttendanceRequest struct {
-	State AttendanceState `json:"state"`
+// MoveSessionRequest defines model for MoveSessionRequest.
+type MoveSessionRequest struct {
+	// EndTime Examples: 17:30
+	EndTime         LocalTime          `json:"end_time"`
+	ExpectedVersion int64              `json:"expected_version"`
+	LocalDate       openapi_types.Date `json:"local_date"`
+
+	// StartTime Examples: 17:30
+	StartTime LocalTime `json:"start_time"`
 }
+
+// ProjectedClassRate defines model for ProjectedClassRate.
+type ProjectedClassRate struct {
+	Currency      ProjectedClassRateCurrency `json:"currency"`
+	EffectiveFrom openapi_types.Date         `json:"effective_from"`
+	RateAmount    int64                      `json:"rate_amount"`
+	RateRevision  int64                      `json:"rate_revision"`
+}
+
+// ProjectedClassRateCurrency defines model for ProjectedClassRate.Currency.
+type ProjectedClassRateCurrency string
+
+// PutClassRateRequest defines model for PutClassRateRequest.
+type PutClassRateRequest struct {
+	RateAmount int64 `json:"rate_amount"`
+}
+
+// PutClassRateResponse defines model for PutClassRateResponse.
+type PutClassRateResponse struct {
+	AllowedRange            RateAllowedRange                            `json:"allowed_range"`
+	ClassId                 openapi_types.UUID                          `json:"class_id"`
+	Currency                PutClassRateResponseCurrency                `json:"currency"`
+	Current                 RateCurrent                                 `json:"current"`
+	EffectiveFrom           openapi_types.Date                          `json:"effective_from"`
+	HistoryState            PutClassRateResponseHistoryState            `json:"history_state"`
+	IssuedInvoicesUnchanged PutClassRateResponseIssuedInvoicesUnchanged `json:"issued_invoices_unchanged"`
+	RateAmount              int64                                       `json:"rate_amount"`
+	RateRevision            int64                                       `json:"rate_revision"`
+}
+
+// PutClassRateResponseCurrency defines model for PutClassRateResponse.Currency.
+type PutClassRateResponseCurrency string
+
+// PutClassRateResponseHistoryState defines model for PutClassRateResponse.HistoryState.
+type PutClassRateResponseHistoryState string
+
+// PutClassRateResponseIssuedInvoicesUnchanged defines model for PutClassRateResponse.IssuedInvoicesUnchanged.
+type PutClassRateResponseIssuedInvoicesUnchanged bool
+
+// PutInvoiceProfileRequest defines model for PutInvoiceProfileRequest.
+type PutInvoiceProfileRequest struct {
+	BankAccountHolder *string `json:"bank_account_holder"`
+	BankAccountNumber *string `json:"bank_account_number"`
+	BankCode          *string `json:"bank_code"`
+	ContactLine       *string `json:"contact_line"`
+	ExpectedRevision  int64   `json:"expected_revision"`
+	LegalName         *string `json:"legal_name"`
+}
+
+// PutScheduleRequest defines model for PutScheduleRequest.
+type PutScheduleRequest struct {
+	EffectiveFrom    openapi_types.Date        `json:"effective_from"`
+	ExpectedRevision int64                     `json:"expected_revision"`
+	Slots            []WeeklyScheduleSlotInput `json:"slots"`
+	ValidThrough     openapi_types.Date        `json:"valid_through"`
+}
+
+// PutScheduleResponse defines model for PutScheduleResponse.
+type PutScheduleResponse struct {
+	AdoptedCount    int                 `json:"adopted_count"`
+	CandidateCount  int                 `json:"candidate_count"`
+	Class           Class               `json:"class"`
+	CreatedCount    int                 `json:"created_count"`
+	FirstSession    *TeachingSession    `json:"first_session"`
+	PreservedCount  int                 `json:"preserved_count"`
+	Rule            ScheduleRuleSummary `json:"rule"`
+	SupersededCount int                 `json:"superseded_count"`
+}
+
+// RateAllowedRange defines model for RateAllowedRange.
+type RateAllowedRange struct {
+	From    openapi_types.Date `json:"from"`
+	Through openapi_types.Date `json:"through"`
+}
+
+// RateCurrent defines model for RateCurrent.
+type RateCurrent struct {
+	Currency      RateCurrentCurrency `json:"currency"`
+	EffectiveFrom openapi_types.Date  `json:"effective_from"`
+	RateAmount    int64               `json:"rate_amount"`
+	RateRevision  int64               `json:"rate_revision"`
+}
+
+// RateCurrentCurrency defines model for RateCurrent.Currency.
+type RateCurrentCurrency string
 
 // Readiness defines model for Readiness.
 type Readiness struct {
@@ -276,13 +1065,116 @@ type Readiness struct {
 	Status  string             `json:"status"`
 }
 
-// RosterPeriod defines model for RosterPeriod.
-type RosterPeriod struct {
-	ClassId       openapi_types.UUID  `json:"class_id"`
+// RosterConflictDetails defines model for RosterConflictDetails.
+type RosterConflictDetails struct {
+	Class        ClassSummary            `json:"class"`
+	ResolvedDate openapi_types.Date      `json:"resolved_date"`
+	Students     []RosterConflictStudent `json:"students"`
+}
+
+// RosterConflictStudent defines model for RosterConflictStudent.
+type RosterConflictStudent struct {
+	Archived      bool                `json:"archived"`
 	EffectiveFrom openapi_types.Date  `json:"effective_from"`
 	EffectiveTo   *openapi_types.Date `json:"effective_to"`
+	Name          string              `json:"name"`
 	StudentId     openapi_types.UUID  `json:"student_id"`
 }
+
+// RosterStudent defines model for RosterStudent.
+type RosterStudent struct {
+	Archived      bool                `json:"archived"`
+	EffectiveFrom openapi_types.Date  `json:"effective_from"`
+	EffectiveTo   *openapi_types.Date `json:"effective_to"`
+	Name          string              `json:"name"`
+	Phone         *string             `json:"phone"`
+	StudentId     openapi_types.UUID  `json:"student_id"`
+}
+
+// SaveAttendanceRequest defines model for SaveAttendanceRequest.
+type SaveAttendanceRequest struct {
+	Marks    []AttendanceMarkInput `json:"marks"`
+	Revision string                `json:"revision"`
+}
+
+// SavedAttendanceMark defines model for SavedAttendanceMark.
+type SavedAttendanceMark struct {
+	MarkedAt  time.Time          `json:"marked_at"`
+	State     AttendanceState    `json:"state"`
+	StudentId openapi_types.UUID `json:"student_id"`
+}
+
+// Schedule defines model for Schedule.
+type Schedule struct {
+	Classes           []ScheduleClass       `json:"classes"`
+	From              openapi_types.Date    `json:"from"`
+	NextHistoryCursor *string               `json:"next_history_cursor"`
+	ReplacedHistory   []ScheduleSession     `json:"replaced_history"`
+	RequestTimeZone   string                `json:"request_time_zone"`
+	Rules             []ScheduleRuleSummary `json:"rules"`
+	Sessions          []ScheduleSession     `json:"sessions"`
+	Through           openapi_types.Date    `json:"through"`
+	TutorId           openapi_types.UUID    `json:"tutor_id"`
+}
+
+// ScheduleClass defines model for ScheduleClass.
+type ScheduleClass struct {
+	ClassId          openapi_types.UUID `json:"class_id"`
+	Color            ClassColor         `json:"color"`
+	Name             string             `json:"name"`
+	ScheduleRevision int64              `json:"schedule_revision"`
+}
+
+// ScheduleRuleState defines model for ScheduleRuleState.
+type ScheduleRuleState string
+
+// ScheduleRuleSummary defines model for ScheduleRuleSummary.
+type ScheduleRuleSummary struct {
+	ClassId        openapi_types.UUID        `json:"class_id"`
+	EndedAt        *time.Time                `json:"ended_at"`
+	ReplacedAt     *time.Time                `json:"replaced_at"`
+	RetiredAt      *time.Time                `json:"retired_at"`
+	Revision       int64                     `json:"revision"`
+	ScheduleRuleId openapi_types.UUID        `json:"schedule_rule_id"`
+	Slots          []WeeklyScheduleSlotInput `json:"slots"`
+	State          ScheduleRuleState         `json:"state"`
+	TimeZone       string                    `json:"time_zone"`
+	ValidFrom      openapi_types.Date        `json:"valid_from"`
+	ValidThrough   openapi_types.Date        `json:"valid_through"`
+}
+
+// ScheduleSession defines model for ScheduleSession.
+type ScheduleSession struct {
+	CancelledAt   *time.Time         `json:"cancelled_at"`
+	ClassArchived bool               `json:"class_archived"`
+	ClassColor    ClassColor         `json:"class_color"`
+	ClassId       openapi_types.UUID `json:"class_id"`
+	ClassName     string             `json:"class_name"`
+	DisplayDate   openapi_types.Date `json:"display_date"`
+
+	// DisplayEnd Examples: 17:30
+	DisplayEnd LocalTime `json:"display_end"`
+
+	// DisplayStart Examples: 17:30
+	DisplayStart    LocalTime            `json:"display_start"`
+	EndUtcOffset    string               `json:"end_utc_offset"`
+	EndsAt          time.Time            `json:"ends_at"`
+	LocalDate       openapi_types.Date   `json:"local_date"`
+	MovedAt         *time.Time           `json:"moved_at"`
+	OriginLocalDate openapi_types.Date   `json:"origin_local_date"`
+	ScheduleRuleId  *openapi_types.UUID  `json:"schedule_rule_id"`
+	SessionId       openapi_types.UUID   `json:"session_id"`
+	SourceTimeZone  *string              `json:"source_time_zone"`
+	StartUtcOffset  string               `json:"start_utc_offset"`
+	StartsAt        time.Time            `json:"starts_at"`
+	State           ScheduleSessionState `json:"state"`
+	SupersededAt    *time.Time           `json:"superseded_at"`
+	UpdatedAt       time.Time            `json:"updated_at"`
+	Version         int64                `json:"version"`
+}
+
+// ScheduleSessionState defines model for ScheduleSessionState.
+type ScheduleSessionState string
 
 // Session What the browser holds after a refresh: an access token in memory only,
 // and when it stops being valid. The refresh token itself is never in a
@@ -290,6 +1182,34 @@ type RosterPeriod struct {
 type Session struct {
 	AccessExpiresAt time.Time `json:"access_expires_at"`
 	AccessToken     string    `json:"access_token"`
+}
+
+// SessionNotEligibleDetails defines model for SessionNotEligibleDetails.
+type SessionNotEligibleDetails struct {
+	Reason SessionNotEligibleDetailsReason `json:"reason"`
+}
+
+// SessionNotEligibleDetailsReason defines model for SessionNotEligibleDetails.Reason.
+type SessionNotEligibleDetailsReason string
+
+// SessionSummary defines model for SessionSummary.
+type SessionSummary struct {
+	ClassColor ClassColor          `json:"class_color"`
+	ClassId    openapi_types.UUID  `json:"class_id"`
+	ClassName  string              `json:"class_name"`
+	EndsAt     time.Time           `json:"ends_at"`
+	LocalDate  openapi_types.Date  `json:"local_date"`
+	SessionId  openapi_types.UUID  `json:"session_id"`
+	StartsAt   time.Time           `json:"starts_at"`
+	State      SessionSummaryState `json:"state"`
+}
+
+// SessionSummaryState defines model for SessionSummary.State.
+type SessionSummaryState string
+
+// SessionVersionRequest defines model for SessionVersionRequest.
+type SessionVersionRequest struct {
+	ExpectedVersion int64 `json:"expected_version"`
 }
 
 // SetupDefaults defines model for SetupDefaults.
@@ -302,11 +1222,50 @@ type SetupDefaults struct {
 	StartTime LocalTime `json:"start_time"`
 }
 
-// Student defines model for Student.
-type Student struct {
+// StudentChangedDetails defines model for StudentChangedDetails.
+type StudentChangedDetails struct {
+	StudentId openapi_types.UUID `json:"student_id"`
+	UpdatedAt time.Time          `json:"updated_at"`
+}
+
+// StudentDetail defines model for StudentDetail.
+type StudentDetail struct {
+	Memberships []StudentMembership `json:"memberships"`
+	Student     StudentRecord       `json:"student"`
+}
+
+// StudentMembership defines model for StudentMembership.
+type StudentMembership struct {
+	Active        bool                `json:"active"`
+	ClassColor    ClassColor          `json:"class_color"`
+	ClassId       openapi_types.UUID  `json:"class_id"`
+	ClassName     string              `json:"class_name"`
+	EffectiveFrom openapi_types.Date  `json:"effective_from"`
+	EffectiveTo   *openapi_types.Date `json:"effective_to"`
+}
+
+// StudentPage defines model for StudentPage.
+type StudentPage struct {
+	NextCursor *string          `json:"next_cursor"`
+	Students   []StudentSummary `json:"students"`
+}
+
+// StudentRecord defines model for StudentRecord.
+type StudentRecord struct {
+	CreatedAt time.Time          `json:"created_at"`
 	Name      string             `json:"name"`
 	Phone     *string            `json:"phone"`
 	StudentId openapi_types.UUID `json:"student_id"`
+	UpdatedAt time.Time          `json:"updated_at"`
+}
+
+// StudentSummary defines model for StudentSummary.
+type StudentSummary struct {
+	ActiveClassCount int64              `json:"active_class_count"`
+	Name             string             `json:"name"`
+	Phone            *string            `json:"phone"`
+	StudentId        openapi_types.UUID `json:"student_id"`
+	UpdatedAt        time.Time          `json:"updated_at"`
 }
 
 // TeachingHome defines model for TeachingHome.
@@ -341,6 +1300,36 @@ type Tutor struct {
 // TutorLanguage defines model for Tutor.Language.
 type TutorLanguage string
 
+// UpdateStudentRequest defines model for UpdateStudentRequest.
+type UpdateStudentRequest struct {
+	ExpectedUpdatedAt time.Time `json:"expected_updated_at"`
+	Name              *string   `json:"name,omitempty"`
+	Phone             *string   `json:"phone,omitempty"`
+}
+
+// WeeklyScheduleInput defines model for WeeklyScheduleInput.
+type WeeklyScheduleInput struct {
+	Slots        []WeeklyScheduleSlotInput `json:"slots"`
+	ValidFrom    openapi_types.Date        `json:"valid_from"`
+	ValidThrough openapi_types.Date        `json:"valid_through"`
+}
+
+// WeeklyScheduleSlotInput defines model for WeeklyScheduleSlotInput.
+type WeeklyScheduleSlotInput struct {
+	// EndTime Examples: 17:30
+	EndTime LocalTime `json:"end_time"`
+
+	// StartTime Examples: 17:30
+	StartTime LocalTime `json:"start_time"`
+	Weekday   int       `json:"weekday"`
+}
+
+// BillingMonth defines model for BillingMonth.
+type BillingMonth = int
+
+// BillingYear defines model for BillingYear.
+type BillingYear = int
+
 // ClassId defines model for ClassId.
 type ClassId = openapi_types.UUID
 
@@ -350,11 +1339,20 @@ type HomeCursor = string
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
 
+// RosterDate defines model for RosterDate.
+type RosterDate = openapi_types.Date
+
 // SessionId defines model for SessionId.
 type SessionId = openapi_types.UUID
 
+// StudentCursor defines model for StudentCursor.
+type StudentCursor = string
+
 // StudentId defines model for StudentId.
 type StudentId = openapi_types.UUID
+
+// StudentQuery defines model for StudentQuery.
+type StudentQuery = string
 
 // BadGateway The one error shape at the gateway boundary (spec 0001).
 type BadGateway = Error
@@ -368,14 +1366,23 @@ type Conflict = Error
 // Forbidden The one error shape at the gateway boundary (spec 0001).
 type Forbidden = Error
 
+// InternalError The one error shape at the gateway boundary (spec 0001).
+type InternalError = Error
+
 // NotFound The one error shape at the gateway boundary (spec 0001).
 type NotFound = Error
+
+// ProjectionUnavailable The one error shape at the gateway boundary (spec 0001).
+type ProjectionUnavailable = Error
 
 // RateLimited The one error shape at the gateway boundary (spec 0001).
 type RateLimited = Error
 
 // Unauthenticated The one error shape at the gateway boundary (spec 0001).
 type Unauthenticated = Error
+
+// UnprocessableEntity The one error shape at the gateway boundary (spec 0001).
+type UnprocessableEntity = Error
 
 // CompleteGoogleSignInParams defines parameters for CompleteGoogleSignIn.
 type CompleteGoogleSignInParams struct {
@@ -428,10 +1435,83 @@ type CreateClassParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// PutClassRateParams defines parameters for PutClassRate.
+type PutClassRateParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetClassRosterParams defines parameters for GetClassRoster.
+type GetClassRosterParams struct {
+	// Date Local roster date. Teaching defaults it from verified token timezone claims.
+	Date *RosterDate `form:"date,omitempty" json:"date,omitempty"`
+}
+
+// ChangeClassRosterParams defines parameters for ChangeClassRoster.
+type ChangeClassRosterParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PutClassScheduleParams defines parameters for PutClassSchedule.
+type PutClassScheduleParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// EndClassScheduleParams defines parameters for EndClassSchedule.
+type EndClassScheduleParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // GetHomeParams defines parameters for GetHome.
 type GetHomeParams struct {
 	// Cursor Opaque cursor bound to the current tutor local date.
 	Cursor *HomeCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// GetScheduleParams defines parameters for GetSchedule.
+type GetScheduleParams struct {
+	From            openapi_types.Date    `form:"from" json:"from"`
+	Through         openapi_types.Date    `form:"through" json:"through"`
+	ClassId         *[]openapi_types.UUID `form:"class_id,omitempty" json:"class_id,omitempty"`
+	IncludeReplaced *bool                 `form:"include_replaced,omitempty" json:"include_replaced,omitempty"`
+	HistoryLimit    *int                  `form:"history_limit,omitempty" json:"history_limit,omitempty"`
+	HistoryCursor   *string               `form:"history_cursor,omitempty" json:"history_cursor,omitempty"`
+}
+
+// SaveSessionAttendanceParams defines parameters for SaveSessionAttendance.
+type SaveSessionAttendanceParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// CancelSessionParams defines parameters for CancelSession.
+type CancelSessionParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// MoveSessionParams defines parameters for MoveSession.
+type MoveSessionParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// RestoreSessionParams defines parameters for RestoreSession.
+type RestoreSessionParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ListStudentsParams defines parameters for ListStudents.
+type ListStudentsParams struct {
+	// Q Case insensitive name or literal phone fragment, trimmed by teaching.
+	Q *StudentQuery `form:"q,omitempty" json:"q,omitempty"`
+
+	// Cursor Opaque cursor bound to the trimmed student search.
+	Cursor *StudentCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // CreateStudentParams defines parameters for CreateStudent.
@@ -440,14 +1520,53 @@ type CreateStudentParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// ArchiveStudentParams defines parameters for ArchiveStudent.
+type ArchiveStudentParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// UpdateStudentParams defines parameters for UpdateStudent.
+type UpdateStudentParams struct {
+	// IdempotencyKey One browser generated UUID, retained until this create step succeeds.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// IssueBillingPeriodJSONRequestBody defines body for IssueBillingPeriod for application/json ContentType.
+type IssueBillingPeriodJSONRequestBody = IssueBillingRequest
+
 // CreateClassJSONRequestBody defines body for CreateClass for application/json ContentType.
 type CreateClassJSONRequestBody = CreateClassRequest
 
-// JoinRosterJSONRequestBody defines body for JoinRoster for application/json ContentType.
-type JoinRosterJSONRequestBody = JoinRosterRequest
+// PutClassRateJSONRequestBody defines body for PutClassRate for application/json ContentType.
+type PutClassRateJSONRequestBody = PutClassRateRequest
 
-// MarkAttendanceJSONRequestBody defines body for MarkAttendance for application/json ContentType.
-type MarkAttendanceJSONRequestBody = MarkAttendanceRequest
+// ChangeClassRosterJSONRequestBody defines body for ChangeClassRoster for application/json ContentType.
+type ChangeClassRosterJSONRequestBody = ChangeRosterRequest
+
+// PutClassScheduleJSONRequestBody defines body for PutClassSchedule for application/json ContentType.
+type PutClassScheduleJSONRequestBody = PutScheduleRequest
+
+// EndClassScheduleJSONRequestBody defines body for EndClassSchedule for application/json ContentType.
+type EndClassScheduleJSONRequestBody = EndScheduleRequest
+
+// PutInvoiceProfileJSONRequestBody defines body for PutInvoiceProfile for application/json ContentType.
+type PutInvoiceProfileJSONRequestBody = PutInvoiceProfileRequest
+
+// SaveSessionAttendanceJSONRequestBody defines body for SaveSessionAttendance for application/json ContentType.
+type SaveSessionAttendanceJSONRequestBody = SaveAttendanceRequest
+
+// CancelSessionJSONRequestBody defines body for CancelSession for application/json ContentType.
+type CancelSessionJSONRequestBody = SessionVersionRequest
+
+// MoveSessionJSONRequestBody defines body for MoveSession for application/json ContentType.
+type MoveSessionJSONRequestBody = MoveSessionRequest
+
+// RestoreSessionJSONRequestBody defines body for RestoreSession for application/json ContentType.
+type RestoreSessionJSONRequestBody = SessionVersionRequest
 
 // CreateStudentJSONRequestBody defines body for CreateStudent for application/json ContentType.
 type CreateStudentJSONRequestBody = CreateStudentRequest
+
+// UpdateStudentJSONRequestBody defines body for UpdateStudent for application/json ContentType.
+type UpdateStudentJSONRequestBody = UpdateStudentRequest

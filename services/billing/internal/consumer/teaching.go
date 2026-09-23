@@ -25,9 +25,11 @@ type teachingFacts struct {
 	SessionID         uuid.UUID `json:"session_id"`
 	Name              string    `json:"name"`
 	RateAmount        int64     `json:"rate_amount"`
+	RateRevision      int64     `json:"rate_revision"`
 	Currency          string    `json:"currency"`
 	RateEffectiveFrom string    `json:"rate_effective_from"`
 	EffectiveFrom     string    `json:"effective_from"`
+	EffectiveTo       string    `json:"effective_to"`
 	StartsAt          time.Time `json:"starts_at"`
 	EndsAt            time.Time `json:"ends_at"`
 	LocalDate         string    `json:"local_date"`
@@ -47,12 +49,23 @@ func Teaching() vermouth.Consumer {
 }
 
 //nolint:funlen,gocognit // The event catalogue switch is deliberately explicit so each projection write stays easy to audit.
-func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) error {
+func handleTeachingEvent(
+	ctx context.Context,
+	tx pgx.Tx,
+	env vermouth.Envelope,
+	source vermouth.SourcePosition,
+) error {
 	switch env.EventName {
 	case vermouth.EventClassCreated,
+		vermouth.EventClassRateChanged,
 		vermouth.EventSessionScheduled,
+		vermouth.EventSessionMoved,
+		vermouth.EventSessionCancelled,
 		vermouth.EventStudentRegistered,
+		vermouth.EventStudentChanged,
+		vermouth.EventStudentRemoved,
 		vermouth.EventRosterJoined,
+		vermouth.EventRosterLeft,
 		vermouth.EventAttendanceMarked:
 	default:
 		return nil
@@ -81,15 +94,34 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 		if err != nil {
 			return err
 		}
-		err = queries.UpsertClassRate(ctx, sqlcgen.UpsertClassRateParams{
+		err = queries.ApplyClassRateFact(ctx, sqlcgen.ApplyClassRateFactParams{
 			ClassID: facts.ClassID, EffectiveFrom: effectiveFrom, TutorID: tutorID,
 			RateAmount: facts.RateAmount, Currency: facts.Currency,
+			RateRevision:    facts.RateRevision,
+			SourcePartition: pgtype.Int4{Int32: source.Partition, Valid: true},
+			SourceOffset:    pgtype.Int8{Int64: source.Offset, Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("project first class rate: %w", err)
 		}
 		return nil
-	case vermouth.EventSessionScheduled:
+	case vermouth.EventClassRateChanged:
+		effectiveFrom, err := parseDay(facts.EffectiveFrom)
+		if err != nil {
+			return err
+		}
+		err = queries.ApplyClassRateFact(ctx, sqlcgen.ApplyClassRateFactParams{
+			ClassID: facts.ClassID, EffectiveFrom: effectiveFrom, TutorID: tutorID,
+			RateAmount: facts.RateAmount, Currency: facts.Currency,
+			RateRevision:    facts.RateRevision,
+			SourcePartition: pgtype.Int4{Int32: source.Partition, Valid: true},
+			SourceOffset:    pgtype.Int8{Int64: source.Offset, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("project class rate: %w", err)
+		}
+		return nil
+	case vermouth.EventSessionScheduled, vermouth.EventSessionMoved:
 		localDate, err := parseDay(facts.LocalDate)
 		if err != nil {
 			return err
@@ -102,12 +134,31 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 			return fmt.Errorf("project session: %w", err)
 		}
 		return nil
-	case vermouth.EventStudentRegistered:
+	case vermouth.EventSessionCancelled:
+		err = queries.MarkSessionCancelled(ctx, sqlcgen.MarkSessionCancelledParams{
+			TutorID: tutorID, SessionID: facts.SessionID,
+			CancelledAt: pgtype.Timestamptz{Time: env.OccurredAt, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("cancel projected session: %w", err)
+		}
+		return nil
+	case vermouth.EventStudentRegistered, vermouth.EventStudentChanged:
 		err = queries.UpsertStudent(ctx, sqlcgen.UpsertStudentParams{
 			StudentID: facts.StudentID, TutorID: tutorID, Name: facts.Name,
 		})
 		if err != nil {
 			return fmt.Errorf("project student: %w", err)
+		}
+		return nil
+	case vermouth.EventStudentRemoved:
+		err = queries.MarkStudentRemoved(ctx, sqlcgen.MarkStudentRemovedParams{
+			TutorID:   tutorID,
+			StudentID: facts.StudentID,
+			RemovedAt: pgtype.Timestamptz{Time: env.OccurredAt, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("remove projected student: %w", err)
 		}
 		return nil
 	case vermouth.EventRosterJoined:
@@ -121,6 +172,21 @@ func handleTeachingEvent(ctx context.Context, tx pgx.Tx, env vermouth.Envelope) 
 		})
 		if err != nil {
 			return fmt.Errorf("project roster period: %w", err)
+		}
+		return nil
+	case vermouth.EventRosterLeft:
+		effectiveTo, err := parseDay(facts.EffectiveTo)
+		if err != nil {
+			return err
+		}
+		err = queries.CloseRosterPeriod(ctx, sqlcgen.CloseRosterPeriodParams{
+			TutorID:     tutorID,
+			ClassID:     facts.ClassID,
+			StudentID:   facts.StudentID,
+			EffectiveTo: effectiveTo,
+		})
+		if err != nil {
+			return fmt.Errorf("close projected roster period: %w", err)
 		}
 		return nil
 	case vermouth.EventAttendanceMarked:
