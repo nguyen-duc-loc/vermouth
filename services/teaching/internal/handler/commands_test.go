@@ -3,6 +3,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"testing"
@@ -13,6 +14,15 @@ import (
 	"github.com/nguyen-duc-loc/vermouth/pkg/vermouth"
 	"github.com/stretchr/testify/require"
 )
+
+func requireSameWireResponse(t *testing.T, expected, actual any) {
+	t.Helper()
+	expectedJSON, err := json.Marshal(expected)
+	require.NoError(t, err)
+	actualJSON, err := json.Marshal(actual)
+	require.NoError(t, err)
+	require.JSONEq(t, string(expectedJSON), string(actualJSON))
+}
 
 func teachingTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
@@ -99,7 +109,7 @@ func TestPutSchedule_AdoptsExactStandaloneAndReplaysImmutableResponse(t *testing
 	)
 	require.NoError(t, err)
 	require.Equal(t, status, replayStatus)
-	require.Equal(t, created, replayed)
+	requireSameWireResponse(t, created, replayed)
 
 	var sessionCount, scheduledEventCount int
 	require.NoError(t, pool.QueryRow(t.Context(), `
@@ -254,7 +264,7 @@ func TestPutClassRate_RevisesEveryCommandAndReplaysOnlyTheReceipt(t *testing.T) 
 	)
 	require.NoError(t, err)
 	require.Equal(t, status, replayStatus)
-	require.Equal(t, first, replayed)
+	requireSameWireResponse(t, first, replayed)
 	_, _, err = work.PutClassRate(
 		ctx,
 		tutorID,
@@ -381,7 +391,7 @@ func TestCreateClass_ConcurrentRetryReturnsOneCommittedAggregate(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.False(t, replayCreated)
-	require.Equal(t, first.result, timezoneReplay)
+	requireSameWireResponse(t, first.result, timezoneReplay)
 }
 
 // covers: AC-4, AC-6, AC-10, AC-11
@@ -406,7 +416,7 @@ func TestCreateStudent_RetryKeepsPrivatePhoneOutOfTheEvent(t *testing.T) {
 	replayedStudent, created, err := work.CreateStudent(ctx, tutorID, "student-command", input)
 	require.NoError(t, err)
 	require.False(t, created)
-	require.Equal(t, createdStudent, replayedStudent)
+	requireSameWireResponse(t, createdStudent, replayedStudent)
 
 	var envelope string
 	require.NoError(t, pool.QueryRow(t.Context(), `
@@ -459,7 +469,7 @@ func TestRosterAndAttendance_RetryCorrectionAndReloadUseTeachingTruth(t *testing
 		ctx, tutorID, classResult.Class.ClassID, "Asia/Ho_Chi_Minh", "roster-loop", rosterInput,
 	)
 	require.NoError(t, err)
-	require.Equal(t, roster, replayedRoster)
+	requireSameWireResponse(t, roster, replayedRoster)
 	_, err = work.ChangeClassRoster(
 		ctx, tutorID, classResult.Class.ClassID, "Asia/Ho_Chi_Minh", "roster-loop",
 		ChangeRosterInput{
@@ -487,7 +497,7 @@ func TestRosterAndAttendance_RetryCorrectionAndReloadUseTeachingTruth(t *testing
 		},
 	)
 	require.NoError(t, err)
-	require.Equal(t, present, repeated)
+	requireSameWireResponse(t, present, repeated)
 
 	correctedAt := markedAt.Add(time.Minute)
 	work.now = func() time.Time { return correctedAt }

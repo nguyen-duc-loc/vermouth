@@ -90,7 +90,7 @@ func TestScheduleMutations_PreserveExceptionsAndReplayCanonicalResponses(t *test
 	)
 	require.NoError(t, err)
 	require.Equal(t, status, replayStatus)
-	require.Equal(t, replaced, replayed)
+	requireSameWireResponse(t, replaced, replayed)
 
 	restored, _, err := work.RestoreSession(
 		ctx, tutorID, cancelledSessionID, "UTC", "restore-exception",

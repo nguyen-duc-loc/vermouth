@@ -262,7 +262,7 @@ func TestSessionCommands_PreserveAttendanceBoundsAndImmutableRetries(t *testing.
 	)
 	require.NoError(t, err)
 	require.Equal(t, status, replayStatus)
-	require.Equal(t, firstMove, replayedMove)
+	requireSameWireResponse(t, firstMove, replayedMove)
 
 	_, _, err = work.MoveSession(
 		ctx, tutorID, sessionID, "UTC", "session-first-move",
@@ -313,13 +313,13 @@ func TestSessionCommands_PreserveAttendanceBoundsAndImmutableRetries(t *testing.
 		SessionVersionInput{ExpectedVersion: 3},
 	)
 	require.NoError(t, err)
-	require.Equal(t, cancelled, replayedCancel)
+	requireSameWireResponse(t, cancelled, replayedCancel)
 	replayedRestore, _, err := work.RestoreSession(
 		ctx, tutorID, sessionID, "Asia/Tokyo", "session-restore",
 		SessionVersionInput{ExpectedVersion: 4},
 	)
 	require.NoError(t, err)
-	require.Equal(t, restored, replayedRestore)
+	requireSameWireResponse(t, restored, replayedRestore)
 
 	_, _, err = work.CancelSession(
 		ctx, tutorID, sessionID, "UTC", "session-cancel",

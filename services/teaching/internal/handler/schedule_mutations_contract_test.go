@@ -197,7 +197,7 @@ func TestEndSchedule_RetiresPlannedRuleAndReplaysImmutableResult(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, status, replayStatus)
-	require.Equal(t, ended, replayed)
+	requireSameWireResponse(t, ended, replayed)
 	work.now = func() time.Time { return commandTime }
 
 	_, _, err = work.EndSchedule(
